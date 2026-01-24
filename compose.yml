@@ -1,0 +1,26 @@
+services:
+  db:
+    image: docker.io/library/postgres:16
+    environment:
+      POSTGRES_DB: padelgo
+      POSTGRES_USER: padelgo
+      POSTGRES_PASSWORD: padelgo
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+
+  api:
+    build: .
+    depends_on:
+      - db
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://db:5432/padelgo
+      SPRING_DATASOURCE_USERNAME: padelgo
+      SPRING_DATASOURCE_PASSWORD: padelgo
+    ports:
+      - "8080:8080"
+
+volumes:
+  pgdata: {}
+

@@ -1,0 +1,10 @@
+.idea
+.gradle
+build
+!build/libs/
+!build/libs/app.jar
+out
+target
+*.iml
+.DS_Store
+

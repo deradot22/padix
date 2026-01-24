@@ -1,0 +1,62 @@
+package com.padelgo.auth
+
+import com.padelgo.api.ApiException
+import com.padelgo.repo.PlayerRepository
+import jakarta.transaction.Transactional
+import org.springframework.http.HttpStatus
+import org.springframework.security.crypto.password.PasswordEncoder
+import org.springframework.stereotype.Service
+import java.util.UUID
+
+@Service
+class AuthService(
+    private val users: UserRepository,
+    private val players: PlayerRepository,
+    private val encoder: PasswordEncoder,
+    private val jwt: JwtService
+) {
+    @Transactional
+    fun register(req: RegisterRequest): AuthResponse {
+        val email = req.email.trim().lowercase()
+        if (users.findByEmailIgnoreCase(email) != null) throw ApiException(HttpStatus.CONFLICT, "Email already registered")
+
+        val player = players.save(
+            com.padelgo.domain.Player(
+                name = req.name.trim(),
+                rating = 1000,
+                gamesPlayed = 0
+            )
+        )
+        val user = users.save(
+            UserAccount(
+                email = email,
+                passwordHash = encoder.encode(req.password),
+                playerId = player.id!!
+            )
+        )
+        return AuthResponse(jwt.createToken(user.id!!, user.email, user.playerId!!))
+    }
+
+    fun login(req: LoginRequest): AuthResponse {
+        val email = req.email.trim().lowercase()
+        val user = users.findByEmailIgnoreCase(email) ?: throw ApiException(HttpStatus.UNAUTHORIZED, "Invalid credentials")
+        if (!encoder.matches(req.password, user.passwordHash)) throw ApiException(HttpStatus.UNAUTHORIZED, "Invalid credentials")
+        return AuthResponse(jwt.createToken(user.id!!, user.email, user.playerId!!))
+    }
+
+    fun me(principal: JwtPrincipal): MeResponse {
+        val user = users.findById(principal.userId).orElseThrow { ApiException(HttpStatus.UNAUTHORIZED, "User not found") }
+        val player = players.findById(user.playerId!!).orElseThrow { ApiException(HttpStatus.UNAUTHORIZED, "Player not found") }
+        return MeResponse(
+            email = user.email,
+            playerId = player.id!!,
+            name = player.name,
+            rating = player.rating,
+            gamesPlayed = player.gamesPlayed,
+            surveyCompleted = user.surveyCompleted,
+            surveyLevel = user.surveyLevel,
+            calibrationEventsRemaining = user.calibrationEventsRemaining
+        )
+    }
+}
+

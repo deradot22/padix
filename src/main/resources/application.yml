@@ -1,0 +1,32 @@
+server:
+  port: 8080
+
+spring:
+  datasource:
+    url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5432/padelgo}
+    username: ${SPRING_DATASOURCE_USERNAME:padelgo}
+    password: ${SPRING_DATASOURCE_PASSWORD:padelgo}
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    properties:
+      hibernate:
+        format_sql: true
+    open-in-view: false
+  flyway:
+    enabled: true
+
+logging:
+  level:
+    org.hibernate.SQL: info
+
+springdoc:
+  swagger-ui:
+    path: /swagger-ui.html
+
+app:
+  jwt:
+    # В проде вынести в секрет/ENV. Для дев-старта ок.
+    secret: ${APP_JWT_SECRET:change-me-in-prod-change-me-in-prod-change-me}
+    ttlSeconds: ${APP_JWT_TTL_SECONDS:2592000} # 30 дней
+
