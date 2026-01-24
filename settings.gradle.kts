@@ -1,2 +1,2 @@
-rootProject.name = "padelgo-backend"
+rootProject.name = "padix-backend"
 

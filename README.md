@@ -1,4 +1,4 @@
-## PadelGo backend (MVP)
+## padix backend (MVP)
 
 Бэкенд для падельного приложения:
 - Главная: игры на сегодня
@@ -33,12 +33,12 @@ npm run dev
 ```
 
 ### Фронтенд в Podman (Nginx + proxy /api -> backend)
-Запуск (предполагается, что `padelgo-api` уже запущен в сети `padelgo-net`):
+Запуск (предполагается, что `padix-api` уже запущен в сети `padix-net`):
 
 ```bash
-podman rm -f padelgo-web 2>/dev/null || true
-podman build -t padelgo-web ./web
-podman run -d --name padelgo-web --network padelgo-net -p 8081:80 localhost/padelgo-web:latest
+podman rm -f padix-web 2>/dev/null || true
+podman build -t padix-web ./web
+podman run -d --name padix-web --network padix-net -p 8081:80 localhost/padix-web:latest
 ```
 
 Сайт: `http://localhost:8081` (API проксируется на бэк по `/api`).
@@ -55,16 +55,16 @@ podman-compose -f compose.yml up --build
 Вариант B (ручной запуск):
 
 ```bash
-podman run -d --name padelgo-db \
-  -e POSTGRES_DB=padelgo -e POSTGRES_USER=padelgo -e POSTGRES_PASSWORD=padelgo \
+podman run -d --name padix-db \
+  -e POSTGRES_DB=padix -e POSTGRES_USER=padix -e POSTGRES_PASSWORD=padix \
   -p 5432:5432 docker.io/library/postgres:16
 
-podman build -t padelgo-api .
-podman run --rm --name padelgo-api \
-  -e SPRING_DATASOURCE_URL=jdbc:postgresql://host.containers.internal:5432/padelgo \
-  -e SPRING_DATASOURCE_USERNAME=padelgo \
-  -e SPRING_DATASOURCE_PASSWORD=padelgo \
-  -p 8080:8080 padelgo-api
+podman build -t padix-api .
+podman run --rm --name padix-api \
+  -e SPRING_DATASOURCE_URL=jdbc:postgresql://host.containers.internal:5432/padix \
+  -e SPRING_DATASOURCE_USERNAME=padix \
+  -e SPRING_DATASOURCE_PASSWORD=padix \
+  -p 8080:8080 padix-api
 ```
 
 ### Базовые сущности

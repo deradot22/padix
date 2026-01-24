@@ -1,4 +1,4 @@
-## PadelGo Web
+## padix Web
 
 Фронтенд (React + Vite) для работы с API бэкенда.
 
