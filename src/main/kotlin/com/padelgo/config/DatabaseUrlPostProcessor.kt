@@ -12,12 +12,13 @@ class DatabaseUrlPostProcessor : EnvironmentPostProcessor, Ordered {
         application: SpringApplication,
     ) {
         val propertyKey = "spring.datasource.url"
-        val existing = environment.getProperty(propertyKey) ?: return
-        if (existing.startsWith("jdbc:")) {
+        val existing = environment.getProperty(propertyKey)
+        val raw = existing ?: environment.getProperty("DATABASE_URL") ?: return
+        if (raw.startsWith("jdbc:")) {
             return
         }
 
-        val normalized = normalizeJdbcUrl(existing) ?: return
+        val normalized = normalizeJdbcUrl(raw) ?: return
         val source = MapPropertySource(
             "normalizedDatasourceUrl",
             mapOf(propertyKey to normalized),
