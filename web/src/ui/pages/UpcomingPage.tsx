@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { api, Event } from "../../lib/api";
+import { api, Event, Player } from "../../lib/api";
 
 function formatDate(d: Date): string {
   const yyyy = d.getFullYear();
@@ -57,6 +57,7 @@ export function UpcomingPage(props: { requireAuth?: boolean; me: any }) {
   const nav = useNavigate();
   const [list, setList] = useState<Event[] | null>(null);
   const [monthEvents, setMonthEvents] = useState<Event[] | null>(null);
+  const [ratingList, setRatingList] = useState<Player[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [showCalendar, setShowCalendar] = useState(false);
@@ -80,6 +81,13 @@ export function UpcomingPage(props: { requireAuth?: boolean; me: any }) {
       .catch((e: unknown) => setError(e instanceof Error ? e.message : "Ошибка"))
       .finally(() => setLoading(false));
   }, [props.me, props.requireAuth]);
+
+  useEffect(() => {
+    api
+      .getRating()
+      .then((d) => setRatingList(d))
+      .catch(() => setRatingList([]));
+  }, []);
 
   useEffect(() => {
     if (props.requireAuth && !props.me) return;
@@ -133,55 +141,122 @@ export function UpcomingPage(props: { requireAuth?: boolean; me: any }) {
   }, [eventsByDate, selectedDate]);
 
   const listContent = useMemo(() => {
-    if (loading) return <div className="card muted">Загрузка…</div>;
+    if (loading) return <div className="section-card muted">Загрузка…</div>;
     if (error) return <div className="error">Не удалось загрузить: {error}</div>;
-    if (!list?.length) return <div className="card muted">Ближайших игр нет.</div>;
+    if (!list?.length) return <div className="section-card muted">Ближайших игр нет.</div>;
 
     return (
-      <div className="card">
-        <div className="split">
-          <h2>Ближайшие игры (2 недели)</h2>
-          <span className="muted">Нажми на игру, чтобы открыть корты/раунды</span>
-        </div>
-        <table className="table">
-          <thead>
-            <tr>
-              <th>Дата</th>
-              <th>Время</th>
-              <th>Формат</th>
-              <th>Игроки</th>
-              <th>Статус</th>
-            </tr>
-          </thead>
-          <tbody>
-            {list.map((e) => (
-              <tr key={e.id} onClick={() => nav(`/events/${e.id}`)} style={{ cursor: "pointer" }}>
-                <td>{prettyDate(e.date)}</td>
-                <td>{timeRange(e.startTime, e.endTime)}</td>
-                <td>{formatLabel(e.format)}</td>
-                <td>{e.registeredCount}</td>
-                <td>{statusPill(e.status)}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+      <div className="event-list">
+        {list.map((e) => (
+          <div key={e.id} className="event-item">
+            <div className="event-main">
+              <div className="event-title">{formatLabel(e.format)}</div>
+              <div className="event-meta">
+                <span>🕒 {prettyDate(e.date)}</span>
+                <span>{timeRange(e.startTime, e.endTime)}</span>
+                <span>👥 {e.registeredCount}</span>
+              </div>
+            </div>
+            <div className="event-actions">
+              {statusPill(e.status)}
+              <button className="btn primary" onClick={() => nav(`/events/${e.id}`)}>
+                Вступить
+              </button>
+            </div>
+          </div>
+        ))}
       </div>
     );
-  }, [error, list, loading]);
+  }, [error, list, loading, nav]);
+
+  const stats = useMemo(() => {
+    const now = new Date();
+    const todayIso = formatDate(now);
+    const gamesToday = (list ?? []).filter((e) => e.date === todayIso).length;
+    const weekEnd = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 7);
+    const gamesWeek = (list ?? []).filter((e) => {
+      const d = new Date(e.date);
+      return d >= now && d <= weekEnd;
+    }).length;
+    const activePlayers = ratingList?.length ?? 0;
+    return { activePlayers, gamesToday, gamesWeek };
+  }, [list, ratingList]);
 
   return (
     <>
-      <div className="section-title">Ближайшие игры</div>
-      {props.me ? (
-        <div className="row" style={{ marginBottom: 12 }}>
-          <Link to="/create" className="btn primary">Создать игру</Link>
-          <button className="btn" onClick={() => setShowCalendar(true)}>
-            Календарь
-          </button>
+      <div className="hero-card">
+        <div className="hero-badge">⚡ Сезон {new Date().getFullYear()}</div>
+        <h1 className="hero-title">
+          Добро пожаловать в <span className="accent">padix</span>
+        </h1>
+        <div className="hero-subtitle">
+          Организуйте игры в падел, следите за рейтингом и находите партнёров для игры.
         </div>
-      ) : null}
+        <div className="hero-actions">
+          <button className="btn primary" onClick={() => document.getElementById("upcoming")?.scrollIntoView({ behavior: "smooth" })}>
+            Найти игру
+          </button>
+          {props.me ? (
+            <Link to="/create" className="btn">Создать игру →</Link>
+          ) : (
+            <Link to="/register" className="btn">Создать игру →</Link>
+          )}
+        </div>
+      </div>
 
-      {listContent}
+      <div className="stat-grid">
+        <div className="stat-card">
+          <div className="stat-value">{stats.activePlayers}</div>
+          <div className="stat-label">Активных игроков</div>
+        </div>
+        <div className="stat-card">
+          <div className="stat-value">{stats.gamesToday}</div>
+          <div className="stat-label">Игр сегодня</div>
+        </div>
+        <div className="stat-card">
+          <div className="stat-value">{stats.gamesWeek}</div>
+          <div className="stat-label">Игр за неделю</div>
+        </div>
+      </div>
+
+      <div className="row" style={{ marginTop: 16, gap: 16 }}>
+        <div className="section-card" style={{ flex: 1 }} id="upcoming">
+          <div className="section-header">
+            <div className="section-title-row">📅 Ближайшие игры</div>
+            <div className="section-actions">
+              {props.me ? <Link to="/create" className="btn">Создать игру</Link> : null}
+              <button className="btn" onClick={() => setShowCalendar(true)}>Календарь</button>
+            </div>
+          </div>
+          {listContent}
+        </div>
+
+        <div className="section-card" style={{ flex: 1 }}>
+          <div className="section-header">
+            <div className="section-title-row">🏆 Топ игроков</div>
+            <Link to="/rating" className="btn">Полный рейтинг →</Link>
+          </div>
+          {!ratingList?.length ? (
+            <div className="muted">Пока нет участников.</div>
+          ) : (
+            <div className="top-list">
+              {ratingList.slice(0, 3).map((p, idx) => (
+                <div key={p.id} className="top-item">
+                  <span className="top-rank">{idx + 1}</span>
+                  <span className="pill pill-action tooltip">
+                    {p.name}
+                    <span className="tooltip-content">
+                      <span className="tooltip-line">Рейтинг: {p.rating}</span>
+                      <span className="tooltip-line">Матчей: {p.gamesPlayed}</span>
+                    </span>
+                  </span>
+                  <span className="top-score">{p.rating}</span>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
 
       {showCalendar ? (
         <div className="modal-overlay" onClick={() => setShowCalendar(false)}>

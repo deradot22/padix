@@ -124,7 +124,7 @@ export function SurveyPage(props: { me: any; onDone: (me: any) => void; onResult
                 <h2>{currentQuestion.title}</h2>
                 <span className="pill">{answers[currentQuestion.id] ? "ответ выбран" : "нужно выбрать"}</span>
               </div>
-              <div className="row" style={{ marginTop: 12 }}>
+              <div className="row stack" style={{ marginTop: 12 }}>
                 {currentQuestion.options.map((o: any) => (
                   <button
                     type="button"
@@ -142,7 +142,7 @@ export function SurveyPage(props: { me: any; onDone: (me: any) => void; onResult
           )}
         </div>
 
-        <div className="row">
+        <div className="row stack">
           <button type="button" className="btn" onClick={back} disabled={loading || step === 0}>
             Назад
           </button>

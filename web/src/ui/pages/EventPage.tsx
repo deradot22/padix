@@ -1,6 +1,16 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, useParams } from "react-router-dom";
-import { api, EventDetails, Match, ScoringMode } from "../../lib/api";
+import {
+  api,
+  EventDetails,
+  EventInviteStatusItem,
+  FriendItem,
+  FriendsSnapshot,
+  InviteStatus,
+  Match,
+  Player,
+  ScoringMode,
+} from "../../lib/api";
 
 function matchTitle(m: Match) {
   const a = m.teamA.map((p) => p.name).join(" + ");
@@ -41,12 +51,44 @@ function pairingLabel(mode?: string): string {
   return "Каждый с каждым";
 }
 
+function formatEventDate(dateStr: string): string {
+  const months = [
+    "января",
+    "февраля",
+    "марта",
+    "апреля",
+    "мая",
+    "июня",
+    "июля",
+    "августа",
+    "сентября",
+    "октября",
+    "ноября",
+    "декабря",
+  ];
+  const [y, m, d] = dateStr.split("-").map((v) => Number(v));
+  if (!y || !m || !d) return dateStr;
+  return `${d} ${months[m - 1] ?? ""}`;
+}
+
 export function EventPage(props: { me: any }) {
   const { eventId } = useParams();
   const [data, setData] = useState<EventDetails | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [invitePublicId, setInvitePublicId] = useState("");
+  const [inviteLoading, setInviteLoading] = useState(false);
+  const [inviteError, setInviteError] = useState<string | null>(null);
+  const [friends, setFriends] = useState<FriendsSnapshot["friends"]>([]);
+  const [friendsLoading, setFriendsLoading] = useState(false);
+  const [friendsError, setFriendsError] = useState<string | null>(null);
+  const [eventInvites, setEventInvites] = useState<EventInviteStatusItem[]>([]);
+  const [eventInvitesLoading, setEventInvitesLoading] = useState(false);
+  const [eventInvitesError, setEventInvitesError] = useState<string | null>(null);
+  const [inviteModalOpen, setInviteModalOpen] = useState(false);
+  const [friendSearch, setFriendSearch] = useState("");
+  const [inviteSelected, setInviteSelected] = useState<Set<string>>(new Set());
   const [registering, setRegistering] = useState(false);
   const [canceling, setCanceling] = useState(false);
   const [closing, setClosing] = useState(false);
@@ -83,6 +125,80 @@ export function EventPage(props: { me: any }) {
     };
   }, [eventId, props.me]);
 
+  useEffect(() => {
+    if (!props.me) return;
+    if (!data?.isAuthor) return;
+    if (!inviteModalOpen && friends.length > 0) return;
+    setFriendsLoading(true);
+    setFriendsError(null);
+    api
+      .getFriends()
+      .then((snapshot) => setFriends(snapshot.friends ?? []))
+      .catch((e: any) => {
+        setFriendsError(e?.message ?? "Ошибка загрузки друзей");
+        setFriends([]);
+      })
+      .finally(() => setFriendsLoading(false));
+  }, [data?.isAuthor, props.me, inviteModalOpen, friends.length]);
+
+  useEffect(() => {
+    if (!props.me) return;
+    if (!data?.isAuthor) return;
+    if (!inviteModalOpen) return;
+    if (!eventId) return;
+    setEventInvitesLoading(true);
+    setEventInvitesError(null);
+    api
+      .getEventInvites(eventId)
+      .then((items) => setEventInvites(items ?? []))
+      .catch((e: any) => {
+        setEventInvitesError(e?.message ?? "Ошибка загрузки приглашений");
+        setEventInvites([]);
+      })
+      .finally(() => setEventInvitesLoading(false));
+  }, [data?.isAuthor, props.me, inviteModalOpen, eventId]);
+
+  async function inviteSelectedFriends() {
+    if (inviteSelected.size === 0) return;
+    if (!eventId) return;
+    setInviteLoading(true);
+    setInviteError(null);
+    try {
+      for (const publicId of inviteSelected) {
+        await api.inviteFriendToEvent(eventId, publicId);
+      }
+      setInviteSelected(new Set());
+      setInfo("Приглашения отправлены.");
+      const refreshed = await api.getEventInvites(eventId);
+      setEventInvites(refreshed ?? []);
+    } catch (err: any) {
+      setInviteError(err?.message ?? "Ошибка приглашения");
+    } finally {
+      setInviteLoading(false);
+    }
+  }
+
+  const filteredFriends = useMemo(() => {
+    const q = friendSearch.trim().toLowerCase();
+    return friends.filter((f) => {
+      if (!q) return true;
+      const name = String(f.name ?? "").toLowerCase();
+      const pid = String(f.publicId ?? "").toLowerCase();
+      return name.includes(q) || pid.includes(q);
+    });
+  }, [friends, friendSearch]);
+
+  const inviteStatusByPublicId = useMemo(() => {
+    return new Map(eventInvites.map((i) => [i.publicId, i.status]));
+  }, [eventInvites]);
+
+  function inviteStatusLabel(status?: InviteStatus): string | null {
+    if (!status) return null;
+    if (status === "ACCEPTED") return "принято";
+    if (status === "DECLINED") return "отклонено";
+    return "отправлено";
+  }
+
   const content = useMemo(() => {
     if (loading) return <div className="card muted">Загрузка…</div>;
     if (loadError) return <div className="error">Не удалось загрузить: {loadError}</div>;
@@ -103,7 +219,7 @@ export function EventPage(props: { me: any }) {
           <div className="split">
             <h2>{e.title}</h2>
             <div className="row">
-              <span className="pill">{e.date}</span>
+              <span className="pill">{formatEventDate(e.date)}</span>
               <span className="pill">
                 {e.startTime.slice(0, 5)}–{e.endTime.slice(0, 5)}
               </span>
@@ -235,6 +351,14 @@ export function EventPage(props: { me: any }) {
               </button>
             ) : null}
           </div>
+          {isAuthor ? (
+            <div style={{ marginTop: 12 }}>
+              <button className="btn" onClick={() => setInviteModalOpen(true)}>
+                Пригласить друга
+              </button>
+              {inviteError ? <div className="error" style={{ marginTop: 8 }}>{inviteError}</div> : null}
+            </div>
+          ) : null}
           {info ? <div className="muted" style={{ marginTop: 8 }}>{info}</div> : null}
         </div>
 
@@ -248,8 +372,15 @@ export function EventPage(props: { me: any }) {
           ) : (
             <div className="row" style={{ marginTop: 10 }}>
               {registered.map((p) => (
-                <span key={p.id} className="pill">
-                  {p.name} <span className="muted">({p.rating})</span>
+                <span key={p.id} className="pill pill-action tooltip">
+                  {p.name}
+                  <span className="tooltip-content">
+                    <span className="tooltip-line">
+                      Рейтинг: {p.rating}
+                      {(p.calibrationEventsRemaining ?? 0) > 0 ? <span className="calibration-mark">?</span> : null}
+                    </span>
+                    <span className="tooltip-line">Матчей: {p.gamesPlayed}</span>
+                  </span>
                 </span>
               ))}
             </div>
@@ -309,26 +440,28 @@ export function EventPage(props: { me: any }) {
               <span className="muted">Матчей: {r.matches.length}</span>
             </div>
 
-            <table className="table">
-              <thead>
-                <tr>
-                  <th>Корт</th>
-                  <th>Матч</th>
-                  <th>Счёт</th>
-                  <th>Статус</th>
-                </tr>
-              </thead>
-              <tbody>
-                {r.matches.map((m) => (
-                  <tr key={m.id}>
-                    <td>{m.courtNumber}</td>
-                    <td className="muted">{matchTitle(m)}</td>
-                    <td>{scoreText(e.scoringMode, m)}</td>
-                    <td className="muted">{m.status}</td>
+            <div className="table-wrap">
+              <table className="table">
+                <thead>
+                  <tr>
+                    <th>Корт</th>
+                    <th>Матч</th>
+                    <th>Счёт</th>
+                    <th>Статус</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {r.matches.map((m) => (
+                    <tr key={m.id}>
+                      <td>{m.courtNumber}</td>
+                      <td className="muted">{matchTitle(m)}</td>
+                      <td>{scoreText(e.scoringMode, m)}</td>
+                      <td className="muted">{m.status}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </div>
         ))}
 
@@ -459,6 +592,9 @@ export function EventPage(props: { me: any }) {
     data,
     loadError,
     loading,
+    friends,
+    friendsError,
+    friendsLoading,
     registering,
     canceling,
     closing,
@@ -469,6 +605,11 @@ export function EventPage(props: { me: any }) {
     savingRound,
     info,
     props.me,
+    invitePublicId,
+    inviteLoading,
+    inviteError,
+    inviteModalOpen,
+    friendSearch,
   ]);
 
   return (
@@ -480,6 +621,92 @@ export function EventPage(props: { me: any }) {
       </div>
       <div className="section-title">Событие</div>
       {content}
+      {inviteModalOpen ? (
+        <div className="modal-overlay" onClick={() => setInviteModalOpen(false)}>
+          <div className="modal invite-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="split">
+              <h2 style={{ margin: 0 }}>Пригласить друга</h2>
+              <button className="btn" onClick={() => setInviteModalOpen(false)}>Закрыть</button>
+            </div>
+            <div className="muted" style={{ marginTop: 6 }}>
+              Поиск по имени или #ID
+            </div>
+            <input
+              className="input"
+              style={{ marginTop: 10 }}
+              placeholder="Начни вводить имя или #ID"
+              value={friendSearch}
+              onChange={(e) => setFriendSearch(e.target.value)}
+            />
+            <div className="row" style={{ marginTop: 10 }}>
+              <button
+                className="btn primary"
+                type="button"
+                disabled={inviteLoading || inviteSelected.size === 0}
+                onClick={async () => {
+                  await inviteSelectedFriends();
+                  setInviteModalOpen(false);
+                  setFriendSearch("");
+                }}
+              >
+                {inviteLoading ? "Приглашаем…" : `Пригласить (${inviteSelected.size})`}
+              </button>
+              <button
+                className="btn"
+                type="button"
+                disabled={inviteLoading || inviteSelected.size === 0}
+                onClick={() => setInviteSelected(new Set())}
+              >
+                Снять выбор
+              </button>
+            </div>
+            {friendsLoading || eventInvitesLoading ? (
+              <div className="muted" style={{ marginTop: 10 }}>Загрузка друзей…</div>
+            ) : friendsError || eventInvitesError ? (
+              <div className="error" style={{ marginTop: 10 }}>
+                {friendsError ?? eventInvitesError}
+              </div>
+            ) : friendsError ? (
+              <div className="error" style={{ marginTop: 10 }}>{friendsError}</div>
+            ) : filteredFriends.length === 0 ? (
+              <div className="muted" style={{ marginTop: 10 }}>Ничего не найдено.</div>
+            ) : (
+              <div className="invite-list">
+                {filteredFriends.map((f: FriendItem) => {
+                  const status = inviteStatusByPublicId.get(f.publicId);
+                  const statusLabel = inviteStatusLabel(status);
+                  const disabled = inviteLoading || !!status;
+                  return (
+                    <button
+                      key={f.userId}
+                      className={`invite-item ${inviteSelected.has(f.publicId) ? "is-selected" : ""}`}
+                      type="button"
+                      disabled={disabled}
+                      onClick={() =>
+                        setInviteSelected((prev) => {
+                          const next = new Set(prev);
+                          if (next.has(f.publicId)) next.delete(f.publicId);
+                          else next.add(f.publicId);
+                          return next;
+                        })
+                      }
+                    >
+                      <span className="invite-main">
+                        <span>{f.name}</span>
+                        <span className="muted">{f.publicId}</span>
+                      </span>
+                      <span className="invite-meta">
+                        {statusLabel ? <span className="invite-status">{statusLabel}</span> : null}
+                        {inviteSelected.has(f.publicId) ? <span className="invite-check">✓</span> : null}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        </div>
+      ) : null}
       {actionError ? (
         <div className="modal-overlay" onClick={() => setActionError(null)}>
           <div className="modal" onClick={(e) => e.stopPropagation()}>

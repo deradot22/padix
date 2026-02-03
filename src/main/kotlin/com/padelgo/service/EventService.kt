@@ -11,6 +11,7 @@ import com.padelgo.domain.RatingChange
 import com.padelgo.domain.Registration
 import com.padelgo.domain.RegistrationStatus
 import com.padelgo.domain.Round
+import com.padelgo.domain.InviteStatus
 import com.padelgo.domain.ScoringMode
 import com.padelgo.repo.EventRepository
 import com.padelgo.repo.MatchRepository
@@ -35,7 +36,8 @@ class EventService(
     private val matchRepo: MatchRepository,
     private val scoreRepo: MatchSetScoreRepository,
     private val ratingChangeRepo: RatingChangeRepository,
-    private val userRepo: com.padelgo.auth.UserRepository
+    private val userRepo: com.padelgo.auth.UserRepository,
+    private val inviteRepo: com.padelgo.repo.EventInviteRepository
 ) {
     fun getToday(date: LocalDate = LocalDate.now()): List<Event> =
         eventRepo.findAllByDateOrderByStartTimeAsc(date)
@@ -148,6 +150,15 @@ class EventService(
             throw ApiException(HttpStatus.CONFLICT, "Registration is closed (status=${event.status})")
         }
         playerRepo.findById(playerId).orElseThrow { ApiException(HttpStatus.NOT_FOUND, "Player not found") }
+
+        val user = userRepo.findByPlayerId(playerId)
+        if (user != null) {
+            val invite = inviteRepo.findByEventIdAndToUserIdAndStatus(eventId, user.id!!, InviteStatus.PENDING)
+            if (invite != null) {
+                invite.status = InviteStatus.ACCEPTED
+                inviteRepo.save(invite)
+            }
+        }
 
         val existing = regRepo.findByEventIdAndPlayerId(eventId, playerId)
         if (existing != null) {

@@ -31,7 +31,7 @@ export function LoginPage(props: { onAuth: (me: any) => void }) {
     <>
       <div className="section-title">Войти</div>
       <div className="grid">
-        <div className="card" style={{ gridColumn: "span 6" }}>
+        <div className="card grid-half">
           <form onSubmit={onSubmit}>
             <label className="label">Email</label>
             <input className="input" value={email} onChange={(e) => setEmail(e.target.value)} />
@@ -45,7 +45,7 @@ export function LoginPage(props: { onAuth: (me: any) => void }) {
             {error ? <div style={{ marginTop: 12 }} className="error">{error}</div> : null}
           </form>
         </div>
-        <div className="card" style={{ gridColumn: "span 6" }}>
+        <div className="card grid-half">
           <h2>Нет аккаунта?</h2>
           <div className="muted" style={{ marginBottom: 12 }}>
             Зарегистрируйся и пройди короткий опрос — это даст стартовый рейтинг.

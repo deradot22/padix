@@ -22,11 +22,19 @@ import java.util.UUID
 @RestController
 @RequestMapping("/api/players")
 class PlayerController(
-    private val service: EventService
+    private val service: EventService,
+    private val userRepo: com.padelgo.auth.UserRepository
 ) {
     @GetMapping("/rating")
-    fun rating(): List<PlayerResponse> =
-        service.listPlayersByRating().map(PlayerResponse::from)
+    fun rating(): List<PlayerResponse> {
+        val players = service.listPlayersByRating()
+        val usersByPlayerId = userRepo.findAllByPlayerIdIn(players.mapNotNull { it.id })
+            .associateBy { it.playerId!! }
+        return players.map { p ->
+            val calibration = usersByPlayerId[p.id]?.calibrationEventsRemaining
+            PlayerResponse.from(p, calibration)
+        }
+    }
 }
 
 @RestController
@@ -36,7 +44,8 @@ class EventController(
     private val roundRepo: RoundRepository,
     private val matchRepo: MatchRepository,
     private val scoreRepo: MatchSetScoreRepository,
-    private val playerRepo: PlayerRepository
+    private val playerRepo: PlayerRepository,
+    private val userRepo: com.padelgo.auth.UserRepository
 ) {
     @PostMapping
     fun create(@Valid @RequestBody req: CreateEventRequest): EventResponse =
@@ -132,6 +141,11 @@ class EventController(
             listOf(it.teamAPlayer1Id!!, it.teamAPlayer2Id!!, it.teamBPlayer1Id!!, it.teamBPlayer2Id!!)
         }.toSet()
         val players = playerRepo.findAllById(playerIds).associateBy { it.id!! }
+        val usersByPlayerId = userRepo.findAllByPlayerIdIn(playerIds).associateBy { it.playerId!! }
+        val playerResponses = players.mapValues { (id, p) ->
+            val calibration = usersByPlayerId[id]?.calibrationEventsRemaining
+            PlayerResponse.from(p, calibration)
+        }
         val scoresByMatch = matches.values.flatten().associate { m ->
             m.id!! to scoreRepo.findAllByMatchIdOrderBySetNumberAsc(m.id!!)
         }
@@ -156,7 +170,7 @@ class EventController(
                         sets = setEntities
                     )
                 }
-                MatchResponse.from(m, players, score)
+                MatchResponse.from(m, playerResponses, score)
             }
             RoundResponse.from(r, ms)
         }
@@ -168,8 +182,14 @@ class EventController(
         return EventDetailsResponse(
             EventResponse.from(event, registeredCount),
             roundDtos,
-            regs.map(PlayerResponse::from),
-            pending.map(PlayerResponse::from),
+            regs.map { p ->
+                val calibration = usersByPlayerId[p.id]?.calibrationEventsRemaining
+                PlayerResponse.from(p, calibration)
+            },
+            pending.map { p ->
+                val calibration = usersByPlayerId[p.id]?.calibrationEventsRemaining
+                PlayerResponse.from(p, calibration)
+            },
             isAuthor,
             authorName
         )

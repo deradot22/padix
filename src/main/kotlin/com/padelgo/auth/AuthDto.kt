@@ -34,6 +34,7 @@ data class MeResponse(
     val name: String,
     val rating: Int,
     val gamesPlayed: Int,
+    val publicId: String,
     val surveyCompleted: Boolean,
     val surveyLevel: Double?,
     val calibrationEventsRemaining: Int

@@ -6,6 +6,7 @@ import jakarta.transaction.Transactional
 import org.springframework.http.HttpStatus
 import org.springframework.security.crypto.password.PasswordEncoder
 import org.springframework.stereotype.Service
+import java.security.SecureRandom
 import java.util.UUID
 
 @Service
@@ -15,6 +16,8 @@ class AuthService(
     private val encoder: PasswordEncoder,
     private val jwt: JwtService
 ) {
+    private val rng = SecureRandom()
+
     @Transactional
     fun register(req: RegisterRequest): AuthResponse {
         val email = req.email.trim().lowercase()
@@ -31,7 +34,8 @@ class AuthService(
             UserAccount(
                 email = email,
                 passwordHash = encoder.encode(req.password),
-                playerId = player.id!!
+                playerId = player.id!!,
+                publicId = generatePublicId()
             )
         )
         return AuthResponse(jwt.createToken(user.id!!, user.email, user.playerId!!))
@@ -53,10 +57,21 @@ class AuthService(
             name = player.name,
             rating = player.rating,
             gamesPlayed = player.gamesPlayed,
+            publicId = formatPublicId(user.publicId),
             surveyCompleted = user.surveyCompleted,
             surveyLevel = user.surveyLevel,
             calibrationEventsRemaining = user.calibrationEventsRemaining
         )
     }
+
+    private fun generatePublicId(): Long {
+        repeat(10) {
+            val candidate = 100_000_000L + (rng.nextDouble() * 900_000_000L).toLong()
+            if (users.findByPublicId(candidate) == null) return candidate
+        }
+        throw ApiException(HttpStatus.CONFLICT, "Failed to generate public id")
+    }
+
+    private fun formatPublicId(publicId: Long): String = "#$publicId"
 }
 

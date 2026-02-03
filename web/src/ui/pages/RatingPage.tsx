@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { api, Player } from "../../lib/api";
+import { ntrpLevel } from "../../lib/rating";
 
 export function RatingPage(props: { authed: boolean }) {
   const [data, setData] = useState<Player[] | null>(null);
@@ -40,26 +41,44 @@ export function RatingPage(props: { authed: boolean }) {
         <div className="split">
           <h2>Рейтинг</h2>
         </div>
-        <table className="table">
-          <thead>
-            <tr>
-              <th>#</th>
-              <th>Игрок</th>
-              <th>Рейтинг</th>
-              <th>Матчей</th>
-            </tr>
-          </thead>
-          <tbody>
-            {data.map((p, idx) => (
-              <tr key={p.id}>
-                <td className="muted">{idx + 1}</td>
-                <td>{p.name}</td>
-                <td>{p.rating}</td>
-                <td className="muted">{p.gamesPlayed}</td>
+        <div className="table-wrap">
+          <table className="table">
+            <thead>
+              <tr>
+                <th>#</th>
+                <th>Игрок</th>
+                <th>Рейтинг</th>
+              <th>NTRP</th>
+                <th>Матчей</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {data.map((p, idx) => (
+                <tr key={p.id}>
+                  <td className="muted">{idx + 1}</td>
+                  <td>
+                    <span className="pill pill-action tooltip">
+                      {p.name}
+                      <span className="tooltip-content">
+                        <span className="tooltip-line">
+                          Рейтинг: {p.rating}
+                          {(p.calibrationEventsRemaining ?? 0) > 0 ? <span className="calibration-mark">?</span> : null}
+                        </span>
+                        <span className="tooltip-line">Матчей: {p.gamesPlayed}</span>
+                      </span>
+                    </span>
+                  </td>
+                  <td>
+                    {p.rating}
+                    {(p.calibrationEventsRemaining ?? 0) > 0 ? <span className="calibration-mark">?</span> : null}
+                  </td>
+                <td className="muted">{ntrpLevel(p.rating)}</td>
+                  <td className="muted">{p.gamesPlayed}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       </div>
     );
   }, [data, error, loading]);

@@ -59,7 +59,8 @@ class SecurityConfig(
         config.allowedOrigins = listOf(
             "https://padix.club",
             "https://www.padix.club",
-            "http://localhost:5173"
+            "http://localhost:5173",
+            "http://localhost:8081"
         )
         config.allowedMethods = listOf("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS")
         config.allowedHeaders = listOf("*")
@@ -121,7 +122,12 @@ class SurveyGateFilter(
                 path == "/api/players/rating" ||
                 path.startsWith("/api/survey/") ||
                 path == "/api/me" ||
-                path.startsWith("/api/me/")
+                path.startsWith("/api/me/") ||
+                (path.startsWith("/api/events/") && (
+                    path.endsWith("/invites") ||
+                    path.endsWith("/invites/accept") ||
+                    path.endsWith("/invites/decline")
+                ))
             if (!completed && !allowed) {
                 response.status = HttpStatus.FORBIDDEN.value()
                 response.contentType = "application/json"

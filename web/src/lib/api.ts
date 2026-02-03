@@ -10,6 +10,7 @@ export type Player = {
   name: string;
   rating: number;
   gamesPlayed: number;
+  calibrationEventsRemaining?: number | null;
 };
 
 export type Event = {
@@ -92,6 +93,42 @@ export type EventHistoryMatch = {
   teamText: string;
   opponentText: string;
   result: string;
+};
+
+export type FriendItem = {
+  userId: string;
+  publicId: string;
+  name: string;
+  rating: number;
+  gamesPlayed: number;
+  calibrationEventsRemaining: number;
+};
+
+export type FriendRequestItem = {
+  publicId: string;
+  name: string;
+};
+
+export type FriendsSnapshot = {
+  friends: FriendItem[];
+  incoming: FriendRequestItem[];
+  outgoing: FriendRequestItem[];
+};
+
+export type EventInviteItem = {
+  eventId: string;
+  eventTitle: string;
+  eventDate: string;
+  fromName: string;
+  fromPublicId: string;
+};
+
+export type InviteStatus = "PENDING" | "ACCEPTED" | "DECLINED";
+
+export type EventInviteStatusItem = {
+  publicId: string;
+  name: string;
+  status: InviteStatus;
 };
 
 function getToken(): string | null {
@@ -198,10 +235,27 @@ export const api = {
       name: string;
       rating: number;
       gamesPlayed: number;
+      publicId: string;
       surveyCompleted: boolean;
       surveyLevel: number | null;
       calibrationEventsRemaining: number;
     }>("/api/me"),
+  getFriends: () => request<FriendsSnapshot>("/api/friends"),
+  requestFriend: (publicId: string) =>
+    request("/api/friends/request", { method: "POST", body: JSON.stringify({ publicId }) }),
+  acceptFriend: (publicId: string) =>
+    request("/api/friends/accept", { method: "POST", body: JSON.stringify({ publicId }) }),
+  declineFriend: (publicId: string) =>
+    request("/api/friends/decline", { method: "POST", body: JSON.stringify({ publicId }) }),
+  inviteFriendToEvent: (eventId: string, publicId: string) =>
+    request(`/api/events/${eventId}/invite`, { method: "POST", body: JSON.stringify({ publicId }) }),
+  getInvites: () => request<EventInviteItem[]>("/api/invites"),
+  acceptEventInvite: (eventId: string) =>
+    request(`/api/events/${eventId}/invites/accept`, { method: "POST" }),
+  declineEventInvite: (eventId: string) =>
+    request(`/api/events/${eventId}/invites/decline`, { method: "POST" }),
+  getEventInvites: (eventId: string) =>
+    request<EventInviteStatusItem[]>(`/api/events/${eventId}/invites`),
   getSurvey: () =>
     request<{
       id: string;

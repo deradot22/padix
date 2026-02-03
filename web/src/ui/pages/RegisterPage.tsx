@@ -31,7 +31,7 @@ export function RegisterPage(props: { onAuth: (me: any) => void }) {
     <>
       <div className="section-title">Регистрация</div>
       <div className="grid">
-        <div className="card" style={{ gridColumn: "span 6" }}>
+        <div className="card grid-half">
           <form onSubmit={onSubmit}>
             <label className="label">Имя (как в рейтинге)</label>
             <input className="input" value={name} onChange={(e) => setName(e.target.value)} />
@@ -48,7 +48,7 @@ export function RegisterPage(props: { onAuth: (me: any) => void }) {
             {error ? <div style={{ marginTop: 12 }} className="error">{error}</div> : null}
           </form>
         </div>
-        <div className="card" style={{ gridColumn: "span 6" }}>
+        <div className="card grid-half">
           <h2>Уже есть аккаунт?</h2>
           <div className="muted" style={{ marginBottom: 12 }}>
             Войди, чтобы увидеть игры на сегодня и свой профиль.

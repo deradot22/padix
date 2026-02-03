@@ -24,14 +24,16 @@ data class PlayerResponse(
     val id: UUID,
     val name: String,
     val rating: Int,
-    val gamesPlayed: Int
+    val gamesPlayed: Int,
+    val calibrationEventsRemaining: Int? = null
 ) {
     companion object {
-        fun from(p: Player) = PlayerResponse(
+        fun from(p: Player, calibrationEventsRemaining: Int? = null) = PlayerResponse(
             id = p.id!!,
             name = p.name,
             rating = p.rating,
-            gamesPlayed = p.gamesPlayed
+            gamesPlayed = p.gamesPlayed,
+            calibrationEventsRemaining = calibrationEventsRemaining
         )
     }
 }
@@ -144,11 +146,11 @@ data class MatchResponse(
     val score: ScoreResponse?
 ) {
     companion object {
-        fun from(m: Match, players: Map<UUID, Player>, score: ScoreResponse?) = MatchResponse(
+        fun from(m: Match, players: Map<UUID, PlayerResponse>, score: ScoreResponse?) = MatchResponse(
             id = m.id!!,
             courtNumber = m.courtNumber,
-            teamA = listOf(players[m.teamAPlayer1Id]!!, players[m.teamAPlayer2Id]!!).map(PlayerResponse::from),
-            teamB = listOf(players[m.teamBPlayer1Id]!!, players[m.teamBPlayer2Id]!!).map(PlayerResponse::from),
+            teamA = listOf(players[m.teamAPlayer1Id]!!, players[m.teamAPlayer2Id]!!),
+            teamB = listOf(players[m.teamBPlayer1Id]!!, players[m.teamBPlayer2Id]!!),
             status = m.status.name,
             score = score
         )

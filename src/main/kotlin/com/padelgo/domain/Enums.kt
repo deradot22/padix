@@ -33,3 +33,12 @@ enum class MatchStatus {
     FINISHED
 }
 
+enum class FriendRequestStatus {
+    PENDING,
+    ACCEPTED,
+    DECLINED
+}enum class InviteStatus {
+    PENDING,
+    ACCEPTED,
+    DECLINED
+}

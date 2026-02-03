@@ -9,7 +9,7 @@ function todayIso(): string {
   return `${d.getFullYear()}-${m}-${day}`;
 }
 
-export function CreateEventPage(props: { me: any }) {
+export function CreateEventPage(props: { me: any; meLoaded?: boolean }) {
   const nav = useNavigate();
   const [title, setTitle] = useState("Американка");
   const [date, setDate] = useState(todayIso());
@@ -24,9 +24,10 @@ export function CreateEventPage(props: { me: any }) {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
+    if (!props.meLoaded) return;
     if (!props.me) nav("/login");
     else if (!props.me.surveyCompleted) nav("/survey");
-  }, [props.me, nav]);
+  }, [props.me, props.meLoaded, nav]);
 
   async function onSubmit(e: FormEvent) {
     e.preventDefault();
@@ -82,10 +83,56 @@ export function CreateEventPage(props: { me: any }) {
 
           <div style={{ height: 10 }} />
           <label className="label">Время (с — по)</label>
-          <div className="row">
-            <input className="input" type="time" value={startTime} onChange={(e) => setStartTime(e.target.value)} />
+          <div className="row time-row">
+            <div className="time-group">
+              <select
+                className="input time-hour"
+                value={startTime.split(":")[0] ?? "00"}
+                onChange={(e) => setStartTime(`${e.target.value}:${startTime.split(":")[1] ?? "00"}`)}
+              >
+                {Array.from({ length: 24 }).map((_, i) => {
+                  const hour = `${i}`.padStart(2, "0");
+                  return (
+                    <option key={hour} value={hour}>
+                      {hour}
+                    </option>
+                  );
+                })}
+              </select>
+              <select
+                className="input time-minute"
+                value={startTime.split(":")[1] ?? "00"}
+                onChange={(e) => setStartTime(`${startTime.split(":")[0] ?? "00"}:${e.target.value}`)}
+              >
+                <option value="00">00</option>
+                <option value="30">30</option>
+              </select>
+            </div>
             <span className="muted">—</span>
-            <input className="input" type="time" value={endTime} onChange={(e) => setEndTime(e.target.value)} />
+            <div className="time-group">
+              <select
+                className="input time-hour"
+                value={endTime.split(":")[0] ?? "00"}
+                onChange={(e) => setEndTime(`${e.target.value}:${endTime.split(":")[1] ?? "00"}`)}
+              >
+                {Array.from({ length: 24 }).map((_, i) => {
+                  const hour = `${i}`.padStart(2, "0");
+                  return (
+                    <option key={hour} value={hour}>
+                      {hour}
+                    </option>
+                  );
+                })}
+              </select>
+              <select
+                className="input time-minute"
+                value={endTime.split(":")[1] ?? "00"}
+                onChange={(e) => setEndTime(`${endTime.split(":")[0] ?? "00"}:${e.target.value}`)}
+              >
+                <option value="00">00</option>
+                <option value="30">30</option>
+              </select>
+            </div>
           </div>
 
           <div style={{ height: 10 }} />
@@ -103,17 +150,17 @@ export function CreateEventPage(props: { me: any }) {
 
           <div style={{ height: 10 }} />
           <label className="label">Режим американки</label>
-          <div className="row">
+          <div className={`switcher ${pairingMode === "ROUND_ROBIN" ? "is-left" : "is-right"}`}>
             <button
               type="button"
-              className={pairingMode === "ROUND_ROBIN" ? "btn primary" : "btn"}
+              className={`switcher-option ${pairingMode === "ROUND_ROBIN" ? "is-active" : ""}`}
               onClick={() => setPairingMode("ROUND_ROBIN")}
             >
               Каждый с каждым
             </button>
             <button
               type="button"
-              className={pairingMode === "BALANCED" ? "btn primary" : "btn"}
+              className={`switcher-option ${pairingMode === "BALANCED" ? "is-active" : ""}`}
               onClick={() => setPairingMode("BALANCED")}
             >
               Равный бой
@@ -125,17 +172,17 @@ export function CreateEventPage(props: { me: any }) {
 
           <div style={{ height: 10 }} />
           <label className="label">Раунды (подачи/ротации)</label>
-          <div className="row">
+          <div className={`switcher ${autoRounds ? "is-left" : "is-right"}`}>
             <button
               type="button"
-              className={autoRounds ? "btn primary" : "btn"}
+              className={`switcher-option ${autoRounds ? "is-active" : ""}`}
               onClick={() => setAutoRounds(true)}
             >
               Авто по уровню игроков
             </button>
             <button
               type="button"
-              className={!autoRounds ? "btn primary" : "btn"}
+              className={`switcher-option ${!autoRounds ? "is-active" : ""}`}
               onClick={() => setAutoRounds(false)}
             >
               Вручную
@@ -167,7 +214,7 @@ export function CreateEventPage(props: { me: any }) {
             onChange={(e) => setPointsPerPlayer(Number(e.target.value))}
           />
 
-          <div className="row" style={{ marginTop: 14 }}>
+          <div className="row stack" style={{ marginTop: 14 }}>
             <button className="btn primary" disabled={loading}>
               {loading ? "Создаём…" : "Создать"}
             </button>

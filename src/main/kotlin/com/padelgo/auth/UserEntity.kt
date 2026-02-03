@@ -28,6 +28,9 @@ class UserAccount(
     @Column(name = "player_id", nullable = false, unique = true)
     var playerId: UUID? = null,
 
+    @Column(name = "public_id", nullable = false, unique = true)
+    var publicId: Long = 0,
+
     @Column(name = "survey_completed", nullable = false)
     var surveyCompleted: Boolean = false,
 
