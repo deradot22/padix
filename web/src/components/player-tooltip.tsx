@@ -22,7 +22,15 @@ export interface PlayerTooltipProps {
   onAddFriend?: (playerId: number | string) => void;
 }
 
+function formatPublicId(odid?: string) {
+  if (!odid) return null;
+  const trimmed = odid.trim();
+  if (!trimmed) return null;
+  return trimmed.startsWith("#") ? trimmed : `#${trimmed}`;
+}
+
 export function PlayerTooltip({ player, children, showAddFriend = true, onAddFriend }: PlayerTooltipProps) {
+  const publicId = formatPublicId(player.odid);
   return (
     <TooltipProvider delayDuration={200}>
       <Tooltip>
@@ -31,7 +39,7 @@ export function PlayerTooltip({ player, children, showAddFriend = true, onAddFri
           <div className="p-3 min-w-[180px]">
             <div className="mb-3">
               <p className="font-semibold text-foreground">{player.name}</p>
-              {player.odid ? <p className="text-xs text-muted-foreground">{player.odid}</p> : null}
+              {publicId ? <p className="text-xs text-muted-foreground">{publicId}</p> : null}
             </div>
 
             <div className="space-y-1.5 text-sm">

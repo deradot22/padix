@@ -14,6 +14,7 @@ import com.padelgo.domain.Round
 import com.padelgo.domain.InviteStatus
 import com.padelgo.domain.ScoringMode
 import com.padelgo.repo.EventRepository
+import com.padelgo.repo.EventCourtRepository
 import com.padelgo.repo.MatchRepository
 import com.padelgo.repo.MatchSetScoreRepository
 import com.padelgo.repo.PlayerRepository
@@ -37,7 +38,8 @@ class EventService(
     private val scoreRepo: MatchSetScoreRepository,
     private val ratingChangeRepo: RatingChangeRepository,
     private val userRepo: com.padelgo.auth.UserRepository,
-    private val inviteRepo: com.padelgo.repo.EventInviteRepository
+    private val inviteRepo: com.padelgo.repo.EventInviteRepository,
+    private val courtRepo: EventCourtRepository
 ) {
     fun getToday(date: LocalDate = LocalDate.now()): List<Event> =
         eventRepo.findAllByDateOrderByStartTimeAsc(date)
@@ -59,7 +61,7 @@ class EventService(
         playerRepo.findAll().sortedWith(compareByDescending<Player> { it.rating }.thenBy { it.name.lowercase() })
 
     @Transactional
-    fun createEvent(event: Event, creatorUserId: UUID): Event {
+    fun createEvent(event: Event, creatorUserId: UUID, courtNames: List<String>? = null): Event {
         val now = java.time.LocalDateTime.now()
         val eventDateTime = java.time.LocalDateTime.of(event.date, event.startTime)
         val eventEndDateTime = java.time.LocalDateTime.of(event.date, event.endTime)
@@ -86,7 +88,38 @@ class EventService(
             event.roundsPlanned = 1 // placeholder, будет пересчитано на старте
         }
         event.createdByUserId = creatorUserId
-        return eventRepo.save(event)
+        val saved = eventRepo.save(event)
+
+        val provided = courtNames?.map { it.trim() }
+        if (provided != null && provided.size != saved.courtsCount) {
+            throw ApiException(HttpStatus.BAD_REQUEST, "courtNames size must match courtsCount")
+        }
+        val resolved = (1..saved.courtsCount).map { idx ->
+            val name = provided?.getOrNull(idx - 1)
+            if (name.isNullOrBlank()) "Корт ${courtLabel(idx)}" else name
+        }
+        resolved.forEachIndexed { idx, name ->
+            courtRepo.save(
+                com.padelgo.domain.EventCourt(
+                    eventId = saved.id,
+                    courtNumber = idx + 1,
+                    name = name
+                )
+            )
+        }
+        return saved
+    }
+
+    private fun courtLabel(index: Int): String {
+        val alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+        val zeroBased = index - 1
+        val first = zeroBased / alphabet.length
+        val second = zeroBased % alphabet.length
+        return if (first == 0) {
+            alphabet[second].toString()
+        } else {
+            "${alphabet[first - 1]}${alphabet[second]}"
+        }
     }
 
     fun getEvent(eventId: UUID): Event =
@@ -125,6 +158,26 @@ class EventService(
     private fun requireAuthor(event: Event, userId: UUID) {
         if (event.createdByUserId != userId) {
             throw ApiException(HttpStatus.FORBIDDEN, "Only author can perform this action")
+        }
+    }
+
+    private fun requireAuthorOrParticipant(event: Event, userId: UUID) {
+        if (event.createdByUserId == userId) return
+        val user = userRepo.findById(userId).orElseThrow {
+            ApiException(HttpStatus.UNAUTHORIZED, "Unauthorized")
+        }
+        val playerId = user.playerId ?: throw ApiException(HttpStatus.FORBIDDEN, "Only participants can perform this action")
+        val reg = regRepo.findByEventIdAndPlayerId(event.id!!, playerId)
+        if (reg != null && reg.status == RegistrationStatus.REGISTERED) return
+        val matches = matchRepo.findAllByEventId(event.id!!)
+        val inMatch = matches.any { m ->
+            m.teamAPlayer1Id == playerId ||
+                m.teamAPlayer2Id == playerId ||
+                m.teamBPlayer1Id == playerId ||
+                m.teamBPlayer2Id == playerId
+        }
+        if (!inMatch) {
+            throw ApiException(HttpStatus.FORBIDDEN, "Only participants can perform this action")
         }
     }
 
@@ -360,7 +413,7 @@ class EventService(
 
         val round = roundRepo.findById(match.roundId!!).orElseThrow { ApiException(HttpStatus.NOT_FOUND, "Round not found") }
         val event = getEvent(round.eventId!!)
-        requireAuthor(event, userId)
+        requireAuthorOrParticipant(event, userId)
         if (event.status != EventStatus.IN_PROGRESS) {
             throw ApiException(HttpStatus.CONFLICT, "Event is not in progress (status=${event.status})")
         }
@@ -404,9 +457,15 @@ class EventService(
             }
         }
 
-        // overwrite existing set scores for match
-        scoreRepo.deleteAllByMatchId(matchId)
-        scoreRepo.saveAll(setEntities)
+        val keepNumbers = setEntities.map { it.setNumber }
+        setEntities.forEach { s ->
+            scoreRepo.upsertScore(matchId, s.setNumber, s.teamAGames, s.teamBGames)
+        }
+        if (keepNumbers.isNotEmpty()) {
+            scoreRepo.deleteAllByMatchIdAndSetNumberNotIn(matchId, keepNumbers)
+        } else {
+            scoreRepo.deleteAllByMatchId(matchId)
+        }
 
         match.status = MatchStatus.FINISHED
         matchRepo.save(match)

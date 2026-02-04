@@ -8,6 +8,7 @@ import jakarta.persistence.GeneratedValue
 import jakarta.persistence.GenerationType
 import jakarta.persistence.Id
 import jakarta.persistence.Table
+import jakarta.persistence.UniqueConstraint
 import org.hibernate.annotations.CreationTimestamp
 import org.hibernate.annotations.UuidGenerator
 import java.time.Instant
@@ -182,6 +183,27 @@ class Match(
     @Enumerated(EnumType.STRING)
     @Column(name = "status", nullable = false)
     var status: MatchStatus = MatchStatus.SCHEDULED
+)
+
+@Entity
+@Table(
+    name = "event_courts",
+    uniqueConstraints = [UniqueConstraint(name = "uk_event_courts_event_court", columnNames = ["event_id", "court_number"])]
+)
+class EventCourt(
+    @Id
+    @UuidGenerator
+    @Column(name = "id", nullable = false)
+    var id: UUID? = null,
+
+    @Column(name = "event_id", nullable = false)
+    var eventId: UUID? = null,
+
+    @Column(name = "court_number", nullable = false)
+    var courtNumber: Int = 1,
+
+    @Column(name = "name", nullable = false)
+    var name: String = "Корт 1"
 )
 
 @Entity

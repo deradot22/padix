@@ -45,7 +45,21 @@ class SecurityConfig(
                     "/swagger-ui/**",
                     "/v3/api-docs/**"
                 ).permitAll()
+                .requestMatchers(org.springframework.http.HttpMethod.GET, "/api/events/*", "/api/events/today", "/api/events/upcoming").permitAll()
                 .anyRequest().authenticated()
+        }
+
+        http.exceptionHandling { handler ->
+            handler.authenticationEntryPoint { _, response, _ ->
+                response.status = HttpStatus.UNAUTHORIZED.value()
+                response.contentType = "application/json"
+                response.writer.write("""{"status":401,"error":"Unauthorized","message":"Unauthorized"}""")
+            }
+            handler.accessDeniedHandler { _, response, _ ->
+                response.status = HttpStatus.FORBIDDEN.value()
+                response.contentType = "application/json"
+                response.writer.write("""{"status":403,"error":"Forbidden","message":"Access denied"}""")
+            }
         }
 
         http.addFilterBefore(JwtAuthFilter(jwtService), UsernamePasswordAuthenticationFilter::class.java)
@@ -127,7 +141,8 @@ class SurveyGateFilter(
                     path.endsWith("/invites") ||
                     path.endsWith("/invites/accept") ||
                     path.endsWith("/invites/decline")
-                ))
+                )) ||
+                (path.startsWith("/api/events/matches/") && path.endsWith("/score"))
             if (!completed && !allowed) {
                 response.status = HttpStatus.FORBIDDEN.value()
                 response.contentType = "application/json"

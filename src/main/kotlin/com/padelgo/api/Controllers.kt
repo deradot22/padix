@@ -45,7 +45,8 @@ class EventController(
     private val matchRepo: MatchRepository,
     private val scoreRepo: MatchSetScoreRepository,
     private val playerRepo: PlayerRepository,
-    private val userRepo: com.padelgo.auth.UserRepository
+    private val userRepo: com.padelgo.auth.UserRepository,
+    private val courtRepo: com.padelgo.repo.EventCourtRepository
 ) {
     @PostMapping
     fun create(@Valid @RequestBody req: CreateEventRequest): EventResponse =
@@ -67,7 +68,8 @@ class EventController(
                     gamesPerSet = req.gamesPerSet,
                     tiebreakEnabled = req.tiebreakEnabled
                 ),
-                principalUserId()
+                principalUserId(),
+                req.courtNames
             )
         )
 
@@ -135,6 +137,8 @@ class EventController(
     @GetMapping("/{eventId}")
     fun getDetails(@PathVariable eventId: UUID): EventDetailsResponse {
         val event = service.getEvent(eventId)
+        val courts = courtRepo.findAllByEventIdOrderByCourtNumberAsc(eventId)
+        val courtNameByNumber = courts.associate { it.courtNumber to it.name }
         val rounds = roundRepo.findAllByEventIdOrderByRoundNumberAsc(eventId)
         val matches = rounds.associate { r -> r.id!! to matchRepo.findAllByRoundIdOrderByCourtNumberAsc(r.id!!) }
         val playerIds = matches.values.flatten().flatMap {
@@ -170,7 +174,8 @@ class EventController(
                         sets = setEntities
                     )
                 }
-                MatchResponse.from(m, playerResponses, score)
+                val courtName = courtNameByNumber[m.courtNumber] ?: "Корт ${m.courtNumber}"
+                MatchResponse.from(m, playerResponses, score, courtName)
             }
             RoundResponse.from(r, ms)
         }

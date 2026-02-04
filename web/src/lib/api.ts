@@ -39,6 +39,7 @@ export type SetScore = { teamAGames: number; teamBGames: number };
 export type Match = {
   id: string;
   courtNumber: number;
+  courtName?: string | null;
   teamA: Player[];
   teamB: Player[];
   status: string;
@@ -155,15 +156,20 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 
   if (!res.ok) {
     let body: unknown = null;
+    let textBody: string | null = null;
     try {
       body = await res.json();
     } catch {
-      // ignore
+      try {
+        textBody = await res.text();
+      } catch {
+        // ignore
+      }
     }
     const apiErr = body as Partial<ApiError> | null;
     const msg =
       apiErr?.message ??
-      `HTTP ${res.status} ${res.statusText} while calling ${path}`;
+      (textBody && textBody.trim() ? textBody.trim() : `HTTP ${res.status} ${res.statusText} while calling ${path}`);
     throw new Error(msg);
   }
 
@@ -210,6 +216,7 @@ export const api = {
     format: "AMERICANA";
     pairingMode: PairingMode;
     courtsCount: number;
+    courtNames?: string[];
     autoRounds: boolean;
     roundsPlanned?: number;
     scoringMode: "POINTS" | "SETS";

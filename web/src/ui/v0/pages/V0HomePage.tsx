@@ -30,6 +30,7 @@ export function V0HomePage(props: { me: any }) {
   const [loading, setLoading] = useState(true);
   const [joiningId, setJoiningId] = useState<string | null>(null);
   const [joinError, setJoinError] = useState<string | null>(null);
+  const [registeredIds, setRegisteredIds] = useState<Record<string, boolean>>({});
 
   useEffect(() => {
     if (props.me && !props.me.surveyCompleted) return;
@@ -55,6 +56,35 @@ export function V0HomePage(props: { me: any }) {
       })
       .finally(() => setLoading(false));
   }, [props.me]);
+
+  useEffect(() => {
+    if (!props.me?.playerId) {
+      setRegisteredIds({});
+      return;
+    }
+    const upcomingIds = (events ?? []).slice(0, 2).map((e) => e.id);
+    if (upcomingIds.length === 0) {
+      setRegisteredIds({});
+      return;
+    }
+    let cancelled = false;
+    Promise.all(upcomingIds.map((id) => api.getEventDetails(id)))
+      .then((details) => {
+        if (cancelled) return;
+        const map: Record<string, boolean> = {};
+        details.forEach((d) => {
+          const meId = props.me?.playerId;
+          map[d.event.id] = !!meId && (d.registeredPlayers ?? []).some((p) => p.id === meId);
+        });
+        setRegisteredIds(map);
+      })
+      .catch(() => {
+        if (!cancelled) setRegisteredIds({});
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [events, props.me?.playerId]);
 
   const stats = useMemo(() => {
     const now = new Date();
@@ -192,9 +222,15 @@ export function V0HomePage(props: { me: any }) {
                       <Users className="h-3 w-3" />
                       {e.registeredCount}/{e.courtsCount * 4}
                     </Badge>
-                    <Button size="sm" disabled={joiningId === e.id} onClick={() => joinEvent(e.id)}>
-                      Вступить
-                    </Button>
+                    {registeredIds[e.id] ? (
+                      <Button size="sm" variant="secondary" onClick={() => nav(`/events/${e.id}`)}>
+                        Вы записаны
+                      </Button>
+                    ) : (
+                      <Button size="sm" disabled={joiningId === e.id} onClick={() => joinEvent(e.id)}>
+                        Вступить
+                      </Button>
+                    )}
                   </div>
                 </div>
               ))

@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { api, EventHistoryItem, EventHistoryMatch, EventInviteItem, FriendsSnapshot } from "../../../lib/api";
 import { ntrpLevel } from "../../../lib/rating";
+import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -28,6 +29,13 @@ import {
   XCircle,
 } from "lucide-react";
 
+function formatPublicId(publicId?: string | null) {
+  if (!publicId) return null;
+  const trimmed = publicId.trim();
+  if (!trimmed) return null;
+  return trimmed.startsWith("#") ? trimmed : `#${trimmed}`;
+}
+
 export function V0ProfilePage(props: { me: any; meLoaded?: boolean }) {
   const nav = useNavigate();
   const [meLive, setMeLive] = useState<any | null>(null);
@@ -45,6 +53,8 @@ export function V0ProfilePage(props: { me: any; meLoaded?: boolean }) {
   const [inviteActionId, setInviteActionId] = useState<string | null>(null);
   const [avatar, setAvatar] = useState<string | null>(null);
   const [avatarOpen, setAvatarOpen] = useState(false);
+  const [info, setInfo] = useState<string | null>(null);
+  const [idCopied, setIdCopied] = useState(false);
 
   const boyAvatars = useMemo(
     () => [
@@ -73,6 +83,18 @@ export function V0ProfilePage(props: { me: any; meLoaded?: boolean }) {
     if (!props.me) nav("/login");
     else if (!props.me.surveyCompleted) nav("/survey");
   }, [props.me, props.meLoaded, nav]);
+
+  useEffect(() => {
+    if (!idCopied) return;
+    const id = window.setTimeout(() => setIdCopied(false), 2000);
+    return () => window.clearTimeout(id);
+  }, [idCopied]);
+
+  useEffect(() => {
+    if (!info) return;
+    const id = window.setTimeout(() => setInfo(null), 5000);
+    return () => window.clearTimeout(id);
+  }, [info]);
 
   useEffect(() => {
     try {
@@ -267,10 +289,37 @@ export function V0ProfilePage(props: { me: any; meLoaded?: boolean }) {
                 <Gamepad2 className="h-4 w-4" />
                 {viewMe.gamesPlayed} матчей
               </Badge>
-              <Badge variant="secondary" className="gap-2 px-4 py-2">
-                <Hash className="h-4 w-4" />
-                {viewMe.publicId}
-              </Badge>
+              <div className="relative">
+                <button
+                  type="button"
+                  className="inline-flex"
+                  onClick={async () => {
+                    const pid = formatPublicId(viewMe.publicId);
+                    if (!pid) return;
+                    try {
+                      await navigator.clipboard.writeText(pid);
+                      setIdCopied(true);
+                    } catch {
+                      setInfo(pid);
+                    }
+                  }}
+                  aria-label="Скопировать ID"
+                  title="Скопировать ID"
+                >
+                  <Badge variant="secondary" className="gap-2 px-4 py-2">
+                    <span className="text-xs uppercase text-muted-foreground">ID</span>
+                    {formatPublicId(viewMe.publicId)}
+                  </Badge>
+                </button>
+                <span
+                  className={cn(
+                    "pointer-events-none absolute -top-2 right-0 translate-y-[-100%] rounded-md bg-emerald-500/15 px-2 py-1 text-[11px] text-emerald-300 transition-all duration-200",
+                    idCopied ? "opacity-100 translate-y-[-110%]" : "opacity-0 translate-y-[-80%]",
+                  )}
+                >
+                  Скопировано
+                </span>
+              </div>
             </div>
 
             {calibration ? (
@@ -507,8 +556,14 @@ export function V0ProfilePage(props: { me: any; meLoaded?: boolean }) {
                       setFriendInput("");
                       const updated = await api.getFriends();
                       setFriends(updated);
+                      setInfo("Заявка отправлена");
                     } catch (err: any) {
-                      setFriendError(err?.message ?? "Ошибка отправки");
+                      const msg = err?.message ?? "Ошибка отправки";
+                      if (typeof msg === "string" && msg.toLowerCase().includes("already")) {
+                        setFriendError("Заявка уже отправлена");
+                      } else {
+                        setFriendError(msg);
+                      }
                     } finally {
                       setFriendLoading(false);
                     }
@@ -520,6 +575,11 @@ export function V0ProfilePage(props: { me: any; meLoaded?: boolean }) {
 
               {friendError ? (
                 <div className="rounded-lg border border-destructive/30 bg-destructive/10 p-3 text-sm">{friendError}</div>
+              ) : null}
+              {info ? (
+                <div className="rounded-lg border border-emerald-500/30 bg-emerald-500/10 p-3 text-sm text-emerald-200">
+                  {info}
+                </div>
               ) : null}
 
               {(friends?.friends ?? []).length > 0 ? (
@@ -536,7 +596,7 @@ export function V0ProfilePage(props: { me: any; meLoaded?: boolean }) {
                         </div>
                         <div className="truncate">
                           <p className="text-sm font-medium truncate">{friend.name}</p>
-                          <p className="text-xs text-muted-foreground truncate">{friend.publicId}</p>
+                        <p className="text-xs text-muted-foreground truncate">{formatPublicId(friend.publicId)}</p>
                         </div>
                       </div>
                     </div>
@@ -553,7 +613,7 @@ export function V0ProfilePage(props: { me: any; meLoaded?: boolean }) {
                     <div key={r.publicId} className="flex items-center justify-between gap-2 rounded-lg bg-secondary/50 p-2 px-3">
                       <div className="min-w-0">
                         <p className="text-sm font-medium truncate">{r.name}</p>
-                        <p className="text-xs text-muted-foreground truncate">{r.publicId}</p>
+                        <p className="text-xs text-muted-foreground truncate">{formatPublicId(r.publicId)}</p>
                       </div>
                       <div className="flex gap-2">
                         <Button

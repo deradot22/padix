@@ -41,6 +41,7 @@ export function V0GamesPage(props: { me: any }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [calendarOpen, setCalendarOpen] = useState(false);
+  const [calendarEvents, setCalendarEvents] = useState<Event[]>([]);
 
   useEffect(() => {
     if (props.me && !props.me.surveyCompleted) return;
@@ -55,6 +56,17 @@ export function V0GamesPage(props: { me: any }) {
       .catch((e: unknown) => setError(e instanceof Error ? e.message : "Ошибка"))
       .finally(() => setLoading(false));
   }, [props.me]);
+
+  const loadCalendarEvents = async (date: Date) => {
+    const from = formatDate(new Date(date.getFullYear(), date.getMonth(), 1));
+    const to = formatDate(new Date(date.getFullYear(), date.getMonth() + 1, 0));
+    try {
+      const res = await api.getUpcomingEvents(from, to);
+      setCalendarEvents(res ?? []);
+    } catch {
+      setCalendarEvents([]);
+    }
+  };
 
   const content = useMemo(() => {
     if (loading) {
@@ -173,7 +185,14 @@ export function V0GamesPage(props: { me: any }) {
 
       <GamesCalendar
         open={calendarOpen}
-        onOpenChange={setCalendarOpen}
+        onOpenChange={(open) => {
+          setCalendarOpen(open);
+          if (open) {
+            loadCalendarEvents(new Date());
+          }
+        }}
+        events={calendarEvents}
+        onMonthChange={loadCalendarEvents}
         onSelectDate={() => {
           setCalendarOpen(false);
         }}

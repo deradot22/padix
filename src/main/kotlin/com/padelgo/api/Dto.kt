@@ -53,6 +53,7 @@ data class CreateEventRequest(
     val pairingMode: PairingMode = PairingMode.ROUND_ROBIN,
     @field:Min(1)
     val courtsCount: Int = 2,
+    val courtNames: List<String>? = null,
     val autoRounds: Boolean = true,
     @field:Min(1)
     val roundsPlanned: Int = 6,
@@ -142,15 +143,17 @@ data class SubmitScoreRequest(
 data class MatchResponse(
     val id: UUID,
     val courtNumber: Int,
+    val courtName: String? = null,
     val teamA: List<PlayerResponse>,
     val teamB: List<PlayerResponse>,
     val status: String,
     val score: ScoreResponse?
 ) {
     companion object {
-        fun from(m: Match, players: Map<UUID, PlayerResponse>, score: ScoreResponse?) = MatchResponse(
+        fun from(m: Match, players: Map<UUID, PlayerResponse>, score: ScoreResponse?, courtName: String? = null) = MatchResponse(
             id = m.id!!,
             courtNumber = m.courtNumber,
+            courtName = courtName,
             teamA = listOf(players[m.teamAPlayer1Id]!!, players[m.teamAPlayer2Id]!!),
             teamB = listOf(players[m.teamBPlayer1Id]!!, players[m.teamBPlayer2Id]!!),
             status = m.status.name,

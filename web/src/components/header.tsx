@@ -1,7 +1,7 @@
 "use client";
 
 import { Link, NavLink, useLocation, useNavigate } from "react-router-dom";
-import { Bell, Check, Moon, Sun, UserPlus, X } from "lucide-react";
+import { Bell, Check, Menu, Moon, Sun, UserPlus, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { useEffect, useMemo, useState } from "react";
@@ -30,6 +30,7 @@ export function Header(props: {
   const [invites, setInvites] = useState<EventInviteItem[]>([]);
   const [incomingFriends, setIncomingFriends] = useState<FriendRequestItem[]>([]);
   const [actionKey, setActionKey] = useState<string | null>(null);
+  const [mobileOpen, setMobileOpen] = useState(false);
   const bellRef = useRef<HTMLButtonElement | null>(null);
   const panelRef = useRef<HTMLDivElement | null>(null);
 
@@ -45,6 +46,8 @@ export function Header(props: {
     () => (props.notificationCount > 0 ? props.notificationCount : invites.length + incomingFriends.length),
     [incomingFriends.length, invites.length, props.notificationCount],
   );
+  const hasInvites = invites.length > 0;
+  const hasFriendRequests = incomingFriends.length > 0;
 
   const toggleTheme = (dark: boolean) => {
     setIsDark(dark);
@@ -83,15 +86,27 @@ export function Header(props: {
 
   useEffect(() => {
     if (!notificationsOpen) return;
+    const id = window.setInterval(() => {
+      loadNotifications();
+    }, 30000);
+    return () => window.clearInterval(id);
+  }, [notificationsOpen]);
+
+  useEffect(() => {
+    if (!notificationsOpen) return;
     const onClick = (ev: MouseEvent) => {
       const target = ev.target as Node;
       if (bellRef.current?.contains(target)) return;
       if (panelRef.current?.contains(target)) return;
       setNotificationsOpen(false);
     };
-    window.addEventListener("mousedown", onClick);
-    return () => window.removeEventListener("mousedown", onClick);
+    window.addEventListener("click", onClick);
+    return () => window.removeEventListener("click", onClick);
   }, [notificationsOpen]);
+
+  useEffect(() => {
+    setMobileOpen(false);
+  }, [pathname]);
 
   return (
     <header className="sticky top-0 z-50 w-full border-b border-border/40 bg-background/80 backdrop-blur-xl">
@@ -126,7 +141,10 @@ export function Header(props: {
               variant="ghost"
               size="icon"
               className="relative"
-              onClick={() => setNotificationsOpen((v) => !v)}
+              onClick={(e) => {
+                e.stopPropagation();
+                setNotificationsOpen((v) => !v);
+              }}
               aria-label="Уведомления"
               title="Уведомления"
             >
@@ -138,25 +156,16 @@ export function Header(props: {
               ) : null}
             </Button>
 
-            {notificationsOpen ? (
-              <div
-                ref={panelRef}
-                className="absolute right-0 mt-2 w-[360px] max-w-[calc(100vw-2rem)] rounded-xl border border-border bg-card p-4 shadow-xl"
-              >
+            <div
+              ref={panelRef}
+              className={cn(
+                "fixed left-2 right-2 top-16 w-auto rounded-xl border border-border bg-card p-4 shadow-xl z-50 sm:absolute sm:top-auto sm:left-auto sm:right-0 sm:w-[360px] sm:max-w-[calc(100vw-2rem)] transition-all duration-150 origin-top opacity-0 scale-95 pointer-events-none",
+                notificationsOpen ? "opacity-100 scale-100 pointer-events-auto" : "",
+              )}
+              onClick={(e) => e.stopPropagation()}
+            >
                 <div className="flex items-center justify-between gap-3">
                   <div className="text-sm font-medium">Уведомления</div>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="bg-transparent"
-                    disabled={loadingNotifications}
-                    onClick={async () => {
-                      await loadNotifications();
-                      await props.onRefreshNotifications();
-                    }}
-                  >
-                    Обновить
-                  </Button>
                 </div>
 
                 {!props.authed ? (
@@ -181,13 +190,17 @@ export function Header(props: {
                       </div>
                     ) : null}
 
-                    <div className="space-y-2">
-                      <div className="text-xs font-medium text-muted-foreground uppercase">Приглашения в игры</div>
-                      {loadingNotifications ? (
-                        <div className="text-sm text-muted-foreground">Загрузка…</div>
-                      ) : invites.length === 0 ? (
-                        <div className="text-sm text-muted-foreground">Нет приглашений.</div>
-                      ) : (
+                    {loadingNotifications ? (
+                      <div className="text-sm text-muted-foreground">Загрузка…</div>
+                    ) : null}
+
+                    {!loadingNotifications && !hasInvites && !hasFriendRequests ? (
+                      <div className="text-sm text-muted-foreground">Нет уведомлений.</div>
+                    ) : null}
+
+                    {hasInvites ? (
+                      <div className="space-y-2">
+                        <div className="text-xs font-medium text-muted-foreground uppercase">Приглашения в игры</div>
                         <div className="space-y-2">
                           {invites.map((inv) => {
                             const key = `invite:${inv.eventId}`;
@@ -261,16 +274,12 @@ export function Header(props: {
                             );
                           })}
                         </div>
-                      )}
-                    </div>
+                      </div>
+                    ) : null}
 
-                    <div className="space-y-2">
-                      <div className="text-xs font-medium text-muted-foreground uppercase">Заявки в друзья</div>
-                      {loadingNotifications ? (
-                        <div className="text-sm text-muted-foreground">Загрузка…</div>
-                      ) : incomingFriends.length === 0 ? (
-                        <div className="text-sm text-muted-foreground">Нет входящих заявок.</div>
-                      ) : (
+                    {hasFriendRequests ? (
+                      <div className="space-y-2">
+                        <div className="text-xs font-medium text-muted-foreground uppercase">Заявки в друзья</div>
                         <div className="space-y-2">
                           {incomingFriends.map((req) => {
                             const key = `friend:${req.publicId}`;
@@ -328,12 +337,11 @@ export function Header(props: {
                             );
                           })}
                         </div>
-                      )}
-                    </div>
+                      </div>
+                    ) : null}
                   </div>
                 )}
               </div>
-            ) : null}
           </div>
 
           <div className="flex items-center rounded-full border border-border bg-secondary p-1">
@@ -355,6 +363,17 @@ export function Header(props: {
             </button>
           </div>
 
+          <Button
+            variant="ghost"
+            size="icon"
+            className="md:hidden"
+            onClick={() => setMobileOpen((v) => !v)}
+            aria-label="Меню"
+            title="Меню"
+          >
+            <Menu className="h-5 w-5" />
+          </Button>
+
           {props.authed ? (
             <Button variant="outline" size="sm" className="ml-2 bg-transparent" onClick={props.onLogout}>
               Выйти
@@ -366,6 +385,29 @@ export function Header(props: {
           )}
         </div>
       </div>
+
+      {mobileOpen ? (
+        <div className="border-t border-border/40 bg-background/95 md:hidden">
+          <div className="mx-auto flex max-w-7xl flex-col gap-1 px-4 py-3">
+            {navigation.map((item) => (
+              <NavLink
+                key={item.name}
+                to={item.href}
+                className={({ isActive }) =>
+                  cn(
+                    "rounded-lg px-3 py-2 text-sm font-medium transition-all duration-200",
+                    isActive || pathname === item.href
+                      ? "bg-secondary text-foreground"
+                      : "text-muted-foreground hover:bg-secondary/50 hover:text-foreground",
+                  )
+                }
+              >
+                {item.name}
+              </NavLink>
+            ))}
+          </div>
+        </div>
+      ) : null}
     </header>
   );
 }

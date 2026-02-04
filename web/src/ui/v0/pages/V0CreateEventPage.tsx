@@ -30,6 +30,7 @@ export function V0CreateEventPage(props: {
   const [endMinute, setEndMinute] = useState("00");
   const [pairingMode, setPairingMode] = useState<PairingMode>("ROUND_ROBIN");
   const [courts, setCourts] = useState(2);
+  const [courtNames, setCourtNames] = useState<string[]>(["Корт A", "Корт B"]);
   const [autoRounds, setAutoRounds] = useState(true);
   const [rounds, setRounds] = useState(6);
   const [pointsPerPlayer, setPointsPerPlayer] = useState(6);
@@ -54,6 +55,20 @@ export function V0CreateEventPage(props: {
     setAutoRounds(roundsMode === "auto");
   }, [roundsMode]);
 
+  useEffect(() => {
+    setCourtNames((prev) => {
+      const next = [...prev];
+      if (next.length < courts) {
+        for (let i = next.length; i < courts; i += 1) {
+          next.push(`Корт ${String.fromCharCode(65 + i)}`);
+        }
+      } else if (next.length > courts) {
+        next.length = courts;
+      }
+      return next;
+    });
+  }, [courts]);
+
   const minPlayers = useMemo(() => Math.max(1, courts) * 4, [courts]);
 
   async function onSubmit(e: FormEvent) {
@@ -71,7 +86,7 @@ export function V0CreateEventPage(props: {
       if (Number.isNaN(endDt.getTime()) || endDt.getTime() <= startDt.getTime()) {
         throw new Error("Время окончания должно быть позже начала");
       }
-      await api.createEvent({
+      const created = await api.createEvent({
         title,
         date,
         startTime,
@@ -79,12 +94,13 @@ export function V0CreateEventPage(props: {
         format: "AMERICANA",
         pairingMode,
         courtsCount: courts,
+        courtNames: courtNames.map((name, idx) => (name?.trim() ? name.trim() : `Корт ${idx + 1}`)),
         autoRounds,
         roundsPlanned: autoRounds ? undefined : rounds,
         scoringMode: "POINTS",
         pointsPerPlayerPerMatch: pointsPerPlayer,
       });
-      nav("/games");
+      nav(`/events/${created.id}`);
     } catch (err: any) {
       setError(err?.message ?? "Ошибка");
     } finally {
@@ -226,6 +242,22 @@ export function V0CreateEventPage(props: {
                     Количество кортов
                   </Label>
                   <Input id="courts" type="number" min={1} value={courts} onChange={(e) => setCourts(Number(e.target.value))} className="bg-secondary border-border h-11" />
+                  <div className="space-y-2 pt-2">
+                    <div className="text-xs text-muted-foreground">Названия кортов</div>
+                    {courtNames.map((name, idx) => (
+                      <Input
+                        key={`court-${idx}`}
+                        value={name}
+                        onChange={(e) => {
+                          const next = [...courtNames];
+                          next[idx] = e.target.value;
+                          setCourtNames(next);
+                        }}
+                        className="bg-secondary border-border h-10"
+                        placeholder={`Корт ${String.fromCharCode(65 + idx)}`}
+                      />
+                    ))}
+                  </div>
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="serves" className="font-medium flex items-center gap-2">

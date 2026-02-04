@@ -1,28 +1,11 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, useParams } from "react-router-dom";
-import { ArrowLeft, Check, Clock, MapPin, Share2, Target, UserPlus, Users, Zap } from "lucide-react";
-import { api, EventDetails, FriendItem, FriendsSnapshot, Match, ScoringMode } from "../../../lib/api";
+import { ArrowLeft, Check, ChevronDown, Clock, MapPin, Share2, Target, UserPlus, Users, Zap } from "lucide-react";
+import { api, EventDetails, FriendItem, FriendsSnapshot, Match } from "../../../lib/api";
 import { PlayerTooltip } from "@/components/player-tooltip";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Label } from "@/components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { cn, formatEventDate, timeRange } from "../utils";
-
-function matchTitle(m: Match) {
-  const a = m.teamA.map((p) => p.name).join(" + ");
-  const b = m.teamB.map((p) => p.name).join(" + ");
-  return `${a}  vs  ${b}`;
-}
-
-function scoreText(mode: ScoringMode, m: Match) {
-  if (!m.score) return "—";
-  if (mode === "POINTS" && m.score.points) return `${m.score.points.teamAPoints}:${m.score.points.teamBPoints}`;
-  if (mode === "SETS" && m.score.sets?.length) {
-    return m.score.sets.map((s) => `${s.teamAGames}:${s.teamBGames}`).join("  ");
-  }
-  return "—";
-}
 
 function statusLabel(status: string): string {
   switch (status) {
@@ -65,13 +48,16 @@ export function V0EventPage(props: { me: any; meLoaded?: boolean }) {
   const [friendsError, setFriendsError] = useState<string | null>(null);
   const [invited, setInvited] = useState<Record<string, boolean>>({});
   const [invitingId, setInvitingId] = useState<string | null>(null);
-  const [scoreOpen, setScoreOpen] = useState(false);
-  const [scoreMatch, setScoreMatch] = useState<Match | null>(null);
-  const [scoreA, setScoreA] = useState<string>("");
-  const [scoreB, setScoreB] = useState<string>("");
-  const [scoreSaving, setScoreSaving] = useState(false);
+  const [startPromptOpen, setStartPromptOpen] = useState(false);
+  const [roundsOpen, setRoundsOpen] = useState(false);
+  const [expandedRoundId, setExpandedRoundId] = useState<string | null>(null);
+  const [activeMatchId, setActiveMatchId] = useState<string | null>(null);
+  const [activeTeam, setActiveTeam] = useState<"A" | "B">("A");
+  const [scoreByMatch, setScoreByMatch] = useState<Record<string, { a: number; b: number }>>({});
+  const [autoFilledByMatch, setAutoFilledByMatch] = useState<Record<string, boolean>>({});
+  const [scoreSavingId, setScoreSavingId] = useState<string | null>(null);
   const [scoreError, setScoreError] = useState<string | null>(null);
-  const [scoreAutoFilled, setScoreAutoFilled] = useState(false);
+  const [scorePadOpen, setScorePadOpen] = useState(false);
 
   useEffect(() => {
     if (!inviteOpen) return;
@@ -83,18 +69,8 @@ export function V0EventPage(props: { me: any; meLoaded?: boolean }) {
       .catch((e: any) => setFriendsError(e?.message ?? "Ошибка загрузки друзей"));
   }, [inviteOpen, props.me]);
 
-  function openScoreDialog(m: Match) {
-    setScoreMatch(m);
-    setScoreError(null);
-    const points = m.score?.points;
-    setScoreA(points ? String(points.teamAPoints) : "");
-    setScoreB(points ? String(points.teamBPoints) : "");
-    setScoreAutoFilled(false);
-    setScoreOpen(true);
-  }
 
   useEffect(() => {
-    if (!props.me) return;
     if (props.me && !props.me.surveyCompleted) return;
     if (!eventId) return;
     let cancelled = false;
@@ -119,18 +95,91 @@ export function V0EventPage(props: { me: any; meLoaded?: boolean }) {
     };
   }, [eventId, props.me]);
 
+  useEffect(() => {
+    if (!data) return;
+    const rounds = data.rounds ?? [];
+    if (rounds.length > 0) {
+      const fallbackRoundId = rounds[0].id;
+      const nextExpandedId = expandedRoundId && rounds.some((r) => r.id === expandedRoundId) ? expandedRoundId : fallbackRoundId;
+      if (nextExpandedId !== expandedRoundId) {
+        setExpandedRoundId(nextExpandedId);
+      }
+      const activeRound = rounds.find((r) => r.id === nextExpandedId) ?? rounds[0];
+      if (activeRound?.matches?.length) {
+        const stillInRound = activeMatchId && activeRound.matches.some((m) => m.id === activeMatchId);
+        if (!stillInRound) {
+          setActiveMatchId(activeRound.matches[0].id);
+        }
+      }
+    }
+    setScoreByMatch((prev) => {
+      const next = { ...prev };
+      rounds.flatMap((r) => r.matches).forEach((m) => {
+        if (next[m.id]) return;
+        const points = m.score?.points;
+        next[m.id] = {
+          a: points?.teamAPoints ?? 0,
+          b: points?.teamBPoints ?? 0,
+        };
+      });
+      return next;
+    });
+  }, [data, expandedRoundId, activeMatchId]);
+
   const content = useMemo(() => {
     if (!props.me) {
-      if (!props.meLoaded) return <div className="text-sm text-muted-foreground">Загрузка…</div>;
+      if (loading) return <div className="text-sm text-muted-foreground">Загрузка…</div>;
+      if (loadError)
+        return (
+          <div className="rounded-lg border border-destructive/30 bg-destructive/10 p-4 text-sm">
+            Не удалось загрузить: {loadError}
+          </div>
+        );
+      if (!data) return <div className="text-sm text-muted-foreground">Событие не найдено.</div>;
+      const e = data.event;
       return (
-        <div className="space-y-4">
-          <div className="text-sm text-muted-foreground">Нужно войти, чтобы открыть игру.</div>
+        <div className="space-y-6 pb-8">
           <Link
-            to="/login"
-            className="inline-flex h-10 items-center justify-center rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground hover:bg-primary/90 transition-colors"
+            to="/games"
+            className="inline-flex items-center gap-2 text-muted-foreground hover:text-foreground transition-colors group"
           >
-            Войти
+            <ArrowLeft className="h-4 w-4 group-hover:-translate-x-1 transition-transform" />
+            <span>Назад к играм</span>
           </Link>
+
+          <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-primary/20 via-primary/10 to-transparent border border-border/50">
+            <div className="relative p-6 lg:p-8">
+              <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-6">
+                <div className="space-y-5">
+                  <div className="flex items-center gap-3 flex-wrap">
+                    <span className="inline-flex items-center rounded-md bg-primary px-3 py-1 text-sm font-medium text-primary-foreground">
+                      {statusLabel(e.status)}
+                    </span>
+                  </div>
+
+                  <div>
+                    <h1 className="text-4xl lg:text-5xl font-bold tracking-tight">{e.title}</h1>
+                    <p className="text-muted-foreground mt-2 text-lg">{formatEventDate(e.date)}</p>
+                  </div>
+
+                  <div className="flex flex-wrap gap-3">
+                    <div className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-card/80 backdrop-blur-sm border border-border/50">
+                      <Clock className="h-4 w-4 text-primary" />
+                      <span className="font-medium">{timeRange(e.startTime, e.endTime)}</span>
+                    </div>
+                    <div className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-card/80 backdrop-blur-sm border border-border/50">
+                      <MapPin className="h-4 w-4 text-primary" />
+                      <span className="font-medium">{e.courtsCount} корта</span>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="text-sm text-muted-foreground">
+                  Войдите, чтобы участвовать и вводить счёт.
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
       );
     }
@@ -151,7 +200,7 @@ export function V0EventPage(props: { me: any; meLoaded?: boolean }) {
     const progressPercent = Math.min(100, (registered.length / Math.max(1, e.courtsCount * 4)) * 100);
 
     return (
-      <div className="space-y-8">
+      <div className="space-y-8 pb-8">
         <Link
           to="/games"
           className="inline-flex items-center gap-2 text-muted-foreground hover:text-foreground transition-colors group"
@@ -267,6 +316,7 @@ export function V0EventPage(props: { me: any; meLoaded?: boolean }) {
                               const refreshed = await api.getEventDetails(eventId);
                               setData(refreshed);
                               setInfo("Регистрация закрыта");
+                            setStartPromptOpen(true);
                             } catch (err: any) {
                               setActionError(err?.message ?? "Ошибка закрытия");
                             } finally {
@@ -283,21 +333,7 @@ export function V0EventPage(props: { me: any; meLoaded?: boolean }) {
                           type="button"
                           className="flex-1 h-11 rounded-md bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 transition-colors inline-flex items-center justify-center"
                           disabled={starting}
-                          onClick={async () => {
-                            if (!eventId) return;
-                            setStarting(true);
-                            setActionError(null);
-                            setInfo(null);
-                            try {
-                              await api.startEvent(eventId);
-                              const refreshed = await api.getEventDetails(eventId);
-                              setData(refreshed);
-                            } catch (err: any) {
-                              setActionError(err?.message ?? "Ошибка старта");
-                            } finally {
-                              setStarting(false);
-                            }
-                          }}
+                          onClick={() => setStartPromptOpen(true)}
                         >
                           {starting ? "Стартуем…" : "Начать игру"}
                         </button>
@@ -327,25 +363,9 @@ export function V0EventPage(props: { me: any; meLoaded?: boolean }) {
                       <button
                         type="button"
                         className="h-12 px-6 rounded-md bg-primary text-primary-foreground text-base font-medium hover:bg-primary/90 transition-colors"
-                        disabled={finishing}
-                        onClick={async () => {
-                          if (!eventId) return;
-                          setFinishing(true);
-                          setActionError(null);
-                          setInfo(null);
-                          try {
-                            await api.finishEvent(eventId);
-                            const refreshed = await api.getEventDetails(eventId);
-                            setData(refreshed);
-                            setInfo("Игра завершена. Рейтинг обновится автоматически.");
-                          } catch (err: any) {
-                            setActionError(err?.message ?? "Ошибка завершения");
-                          } finally {
-                            setFinishing(false);
-                          }
-                        }}
+                        onClick={() => setRoundsOpen(true)}
                       >
-                        {finishing ? "Завершаем…" : "Завершить игру"}
+                        Ввести счёт
                       </button>
                     ) : (
                       <div className="text-sm text-muted-foreground">Игра идёт</div>
@@ -437,6 +457,44 @@ export function V0EventPage(props: { me: any; meLoaded?: boolean }) {
                   </div>
                 ))
               )}
+            </div>
+          </DialogContent>
+        </Dialog>
+
+        <Dialog open={startPromptOpen} onOpenChange={setStartPromptOpen}>
+          <DialogContent className="sm:max-w-lg">
+            <DialogHeader>
+              <DialogTitle>Готовы начать?</DialogTitle>
+            </DialogHeader>
+            <div className="text-sm text-muted-foreground">
+              Игра <b>{data.event.title}</b> готова к началу. Все участники зарегистрированы.
+            </div>
+            <div className="mt-4 flex gap-2 justify-end">
+              <Button variant="outline" className="bg-transparent" onClick={() => setStartPromptOpen(false)}>
+                Позже
+              </Button>
+              <Button
+                onClick={async () => {
+                  if (!eventId) return;
+                  setStarting(true);
+                  setActionError(null);
+                  setInfo(null);
+                  try {
+                    await api.startEvent(eventId);
+                    const refreshed = await api.getEventDetails(eventId);
+                    setData(refreshed);
+                    setStartPromptOpen(false);
+                    setRoundsOpen(true);
+                  } catch (err: any) {
+                    setActionError(err?.message ?? "Ошибка старта");
+                  } finally {
+                    setStarting(false);
+                  }
+                }}
+                disabled={starting}
+              >
+                {starting ? "Стартуем…" : "Начать игру"}
+              </Button>
             </div>
           </DialogContent>
         </Dialog>
@@ -556,176 +614,281 @@ export function V0EventPage(props: { me: any; meLoaded?: boolean }) {
           </div>
         </div>
 
-        <div className="space-y-4">
-          {data.rounds.map((r) => (
-            <div key={r.id} className="rounded-xl border border-border bg-card p-6">
-              <div className="flex items-center justify-between gap-3">
-                <div className="text-lg font-semibold">Раунд {r.roundNumber}</div>
-                <div className="text-sm text-muted-foreground">Матчей: {r.matches.length}</div>
-              </div>
-              <div className="mt-4 overflow-x-auto">
-                <table className="w-full">
-                  <thead>
-                    <tr className="border-b border-border text-left text-sm uppercase tracking-wider text-muted-foreground">
-                      <th className="pb-3 pr-6 font-medium">Корт</th>
-                      <th className="pb-3 pr-6 font-medium">Матч</th>
-                      <th className="pb-3 pr-6 font-medium">Счёт</th>
-                      <th className="pb-3 font-medium">Статус</th>
-                      <th className="pb-3 pl-6 font-medium text-right">Действия</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-border">
-                    {r.matches.map((m) => (
-                      <tr key={m.id} className="hover:bg-secondary/30 transition-colors">
-                        <td className="py-3 pr-6">{m.courtNumber}</td>
-                        <td className="py-3 pr-6 text-muted-foreground">{matchTitle(m)}</td>
-                        <td className="py-3 pr-6">{scoreText(e.scoringMode, m)}</td>
-                        <td className="py-3 text-muted-foreground">{m.status}</td>
-                        <td className="py-3 pl-6 text-right">
-                          {e.status === "IN_PROGRESS" && isAuthor ? (
-                            e.scoringMode === "POINTS" ? (
-                              <Button size="sm" variant="secondary" onClick={() => openScoreDialog(m)}>
-                                Ввести счёт
-                              </Button>
-                            ) : (
-                              <span className="text-xs text-muted-foreground">Сеты пока не поддержаны</span>
-                            )
-                          ) : (
-                            <span className="text-xs text-muted-foreground">—</span>
-                          )}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          ))}
-        </div>
-
         <Dialog
-          open={scoreOpen}
+          open={roundsOpen}
           onOpenChange={(open) => {
-            setScoreOpen(open);
+            setRoundsOpen(open);
             if (!open) {
-              setScoreMatch(null);
-              setScoreError(null);
-              setScoreSaving(false);
-              setScoreAutoFilled(false);
+              setScorePadOpen(false);
             }
           }}
         >
-          <DialogContent className="sm:max-w-md">
+          <DialogContent className="max-w-4xl">
             <DialogHeader>
-              <DialogTitle>Ввести счёт</DialogTitle>
+              <DialogTitle>Раунды</DialogTitle>
             </DialogHeader>
 
-            {!scoreMatch ? (
-              <div className="text-sm text-muted-foreground">Выберите матч</div>
-            ) : (
-              <div className="space-y-4">
-                <div className="text-sm text-muted-foreground">{matchTitle(scoreMatch)}</div>
-
-                {(() => {
-                  const maxScore = (data?.event.pointsPerPlayerPerMatch ?? 6) * 4;
-                  return (
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="space-y-2">
-                    <Label>Команда A</Label>
-                    <Select
-                      value={scoreA}
-                      onValueChange={(val) => {
-                        setScoreA(val);
-                        if (!scoreAutoFilled) {
-                          const n = Number(val);
-                          if (Number.isFinite(n)) {
-                            setScoreB(String(Math.max(0, maxScore - n)));
-                            setScoreAutoFilled(true);
-                          }
-                        }
+            <div className="space-y-3 max-h-[70vh] overflow-y-auto pr-1">
+              {(data.rounds ?? []).map((r) => {
+                const expanded = r.id === expandedRoundId;
+                return (
+                  <div key={r.id} className="rounded-xl border border-border bg-card">
+                    <button
+                      type="button"
+                      className="w-full flex items-center justify-between gap-3 p-4 text-left"
+                      onClick={() => {
+                        setExpandedRoundId(r.id);
+                        setScorePadOpen(false);
                       }}
                     >
-                      <SelectTrigger>
-                        <SelectValue placeholder="0" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {Array.from({ length: (data?.event.pointsPerPlayerPerMatch ?? 6) * 4 + 1 }, (_, i) => (
-                          <SelectItem key={`a-${i}`} value={String(i)}>
-                            {i}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div className="space-y-2">
-                    <Label>Команда B</Label>
-                    <Select
-                      value={scoreB}
-                      onValueChange={(val) => {
-                        setScoreB(val);
-                        if (!scoreAutoFilled) {
-                          const n = Number(val);
-                          if (Number.isFinite(n)) {
-                            setScoreA(String(Math.max(0, maxScore - n)));
-                            setScoreAutoFilled(true);
-                          }
-                        }
-                      }}
-                    >
-                      <SelectTrigger>
-                        <SelectValue placeholder="0" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {Array.from({ length: (data?.event.pointsPerPlayerPerMatch ?? 6) * 4 + 1 }, (_, i) => (
-                          <SelectItem key={`b-${i}`} value={String(i)}>
-                            {i}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                </div>
-                  );
-                })()}
+                      <div>
+                        <div className="text-lg font-semibold">Раунд {r.roundNumber}</div>
+                        <div className="text-sm text-muted-foreground">Матчей: {r.matches.length}</div>
+                      </div>
+                      <ChevronDown className={cn("h-5 w-5 transition-transform", expanded ? "rotate-180" : "")} />
+                    </button>
 
-                {scoreError ? (
-                  <div className="rounded-lg border border-destructive/30 bg-destructive/10 p-3 text-sm">{scoreError}</div>
-                ) : null}
+                    {expanded ? (
+                      <div className="px-4 pb-4">
+                        <div className="space-y-3">
+                          {r.matches.map((m) => {
+                            const scores = scoreByMatch[m.id] ?? { a: 0, b: 0 };
+                            const active = m.id === activeMatchId;
+                            const teamA = m.teamA.map((p) => p.name).join(" + ");
+                            const teamB = m.teamB.map((p) => p.name).join(" + ");
+                            return (
+                              <div
+                                key={m.id}
+                                className={cn(
+                                  "rounded-lg border border-border/50 p-3 transition-colors",
+                                  active ? "bg-secondary/30" : "bg-secondary/10",
+                                )}
+                              >
+                                <div className="text-sm text-muted-foreground">{m.courtName ?? `Корт ${m.courtNumber}`}</div>
+                                <div className="mt-3 grid grid-cols-2 gap-3">
+                                  <button
+                                    type="button"
+                                    className={cn(
+                                      "rounded-lg border px-3 py-3 text-center transition-colors",
+                                      activeTeam === "A" && active ? "border-primary text-primary" : "border-border",
+                                    )}
+                                    onClick={() => {
+                                      setActiveMatchId(m.id);
+                                      setActiveTeam("A");
+                                      setScorePadOpen(true);
+                                    }}
+                                  >
+                                    <div className="text-xs text-muted-foreground">{teamA}</div>
+                                    <div className="mt-1 text-2xl font-semibold">{scores.a}</div>
+                                  </button>
+                                  <button
+                                    type="button"
+                                    className={cn(
+                                      "rounded-lg border px-3 py-3 text-center transition-colors",
+                                      activeTeam === "B" && active ? "border-primary text-primary" : "border-border",
+                                    )}
+                                    onClick={() => {
+                                      setActiveMatchId(m.id);
+                                      setActiveTeam("B");
+                                      setScorePadOpen(true);
+                                    }}
+                                  >
+                                    <div className="text-xs text-muted-foreground">{teamB}</div>
+                                    <div className="mt-1 text-2xl font-semibold">{scores.b}</div>
+                                  </button>
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
 
-                <div className="flex justify-end gap-2">
-                  <Button variant="outline" className="bg-transparent" onClick={() => setScoreOpen(false)} disabled={scoreSaving}>
-                    Отмена
-                  </Button>
-                  <Button
-                    onClick={async () => {
-                      if (!eventId || !scoreMatch) return;
-                      const a = Number(scoreA);
-                      const b = Number(scoreB);
-                      if (!Number.isFinite(a) || !Number.isFinite(b)) {
-                        setScoreError("Введите числа для обеих команд");
-                        return;
-                      }
-                      setScoreSaving(true);
-                      setScoreError(null);
-                      try {
-                        await api.submitScore(scoreMatch.id, { teamAPoints: a, teamBPoints: b });
-                        const refreshed = await api.getEventDetails(eventId);
-                        setData(refreshed);
-                        setInfo("Счёт сохранён");
-                        setScoreOpen(false);
-                      } catch (e: any) {
-                        setScoreError(e?.message ?? "Не удалось сохранить счёт");
-                      } finally {
-                        setScoreSaving(false);
-                      }
-                    }}
-                    disabled={scoreSaving}
-                  >
-                    {scoreSaving ? "Сохраняем…" : "Сохранить"}
-                  </Button>
-                </div>
+                        {activeMatchId && scorePadOpen ? (
+                          <div className="mt-4">
+                            <div className="grid grid-cols-6 gap-2">
+                              {Array.from({ length: (e.pointsPerPlayerPerMatch ?? 6) * 4 }, (_, i) => i + 1).map((n) => (
+                                <button
+                                  key={n}
+                                  type="button"
+                                  className="rounded-lg border border-border bg-secondary/20 py-2 text-sm font-semibold hover:bg-secondary"
+                                  onClick={() => {
+                                    const totalPoints = (e.pointsPerPlayerPerMatch ?? 6) * 4;
+                                    setScoreByMatch((prev) => {
+                                      const current = prev[activeMatchId] ?? { a: 0, b: 0 };
+                                      let nextA = activeTeam === "A" ? n : current.a;
+                                      let nextB = activeTeam === "B" ? n : current.b;
+                                      const autoFilled = autoFilledByMatch[activeMatchId];
+                                      const canAutoFill =
+                                        !autoFilled &&
+                                        ((activeTeam === "A" && current.b === 0) ||
+                                          (activeTeam === "B" && current.a === 0));
+                                      if (canAutoFill) {
+                                        if (activeTeam === "A") {
+                                          nextB = Math.max(0, totalPoints - n);
+                                        } else {
+                                          nextA = Math.max(0, totalPoints - n);
+                                        }
+                                        setAutoFilledByMatch((m) => ({ ...m, [activeMatchId]: true }));
+                                      }
+                                      return {
+                                        ...prev,
+                                        [activeMatchId]: { a: nextA, b: nextB },
+                                      };
+                                    });
+                                  }}
+                                >
+                                  {n}
+                                </button>
+                              ))}
+                            </div>
+                            <div className="mt-3 flex items-center justify-between gap-3">
+                              {scoreError ? (
+                                <div className="text-xs text-destructive">{scoreError}</div>
+                              ) : (
+                                <div className="text-xs text-muted-foreground">Выберите значение для активной команды</div>
+                              )}
+                              <Button
+                                size="sm"
+                                disabled={scoreSavingId === activeMatchId}
+                                onClick={async () => {
+                                  const current = scoreByMatch[activeMatchId];
+                                  if (!current) return;
+                                  if (!eventId) return;
+                                  setScoreSavingId(activeMatchId);
+                                  setScoreError(null);
+                                  try {
+                                    await api.submitScore(activeMatchId, { teamAPoints: current.a, teamBPoints: current.b });
+                                    const refreshed = await api.getEventDetails(eventId);
+                                    setData(refreshed);
+                                    setInfo("Счёт сохранён");
+                                    const rounds = refreshed.rounds ?? [];
+                                    const currentIdx = rounds.findIndex((round) =>
+                                      round.matches.some((m) => m.id === activeMatchId),
+                                    );
+                                    const nextRound = currentIdx >= 0 ? rounds[currentIdx + 1] : null;
+                                    if (nextRound) {
+                                      setExpandedRoundId(nextRound.id);
+                                      setActiveMatchId(nextRound.matches[0]?.id ?? null);
+                                    }
+                                    setScorePadOpen(false);
+                                  } catch (e: any) {
+                                    const msg = e?.message ?? "Не удалось сохранить счёт";
+                                    if (msg.includes("Survey is required")) {
+                                      setScoreError("Нужно пройти опрос, чтобы сохранять счёт.");
+                                    } else if (msg.includes("Only participants")) {
+                                      setScoreError("Сохранять счёт могут только участники игры.");
+                                    } else if (msg.includes("Only author")) {
+                                      setScoreError("Сохранять счёт может только автор игры.");
+                                    } else if (msg.includes("HTTP 403")) {
+                                      setScoreError("Нет доступа для сохранения счёта.");
+                                    } else if (msg.includes("HTTP 401")) {
+                                      setScoreError("Нужна авторизация для сохранения счёта.");
+                                    } else {
+                                      setScoreError(msg);
+                                    }
+                                  } finally {
+                                    setScoreSavingId(null);
+                                  }
+                                }}
+                              >
+                                {scoreSavingId === activeMatchId ? "Сохраняем…" : "Следующий раунд"}
+                              </Button>
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="mt-4 flex items-center justify-between gap-3">
+                            <div className="text-xs text-muted-foreground">Нажмите на счёт команды, чтобы выбрать очки.</div>
+                            <Button
+                              size="sm"
+                              variant="default"
+                              disabled={
+                                !activeMatchId ||
+                                !scoreByMatch[activeMatchId] ||
+                                (scoreByMatch[activeMatchId].a === 0 && scoreByMatch[activeMatchId].b === 0)
+                              }
+                              onClick={async () => {
+                                if (!activeMatchId || !eventId) return;
+                                const current = scoreByMatch[activeMatchId];
+                                if (!current) return;
+                                if (current.a === 0 && current.b === 0) return;
+                                setScoreSavingId(activeMatchId);
+                                setScoreError(null);
+                                try {
+                                  await api.submitScore(activeMatchId, { teamAPoints: current.a, teamBPoints: current.b });
+                                  const refreshed = await api.getEventDetails(eventId);
+                                  setData(refreshed);
+                                  setInfo("Счёт сохранён");
+                                  const rounds = refreshed.rounds ?? [];
+                                  const currentIdx = rounds.findIndex((round) =>
+                                    round.matches.some((m) => m.id === activeMatchId),
+                                  );
+                                  const nextRound = currentIdx >= 0 ? rounds[currentIdx + 1] : null;
+                                  if (nextRound) {
+                                    setExpandedRoundId(nextRound.id);
+                                    setActiveMatchId(nextRound.matches[0]?.id ?? null);
+                                  }
+                                } catch (e: any) {
+                                  const msg = e?.message ?? "Не удалось сохранить счёт";
+                                  if (msg.includes("Survey is required")) {
+                                    setScoreError("Нужно пройти опрос, чтобы сохранять счёт.");
+                                  } else if (msg.includes("Only participants")) {
+                                    setScoreError("Сохранять счёт могут только участники игры.");
+                                  } else if (msg.includes("Only author")) {
+                                    setScoreError("Сохранять счёт может только автор игры.");
+                                  } else if (msg.includes("HTTP 403")) {
+                                    setScoreError("Нет доступа для сохранения счёта.");
+                                  } else if (msg.includes("HTTP 401")) {
+                                    setScoreError("Нужна авторизация для сохранения счёта.");
+                                  } else {
+                                    setScoreError(msg);
+                                  }
+                                } finally {
+                                  setScoreSavingId(null);
+                                }
+                              }}
+                            >
+                              {scoreSavingId === activeMatchId ? "Сохраняем…" : "Следующий раунд"}
+                            </Button>
+                          </div>
+                        )}
+                      </div>
+                    ) : null}
+                  </div>
+                );
+              })}
+            </div>
+
+            <div className="mt-5 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+              <div className="flex gap-2">
+                <Button variant="secondary" onClick={() => setInfo("Добавление раунда пока не поддержано.")}>
+                  + Раунд
+                </Button>
+                <Button variant="secondary" onClick={() => setInfo("Финальный раунд пока не поддержан.")}>
+                  Финальный раунд
+                </Button>
               </div>
-            )}
+              <Button
+                variant="destructive"
+                onClick={async () => {
+                  if (!eventId) return;
+                  setFinishing(true);
+                  setActionError(null);
+                  setInfo(null);
+                  try {
+                    await api.finishEvent(eventId);
+                    const refreshed = await api.getEventDetails(eventId);
+                    setData(refreshed);
+                    setInfo("Игра завершена. Рейтинг обновится автоматически.");
+                  } catch (err: any) {
+                    setActionError(err?.message ?? "Ошибка завершения");
+                  } finally {
+                    setFinishing(false);
+                  }
+                }}
+                disabled={finishing}
+              >
+                {finishing ? "Завершаем…" : "Завершить игру"}
+              </Button>
+            </div>
           </DialogContent>
         </Dialog>
 
@@ -737,6 +900,15 @@ export function V0EventPage(props: { me: any; meLoaded?: boolean }) {
     canceling,
     closing,
     data,
+    roundsOpen,
+    expandedRoundId,
+    activeMatchId,
+    activeTeam,
+    scoreByMatch,
+    autoFilledByMatch,
+    scoreError,
+    scoreSavingId,
+    scorePadOpen,
     friends,
     friendsError,
     info,
@@ -746,15 +918,9 @@ export function V0EventPage(props: { me: any; meLoaded?: boolean }) {
     loadError,
     loading,
     registering,
-    scoreA,
-    scoreAutoFilled,
-    scoreB,
-    scoreError,
-    scoreMatch,
-    scoreOpen,
-    scoreSaving,
     finishing,
     starting,
+    startPromptOpen,
     eventId,
     props.me,
     props.meLoaded,

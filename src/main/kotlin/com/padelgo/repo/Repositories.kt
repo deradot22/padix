@@ -58,6 +58,33 @@ interface MatchRepository : JpaRepository<Match, UUID> {
 interface MatchSetScoreRepository : JpaRepository<MatchSetScore, UUID> {
     fun findAllByMatchIdOrderBySetNumberAsc(matchId: UUID): List<MatchSetScore>
     fun deleteAllByMatchId(matchId: UUID)
+
+    @org.springframework.data.jpa.repository.Modifying
+    @Query(
+        value = """
+            insert into match_set_scores (match_id, set_number, team_a_games, team_b_games, id)
+            values (:matchId, :setNumber, :teamAGames, :teamBGames, gen_random_uuid())
+            on conflict (match_id, set_number)
+            do update set team_a_games = excluded.team_a_games, team_b_games = excluded.team_b_games
+        """,
+        nativeQuery = true
+    )
+    fun upsertScore(
+        @Param("matchId") matchId: UUID,
+        @Param("setNumber") setNumber: Int,
+        @Param("teamAGames") teamAGames: Int,
+        @Param("teamBGames") teamBGames: Int
+    )
+
+    @org.springframework.data.jpa.repository.Modifying
+    @Query(
+        value = "delete from match_set_scores where match_id = :matchId and set_number not in (:keep)",
+        nativeQuery = true
+    )
+    fun deleteAllByMatchIdAndSetNumberNotIn(
+        @Param("matchId") matchId: UUID,
+        @Param("keep") keep: List<Int>
+    )
 }
 
 interface RatingChangeRepository : JpaRepository<RatingChange, UUID> {

@@ -1,26 +1,19 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
+import type { Event } from "@/lib/api";
 
 export interface GamesCalendarProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onSelectDate?: (date: Date) => void;
+  events?: Event[];
+  onMonthChange?: (date: Date) => void;
 }
-
-// Mock data for games per day (kept from design; can be wired later)
-const gamesData: Record<string, number> = {
-  "2026-01-17": 1,
-  "2026-01-18": 5,
-  "2026-01-19": 1,
-  "2026-01-22": 3,
-  "2026-01-28": 2,
-  "2026-01-29": 1,
-};
 
 const WEEKDAYS = ["ПН", "ВТ", "СР", "ЧТ", "ПТ", "СБ", "ВС"];
 const MONTHS = [
@@ -47,7 +40,7 @@ function getFirstDayOfMonth(year: number, month: number) {
   return day === 0 ? 6 : day - 1; // Monday-first
 }
 
-export function GamesCalendar({ open, onOpenChange, onSelectDate }: GamesCalendarProps) {
+export function GamesCalendar({ open, onOpenChange, onSelectDate, events, onMonthChange }: GamesCalendarProps) {
   const [currentDate, setCurrentDate] = useState(new Date(2026, 0, 1));
 
   const year = currentDate.getFullYear();
@@ -61,11 +54,28 @@ export function GamesCalendar({ open, onOpenChange, onSelectDate }: GamesCalenda
   const totalCells = 42;
   const daysFromNextMonth = totalCells - daysInMonth - daysFromPrevMonth;
 
-  const prevMonth = () => setCurrentDate(new Date(year, month - 1, 1));
-  const nextMonth = () => setCurrentDate(new Date(year, month + 1, 1));
+  const prevMonth = () => {
+    const next = new Date(year, month - 1, 1);
+    setCurrentDate(next);
+    onMonthChange?.(next);
+  };
+  const nextMonth = () => {
+    const next = new Date(year, month + 1, 1);
+    setCurrentDate(next);
+    onMonthChange?.(next);
+  };
 
   const formatDateKey = (y: number, m: number, d: number) =>
     `${y}-${String(m + 1).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
+
+  const gamesData = useMemo(() => {
+    const map: Record<string, number> = {};
+    (events ?? []).forEach((e) => {
+      if (!map[e.date]) map[e.date] = 0;
+      map[e.date] += 1;
+    });
+    return map;
+  }, [events]);
 
   const handleDateClick = (day: number, isCurrentMonth: boolean) => {
     if (!isCurrentMonth) return;

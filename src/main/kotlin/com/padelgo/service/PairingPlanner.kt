@@ -32,6 +32,7 @@ class PairingPlanner(
     private val partnerCounts = mutableMapOf<PairKey, Int>()
     private val opponentCounts = mutableMapOf<PairKey, Int>()
     private val playedRounds = mutableMapOf<UUID, Int>()
+    private val courtCounts = mutableMapOf<UUID, MutableMap<Int, Int>>()
 
     fun planRounds(allPlayers: List<UUID>, rounds: Int): List<List<PlannedMatch>> {
         require(courtsCount > 0) { "courtsCount must be > 0" }
@@ -66,8 +67,7 @@ class PairingPlanner(
             .toMutableList()
 
         val matches = mutableListOf<PlannedMatch>()
-        var court = 1
-        while (remaining.size >= 4 && court <= courtsCount) {
+        while (remaining.size >= 4 && matches.size < courtsCount) {
             val anchor = remaining.first()
             val others = remaining.drop(1)
 
@@ -78,7 +78,7 @@ class PairingPlanner(
                 for (j in i + 1 until others.size - 1) {
                     for (k in j + 1 until others.size) {
                         val quad = listOf(anchor, others[i], others[j], others[k])
-                        val (match, cost) = bestSplitForQuad(court, quad)
+                        val (match, cost) = bestSplitForQuad(quad)
                         if (cost < bestCost) {
                             bestCost = cost
                             best = match
@@ -95,26 +95,48 @@ class PairingPlanner(
             remaining.remove(chosen.teamA.second)
             remaining.remove(chosen.teamB.first)
             remaining.remove(chosen.teamB.second)
-            court++
         }
 
-        return matches
+        return assignCourts(matches)
     }
 
-    private fun bestSplitForQuad(court: Int, quad: List<UUID>): Pair<PlannedMatch, Double> {
+    private fun bestSplitForQuad(quad: List<UUID>): Pair<PlannedMatch, Double> {
         val a = quad[0]
         val b = quad[1]
         val c = quad[2]
         val d = quad[3]
 
         val candidates = listOf(
-            PlannedMatch(court, teamA = a to b, teamB = c to d),
-            PlannedMatch(court, teamA = a to c, teamB = b to d),
-            PlannedMatch(court, teamA = a to d, teamB = b to c)
+            PlannedMatch(1, teamA = a to b, teamB = c to d),
+            PlannedMatch(1, teamA = a to c, teamB = b to d),
+            PlannedMatch(1, teamA = a to d, teamB = b to c)
         )
         return candidates
             .map { it to cost(it) }
             .minBy { it.second }
+    }
+
+    private fun assignCourts(matches: List<PlannedMatch>): List<PlannedMatch> {
+        if (matches.isEmpty()) return matches
+        val available = (1..courtsCount).toMutableList()
+        val ordered = matches.sortedByDescending { courtBias(it) }
+        val result = mutableListOf<PlannedMatch>()
+        ordered.forEach { m ->
+            val bestCourt = available.minBy { courtCost(m, it) }
+            result.add(m.copy(courtNumber = bestCourt))
+            available.remove(bestCourt)
+        }
+        return result
+    }
+
+    private fun courtBias(m: PlannedMatch): Int {
+        val players = listOf(m.teamA.first, m.teamA.second, m.teamB.first, m.teamB.second)
+        return players.sumOf { p -> (courtCounts[p]?.values?.maxOrNull() ?: 0) }
+    }
+
+    private fun courtCost(m: PlannedMatch, court: Int): Int {
+        val players = listOf(m.teamA.first, m.teamA.second, m.teamB.first, m.teamB.second)
+        return players.sumOf { p -> courtCounts[p]?.get(court) ?: 0 }
     }
 
     private fun cost(m: PlannedMatch): Double {
@@ -164,6 +186,12 @@ class PairingPlanner(
 
             listOf(m.teamA.first, m.teamA.second, m.teamB.first, m.teamB.second)
                 .forEach { playedRounds[it] = (playedRounds[it] ?: 0) + 1 }
+
+            val players = listOf(m.teamA.first, m.teamA.second, m.teamB.first, m.teamB.second)
+            players.forEach { p ->
+                val map = courtCounts.getOrPut(p) { mutableMapOf() }
+                map[m.courtNumber] = (map[m.courtNumber] ?: 0) + 1
+            }
         }
     }
 
