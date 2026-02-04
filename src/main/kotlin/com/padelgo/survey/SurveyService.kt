@@ -5,6 +5,7 @@ import com.padelgo.api.ApiException
 import com.padelgo.auth.JwtPrincipal
 import com.padelgo.auth.UserRepository
 import com.padelgo.repo.PlayerRepository
+import com.padelgo.service.Ntrp
 import jakarta.transaction.Transactional
 import org.springframework.http.HttpStatus
 import org.springframework.stereotype.Service
@@ -69,6 +70,7 @@ class SurveyService(
         user.surveyPayload = objectMapper.writeValueAsString(req)
         user.calibrationEventsRemaining = 3
         player.rating = rating
+        player.ntrp = Ntrp.fromRating(rating)
 
         users.save(user)
         players.save(player)

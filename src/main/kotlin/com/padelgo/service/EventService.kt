@@ -525,6 +525,7 @@ class EventService(
         val old = p.rating
         val newRating = (old + delta).coerceAtLeast(0)
         p.rating = newRating
+        p.ntrp = Ntrp.fromRating(newRating)
         ratingChangeRepo.save(
             RatingChange(
                 eventId = eventId,

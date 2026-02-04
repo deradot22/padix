@@ -4,6 +4,7 @@ import { ReactNode } from "react";
 import { Gamepad2, Trophy, UserPlus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { ntrpLevel } from "@/lib/rating";
 
 export interface PlayerTooltipPlayer {
   id: number | string;
@@ -22,16 +23,6 @@ export interface PlayerTooltipProps {
 }
 
 export function PlayerTooltip({ player, children, showAddFriend = true, onAddFriend }: PlayerTooltipProps) {
-  const getNtrpFromRating = (rating: number): string => {
-    if (rating >= 1700) return "6.0+";
-    if (rating >= 1400) return "5.0";
-    if (rating >= 1200) return "4.5";
-    if (rating >= 1100) return "4.0";
-    if (rating >= 1000) return "3.5";
-    if (rating >= 900) return "3.0";
-    return "2.5";
-  };
-
   return (
     <TooltipProvider delayDuration={200}>
       <Tooltip>
@@ -55,7 +46,7 @@ export function PlayerTooltip({ player, children, showAddFriend = true, onAddFri
               <div className="flex items-center justify-between">
                 <span className="flex items-center gap-1.5 text-muted-foreground">NTRP</span>
                 <span className="font-medium text-foreground">
-                  {player.ntrp || getNtrpFromRating(player.rating)}
+                  {player.ntrp || ntrpLevel(player.rating)}
                 </span>
               </div>
 

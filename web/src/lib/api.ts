@@ -9,6 +9,7 @@ export type Player = {
   id: string;
   name: string;
   rating: number;
+  ntrp?: string;
   gamesPlayed: number;
   calibrationEventsRemaining?: number | null;
 };
@@ -100,6 +101,7 @@ export type FriendItem = {
   publicId: string;
   name: string;
   rating: number;
+  ntrp?: string;
   gamesPlayed: number;
   calibrationEventsRemaining: number;
 };
@@ -234,6 +236,7 @@ export const api = {
       playerId: string;
       name: string;
       rating: number;
+      ntrp: string;
       gamesPlayed: number;
       publicId: string;
       surveyCompleted: boolean;

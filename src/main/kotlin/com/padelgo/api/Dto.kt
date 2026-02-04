@@ -24,6 +24,7 @@ data class PlayerResponse(
     val id: UUID,
     val name: String,
     val rating: Int,
+    val ntrp: String,
     val gamesPlayed: Int,
     val calibrationEventsRemaining: Int? = null
 ) {
@@ -32,6 +33,7 @@ data class PlayerResponse(
             id = p.id!!,
             name = p.name,
             rating = p.rating,
+            ntrp = p.ntrp,
             gamesPlayed = p.gamesPlayed,
             calibrationEventsRemaining = calibrationEventsRemaining
         )

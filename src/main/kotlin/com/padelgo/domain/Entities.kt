@@ -29,6 +29,9 @@ class Player(
     @Column(name = "rating", nullable = false)
     var rating: Int = 1000,
 
+    @Column(name = "ntrp", nullable = false)
+    var ntrp: String = "2.0",
+
     @Column(name = "games_played", nullable = false)
     var gamesPlayed: Int = 0,
 

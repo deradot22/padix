@@ -75,6 +75,7 @@ class SocialService(
                 publicId = formatPublicId(user.publicId),
                 name = player?.name ?: user.email,
                 rating = player?.rating ?: 0,
+                ntrp = player?.ntrp ?: "1.0",
                 gamesPlayed = player?.gamesPlayed ?: 0,
                 calibrationEventsRemaining = user.calibrationEventsRemaining
             )
@@ -196,6 +197,7 @@ data class FriendItem(
     val publicId: String,
     val name: String,
     val rating: Int,
+    val ntrp: String,
     val gamesPlayed: Int,
     val calibrationEventsRemaining: Int
 )

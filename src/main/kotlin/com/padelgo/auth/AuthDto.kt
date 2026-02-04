@@ -33,6 +33,7 @@ data class MeResponse(
     val playerId: java.util.UUID,
     val name: String,
     val rating: Int,
+    val ntrp: String,
     val gamesPlayed: Int,
     val publicId: String,
     val surveyCompleted: Boolean,

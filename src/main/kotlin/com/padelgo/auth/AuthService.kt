@@ -2,6 +2,7 @@ package com.padelgo.auth
 
 import com.padelgo.api.ApiException
 import com.padelgo.repo.PlayerRepository
+import com.padelgo.service.Ntrp
 import jakarta.transaction.Transactional
 import org.springframework.http.HttpStatus
 import org.springframework.security.crypto.password.PasswordEncoder
@@ -27,6 +28,7 @@ class AuthService(
             com.padelgo.domain.Player(
                 name = req.name.trim(),
                 rating = 1000,
+                ntrp = Ntrp.fromRating(1000),
                 gamesPlayed = 0
             )
         )
@@ -56,6 +58,7 @@ class AuthService(
             playerId = player.id!!,
             name = player.name,
             rating = player.rating,
+            ntrp = player.ntrp,
             gamesPlayed = player.gamesPlayed,
             publicId = formatPublicId(user.publicId),
             surveyCompleted = user.surveyCompleted,
