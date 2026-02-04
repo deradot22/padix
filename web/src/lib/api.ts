@@ -12,6 +12,7 @@ export type Player = {
   ntrp?: string;
   gamesPlayed: number;
   calibrationEventsRemaining?: number | null;
+  publicId?: string;
 };
 
 export type Event = {

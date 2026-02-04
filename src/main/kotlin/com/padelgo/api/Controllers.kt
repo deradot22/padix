@@ -32,7 +32,8 @@ class PlayerController(
             .associateBy { it.playerId!! }
         return players.map { p ->
             val calibration = usersByPlayerId[p.id]?.calibrationEventsRemaining
-            PlayerResponse.from(p, calibration)
+            val publicId = formatPublicId(usersByPlayerId[p.id]?.publicId)
+            PlayerResponse.from(p, calibration, publicId)
         }
     }
 }
@@ -141,14 +142,18 @@ class EventController(
         val courtNameByNumber = courts.associate { it.courtNumber to it.name }
         val rounds = roundRepo.findAllByEventIdOrderByRoundNumberAsc(eventId)
         val matches = rounds.associate { r -> r.id!! to matchRepo.findAllByRoundIdOrderByCourtNumberAsc(r.id!!) }
-        val playerIds = matches.values.flatten().flatMap {
+        val regs = service.getRegisteredPlayers(eventId)
+        val pending = service.getPendingCancelRequests(eventId)
+        val matchPlayerIds = matches.values.flatten().flatMap {
             listOf(it.teamAPlayer1Id!!, it.teamAPlayer2Id!!, it.teamBPlayer1Id!!, it.teamBPlayer2Id!!)
-        }.toSet()
+        }
+        val playerIds = (matchPlayerIds + regs.mapNotNull { it.id } + pending.mapNotNull { it.id }).toSet()
         val players = playerRepo.findAllById(playerIds).associateBy { it.id!! }
         val usersByPlayerId = userRepo.findAllByPlayerIdIn(playerIds).associateBy { it.playerId!! }
         val playerResponses = players.mapValues { (id, p) ->
             val calibration = usersByPlayerId[id]?.calibrationEventsRemaining
-            PlayerResponse.from(p, calibration)
+            val publicId = formatPublicId(usersByPlayerId[id]?.publicId)
+            PlayerResponse.from(p, calibration, publicId)
         }
         val scoresByMatch = matches.values.flatten().associate { m ->
             m.id!! to scoreRepo.findAllByMatchIdOrderBySetNumberAsc(m.id!!)
@@ -179,8 +184,6 @@ class EventController(
             }
             RoundResponse.from(r, ms)
         }
-        val regs = service.getRegisteredPlayers(eventId)
-        val pending = service.getPendingCancelRequests(eventId)
         val isAuthor = service.isAuthor(eventId, principalUserId())
         val authorName = service.getAuthorName(eventId) ?: if (isAuthor) "Вы" else "Не указан"
         val registeredCount = service.getRegisteredCount(eventId)
@@ -189,11 +192,13 @@ class EventController(
             roundDtos,
             regs.map { p ->
                 val calibration = usersByPlayerId[p.id]?.calibrationEventsRemaining
-                PlayerResponse.from(p, calibration)
+                val publicId = formatPublicId(usersByPlayerId[p.id]?.publicId)
+                PlayerResponse.from(p, calibration, publicId)
             },
             pending.map { p ->
                 val calibration = usersByPlayerId[p.id]?.calibrationEventsRemaining
-                PlayerResponse.from(p, calibration)
+                val publicId = formatPublicId(usersByPlayerId[p.id]?.publicId)
+                PlayerResponse.from(p, calibration, publicId)
             },
             isAuthor,
             authorName
@@ -206,4 +211,6 @@ class EventController(
         throw com.padelgo.api.ApiException(org.springframework.http.HttpStatus.UNAUTHORIZED, "Unauthorized")
     }
 }
+
+private fun formatPublicId(publicId: Long?): String? = publicId?.let { "#$it" }
 

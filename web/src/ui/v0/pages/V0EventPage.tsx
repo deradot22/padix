@@ -60,14 +60,25 @@ export function V0EventPage(props: { me: any; meLoaded?: boolean }) {
   const [scorePadOpen, setScorePadOpen] = useState(false);
 
   useEffect(() => {
-    if (!inviteOpen) return;
     if (!props.me) return;
+    if (friends) return;
     setFriendsError(null);
     api
       .getFriends()
       .then(setFriends)
       .catch((e: any) => setFriendsError(e?.message ?? "Ошибка загрузки друзей"));
-  }, [inviteOpen, props.me]);
+  }, [props.me, friends]);
+
+  useEffect(() => {
+    if (!inviteOpen) return;
+    if (!props.me) return;
+    if (friends) return;
+    setFriendsError(null);
+    api
+      .getFriends()
+      .then(setFriends)
+      .catch((e: any) => setFriendsError(e?.message ?? "Ошибка загрузки друзей"));
+  }, [inviteOpen, props.me, friends]);
 
 
   useEffect(() => {
@@ -195,9 +206,12 @@ export function V0EventPage(props: { me: any; meLoaded?: boolean }) {
     const e = data.event;
     const registered = data.registeredPlayers ?? [];
     const meId = props.me?.playerId;
+    const myPublicId = props.me?.publicId;
     const isRegistered = !!meId && registered.some((p) => p.id === meId);
     const isAuthor = data.isAuthor;
     const progressPercent = Math.min(100, (registered.length / Math.max(1, e.courtsCount * 4)) * 100);
+    const friendPublicIds = new Set((friends?.friends ?? []).map((f) => f.publicId));
+    const outgoingPublicIds = new Set((friends?.outgoing ?? []).map((f) => f.publicId));
 
     return (
       <div className="space-y-8 pb-8">
@@ -245,13 +259,13 @@ export function V0EventPage(props: { me: any; meLoaded?: boolean }) {
                 </div>
               </div>
 
-              <div className="flex flex-col gap-3">
+              <div className="flex flex-col gap-3 items-start">
                 {e.status === "OPEN_FOR_REGISTRATION" || e.status === "REGISTRATION_CLOSED" ? (
                   <>
                     {isRegistered ? (
                       <button
                         type="button"
-                        className="h-12 px-6 rounded-md border border-primary bg-primary/10 text-primary text-base font-medium hover:bg-primary/20 transition-colors inline-flex items-center justify-center"
+                        className="h-12 w-full px-6 rounded-md border border-primary bg-primary/10 text-primary text-base font-medium hover:bg-primary/20 transition-colors inline-flex items-center justify-center"
                         disabled={canceling}
                         onClick={async () => {
                           if (!eventId) return;
@@ -276,7 +290,7 @@ export function V0EventPage(props: { me: any; meLoaded?: boolean }) {
                     ) : e.status === "OPEN_FOR_REGISTRATION" ? (
                       <button
                         type="button"
-                        className="h-12 px-6 rounded-md bg-primary text-primary-foreground text-base font-medium hover:bg-primary/90 transition-colors"
+                        className="h-12 w-full px-6 rounded-md bg-primary text-primary-foreground text-base font-medium hover:bg-primary/90 transition-colors"
                         disabled={registering}
                         onClick={async () => {
                           if (!eventId) return;
@@ -300,7 +314,7 @@ export function V0EventPage(props: { me: any; meLoaded?: boolean }) {
                       <div className="text-sm text-muted-foreground">Регистрация закрыта</div>
                     )}
 
-                    <div className="flex gap-2">
+                    <div className="flex flex-wrap items-center gap-2 w-full">
                       {isAuthor && e.status === "OPEN_FOR_REGISTRATION" ? (
                         <button
                           type="button"
@@ -339,15 +353,6 @@ export function V0EventPage(props: { me: any; meLoaded?: boolean }) {
                         </button>
                       ) : null}
 
-                      <button
-                        type="button"
-                        className="h-11 w-11 rounded-md border border-border bg-transparent hover:bg-secondary transition-colors inline-flex items-center justify-center"
-                        title="Пригласить"
-                        aria-label="Пригласить"
-                        onClick={() => setInviteOpen(true)}
-                      >
-                        <UserPlus className="h-4 w-4" />
-                      </button>
                     </div>
 
                     {info ? <div className="text-sm text-muted-foreground">{info}</div> : null}
@@ -382,21 +387,32 @@ export function V0EventPage(props: { me: any; meLoaded?: boolean }) {
                   <div className="text-sm text-muted-foreground">Статус: {statusLabel(e.status)}</div>
                 )}
 
-                <button
-                  type="button"
-                  className="text-muted-foreground text-sm inline-flex items-center justify-center hover:text-foreground"
-                  onClick={async () => {
-                    try {
-                      await navigator.clipboard.writeText(window.location.href);
-                      setInfo("Ссылка скопирована");
-                    } catch {
-                      setInfo(window.location.href);
-                    }
-                  }}
-                >
-                  <Share2 className="h-4 w-4 mr-2" />
-                  Поделиться
-                </button>
+                <div className="flex items-center gap-3 self-start">
+                  <button
+                    type="button"
+                    className="h-10 w-10 rounded-md border border-border bg-transparent hover:bg-secondary transition-colors inline-flex items-center justify-center"
+                    title="Пригласить"
+                    aria-label="Пригласить"
+                    onClick={() => setInviteOpen(true)}
+                  >
+                    <UserPlus className="h-4 w-4" />
+                  </button>
+                  <button
+                    type="button"
+                    className="text-muted-foreground text-sm inline-flex items-center justify-center hover:text-foreground"
+                    onClick={async () => {
+                      try {
+                        await navigator.clipboard.writeText(window.location.href);
+                        setInfo("Ссылка скопирована");
+                      } catch {
+                        setInfo(window.location.href);
+                      }
+                    }}
+                  >
+                    <Share2 className="h-4 w-4 mr-2" />
+                    Поделиться
+                  </button>
+                </div>
               </div>
             </div>
           </div>
@@ -469,7 +485,7 @@ export function V0EventPage(props: { me: any; meLoaded?: boolean }) {
             <div className="text-sm text-muted-foreground">
               Игра <b>{data.event.title}</b> готова к началу. Все участники зарегистрированы.
             </div>
-            <div className="mt-4 flex gap-2 justify-end">
+            <div className="mt-4 flex flex-wrap items-center gap-2 justify-end">
               <Button variant="outline" className="bg-transparent" onClick={() => setStartPromptOpen(false)}>
                 Позже
               </Button>
@@ -577,10 +593,37 @@ export function V0EventPage(props: { me: any; meLoaded?: boolean }) {
                     name: p.name,
                     rating: p.rating,
                     matches: p.gamesPlayed,
+                    odid: p.publicId,
                   }}
-                  showAddFriend={false}
+                  showAddFriend={p.id !== meId}
+                  addFriendStatus={
+                    !p.publicId
+                      ? "none"
+                      : friendPublicIds.has(p.publicId)
+                        ? "friend"
+                        : outgoingPublicIds.has(p.publicId)
+                          ? "requested"
+                          : "none"
+                  }
+                  onAddFriend={async () => {
+                    if (!p.publicId) {
+                      throw new Error("Не удалось определить публичный ID");
+                    }
+                    await api.requestFriend(p.publicId);
+                    setFriends((prev) =>
+                      prev
+                        ? {
+                            ...prev,
+                            outgoing: prev.outgoing.some((o) => o.publicId === p.publicId)
+                              ? prev.outgoing
+                              : [...prev.outgoing, { publicId: p.publicId, name: p.name }],
+                          }
+                        : prev,
+                    );
+                    return "Заявка отправлена";
+                  }}
                 >
-                  <button className="group relative p-4 rounded-xl bg-gradient-to-br from-primary/10 to-primary/5 border border-primary/20 hover:border-primary/40 transition-all hover:shadow-lg hover:shadow-primary/10">
+                  <button className="group relative w-full p-4 rounded-xl bg-gradient-to-br from-primary/10 to-primary/5 border border-primary/20 hover:border-primary/40 transition-all hover:shadow-lg hover:shadow-primary/10">
                     <div className="absolute -top-2 -right-2 w-6 h-6 rounded-full bg-primary text-primary-foreground text-xs font-bold flex items-center justify-center">
                       {idx + 1}
                     </div>
@@ -858,7 +901,7 @@ export function V0EventPage(props: { me: any; meLoaded?: boolean }) {
             </div>
 
             <div className="mt-5 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-              <div className="flex gap-2">
+              <div className="flex flex-wrap items-center gap-2">
                 <Button variant="secondary" onClick={() => setInfo("Добавление раунда пока не поддержано.")}>
                   + Раунд
                 </Button>

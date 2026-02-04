@@ -164,15 +164,15 @@ export function V0CreateEventPage(props: {
 
               <div className="space-y-3">
                 <Label className="font-medium">Время проведения</Label>
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid gap-4 md:grid-cols-2">
                   <div className="bg-gradient-to-br from-primary/10 to-primary/5 rounded-xl p-5 border border-primary/20">
                     <div className="flex items-center gap-2 mb-3">
                       <Clock className="h-4 w-4 text-primary" />
                       <span className="text-sm font-semibold text-foreground">Начало</span>
                     </div>
-                    <div className="flex gap-3">
+                    <div className="grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-2">
                       <Select value={startHour} onValueChange={setStartHour}>
-                        <SelectTrigger className="flex-1 bg-background border-primary/30 h-12 text-base font-semibold">
+                        <SelectTrigger className="w-full bg-background border-primary/30 h-12 text-base font-semibold">
                           <SelectValue />
                         </SelectTrigger>
                         <SelectContent>
@@ -185,7 +185,7 @@ export function V0CreateEventPage(props: {
                       </Select>
                       <div className="flex items-center text-muted-foreground font-semibold">:</div>
                       <Select value={startMinute} onValueChange={setStartMinute}>
-                        <SelectTrigger className="w-24 bg-background border-primary/30 h-12 text-base font-semibold">
+                        <SelectTrigger className="w-full bg-background border-primary/30 h-12 text-base font-semibold">
                           <SelectValue />
                         </SelectTrigger>
                         <SelectContent>
@@ -204,9 +204,9 @@ export function V0CreateEventPage(props: {
                       <Clock className="h-4 w-4 text-accent" />
                       <span className="text-sm font-semibold text-foreground">Окончание</span>
                     </div>
-                    <div className="flex gap-3">
+                    <div className="grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-2">
                       <Select value={endHour} onValueChange={setEndHour}>
-                        <SelectTrigger className="flex-1 bg-background border-accent/30 h-12 text-base font-semibold">
+                        <SelectTrigger className="w-full bg-background border-accent/30 h-12 text-base font-semibold">
                           <SelectValue />
                         </SelectTrigger>
                         <SelectContent>
@@ -219,7 +219,7 @@ export function V0CreateEventPage(props: {
                       </Select>
                       <div className="flex items-center text-muted-foreground font-semibold">:</div>
                       <Select value={endMinute} onValueChange={setEndMinute}>
-                        <SelectTrigger className="w-24 bg-background border-accent/30 h-12 text-base font-semibold">
+                        <SelectTrigger className="w-full bg-background border-accent/30 h-12 text-base font-semibold">
                           <SelectValue />
                         </SelectTrigger>
                         <SelectContent>
@@ -241,9 +241,46 @@ export function V0CreateEventPage(props: {
                     <MapPin className="h-4 w-4 text-primary" />
                     Количество кортов
                   </Label>
-                  <Input id="courts" type="number" min={1} value={courts} onChange={(e) => setCourts(Number(e.target.value))} className="bg-secondary border-border h-11" />
-                  <div className="space-y-2 pt-2">
-                    <div className="text-xs text-muted-foreground">Названия кортов</div>
+                  <Select value={courts.toString()} onValueChange={(value) => setCourts(Number(value))}>
+                    <SelectTrigger id="courts" className="bg-secondary border-border h-10 text-sm font-semibold px-4 w-full">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent className="text-sm max-h-40 overflow-y-auto">
+                      {Array.from({ length: 12 }, (_, i) => {
+                        const value = (i + 1).toString();
+                        return (
+                          <SelectItem key={value} value={value}>
+                            {value}
+                          </SelectItem>
+                        );
+                      })}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="serves" className="font-medium flex items-center gap-2">
+                    <Zap className="h-4 w-4 text-primary" />
+                    Подач на игрока (POINTS)
+                  </Label>
+                  <Select value={pointsPerPlayer.toString()} onValueChange={(value) => setPointsPerPlayer(Number(value))}>
+                    <SelectTrigger id="serves" className="bg-secondary border-border h-10 text-sm font-semibold px-4 w-full">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent className="text-sm max-h-72 overflow-y-auto">
+                      {Array.from({ length: 20 }, (_, i) => {
+                        const value = (i + 1).toString();
+                        return (
+                          <SelectItem key={value} value={value}>
+                            {value}
+                          </SelectItem>
+                        );
+                      })}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2 pt-2 md:col-span-2">
+                  <div className="text-xs text-muted-foreground">Названия кортов</div>
+                  <div className="grid gap-2 md:grid-cols-4">
                     {courtNames.map((name, idx) => (
                       <Input
                         key={`court-${idx}`}
@@ -258,13 +295,6 @@ export function V0CreateEventPage(props: {
                       />
                     ))}
                   </div>
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="serves" className="font-medium flex items-center gap-2">
-                    <Zap className="h-4 w-4 text-primary" />
-                    Подач на игрока (POINTS)
-                  </Label>
-                  <Input id="serves" type="number" min={1} value={pointsPerPlayer} onChange={(e) => setPointsPerPlayer(Number(e.target.value))} className="bg-secondary border-border h-11" />
                 </div>
               </div>
 
@@ -316,7 +346,7 @@ export function V0CreateEventPage(props: {
               </div>
 
               <div className="space-y-3">
-                <Label className="font-medium">Раунды (подачи/ротации)</Label>
+                <Label className="font-medium">Раунды</Label>
                 <div className="grid gap-3 md:grid-cols-2">
                   {[
                     { id: "auto" as const, title: "Автоматически", desc: "Система подберёт оптимальное число раундов" },
@@ -377,8 +407,7 @@ export function V0CreateEventPage(props: {
                 </div>
                 <div className="rounded-lg bg-secondary/50 p-4 border border-border/50">
                   <div className="text-xs text-muted-foreground uppercase tracking-wide mb-1">Подачи</div>
-                  <div className="font-semibold text-lg">{pointsPerPlayer} очков</div>
-                  <div className="text-sm text-muted-foreground">На игрока</div>
+                  <div className="font-semibold text-lg">{pointsPerPlayer} подач на игрока</div>
                 </div>
               </div>
 

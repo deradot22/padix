@@ -26,16 +26,18 @@ data class PlayerResponse(
     val rating: Int,
     val ntrp: String,
     val gamesPlayed: Int,
-    val calibrationEventsRemaining: Int? = null
+    val calibrationEventsRemaining: Int? = null,
+    val publicId: String? = null
 ) {
     companion object {
-        fun from(p: Player, calibrationEventsRemaining: Int? = null) = PlayerResponse(
+        fun from(p: Player, calibrationEventsRemaining: Int? = null, publicId: String? = null) = PlayerResponse(
             id = p.id!!,
             name = p.name,
             rating = p.rating,
             ntrp = p.ntrp,
             gamesPlayed = p.gamesPlayed,
-            calibrationEventsRemaining = calibrationEventsRemaining
+            calibrationEventsRemaining = calibrationEventsRemaining,
+            publicId = publicId
         )
     }
 }
