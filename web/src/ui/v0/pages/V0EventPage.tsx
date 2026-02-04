@@ -610,16 +610,19 @@ export function V0EventPage(props: { me: any; meLoaded?: boolean }) {
                       throw new Error("Не удалось определить публичный ID");
                     }
                     await api.requestFriend(p.publicId);
-                    setFriends((prev) =>
-                      prev
-                        ? {
-                            ...prev,
-                            outgoing: prev.outgoing.some((o) => o.publicId === p.publicId)
-                              ? prev.outgoing
-                              : [...prev.outgoing, { publicId: p.publicId, name: p.name }],
-                          }
-                        : prev,
-                    );
+                    const publicId = p.publicId;
+                    if (publicId) {
+                      setFriends((prev) =>
+                        prev
+                          ? {
+                              ...prev,
+                              outgoing: prev.outgoing.some((o) => o.publicId === publicId)
+                                ? prev.outgoing
+                                : [...prev.outgoing, { publicId, name: p.name }],
+                            }
+                          : prev,
+                      );
+                    }
                     return "Заявка отправлена";
                   }}
                 >
