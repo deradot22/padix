@@ -44,6 +44,9 @@ class UserAccount(
     @JdbcTypeCode(SqlTypes.JSON)
     var surveyPayload: String? = null,
 
+    @Column(name = "disabled", nullable = false)
+    var disabled: Boolean = false,
+
     @Column(name = "calibration_events_remaining", nullable = false)
     var calibrationEventsRemaining: Int = 0,
 

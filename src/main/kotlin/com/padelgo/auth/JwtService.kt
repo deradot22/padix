@@ -15,17 +15,23 @@ class JwtService(
 ) {
     private val key = Keys.hmacShaKeyFor(secret.toByteArray(Charsets.UTF_8))
 
-    fun createToken(userId: UUID, email: String, playerId: UUID): String {
+    fun createToken(userId: UUID, email: String, playerId: UUID, isAdmin: Boolean = false): String {
         val now = Instant.now()
         val exp = now.plusSeconds(ttlSeconds)
         return Jwts.builder()
             .subject(userId.toString())
             .claim("email", email)
             .claim("playerId", playerId.toString())
+            .claim("admin", isAdmin)
             .issuedAt(Date.from(now))
             .expiration(Date.from(exp))
             .signWith(key)
             .compact()
+    }
+
+    fun createAdminToken(username: String): String {
+        val zero = UUID(0, 0)
+        return createToken(zero, username, zero, true)
     }
 
     fun parse(token: String): JwtPrincipal {
@@ -35,13 +41,15 @@ class JwtService(
         val userId = UUID.fromString(claims.subject)
         val email = claims["email"] as String
         val playerId = UUID.fromString(claims["playerId"] as String)
-        return JwtPrincipal(userId = userId, email = email, playerId = playerId)
+        val isAdmin = (claims["admin"] as? Boolean) ?: false
+        return JwtPrincipal(userId = userId, email = email, playerId = playerId, isAdmin = isAdmin)
     }
 }
 
 data class JwtPrincipal(
     val userId: UUID,
     val email: String,
-    val playerId: UUID
+    val playerId: UUID,
+    val isAdmin: Boolean = false
 )
 

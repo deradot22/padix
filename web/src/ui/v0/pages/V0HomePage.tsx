@@ -130,8 +130,8 @@ export function V0HomePage(props: { me: any }) {
   ];
 
   return (
-    <div className="space-y-8">
-      <div className="relative overflow-hidden rounded-2xl border border-border bg-gradient-to-br from-primary/10 via-background to-background p-8 lg:p-12">
+    <div className="space-y-8 w-full min-w-0">
+      <div className="relative w-full overflow-hidden rounded-2xl border border-border bg-gradient-to-br from-primary/10 via-background to-background p-8 lg:p-12">
         <div className="relative z-10 max-w-2xl">
           <Badge className="mb-4 bg-primary/20 text-primary border-primary/30 border">
             <Zap className="mr-1 h-3 w-3" />
@@ -162,9 +162,9 @@ export function V0HomePage(props: { me: any }) {
         <div className="absolute -bottom-20 -right-10 h-48 w-48 rounded-full bg-primary/5 blur-2xl" />
       </div>
 
-      <div className="grid gap-4 sm:grid-cols-3">
+      <div className="grid w-full gap-4 sm:grid-cols-3 items-stretch">
         {quickStats.map((stat) => (
-          <Card key={stat.label} className="border-border/50">
+          <Card key={stat.label} className="border-border/50 w-full">
             <CardContent className="flex items-center gap-4 p-6">
               <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-secondary">
                 <stat.icon className={`h-6 w-6 ${stat.color}`} />
@@ -178,8 +178,8 @@ export function V0HomePage(props: { me: any }) {
         ))}
       </div>
 
-      <div className="grid gap-8 lg:grid-cols-2">
-        <Card>
+      <div className="grid w-full gap-8 lg:grid-cols-2 items-stretch">
+        <Card className="w-full">
           <CardHeader className="flex flex-row items-center justify-between pb-4">
             <CardTitle className="flex items-center gap-2">
               <Calendar className="h-5 w-5 text-primary" />
@@ -238,7 +238,7 @@ export function V0HomePage(props: { me: any }) {
           </CardContent>
         </Card>
 
-        <Card>
+        <Card className="w-full">
           <CardHeader className="flex flex-row items-center justify-between pb-4">
             <CardTitle className="flex items-center gap-2">
               <Trophy className="h-5 w-5 text-primary" />

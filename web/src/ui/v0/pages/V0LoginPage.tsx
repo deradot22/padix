@@ -1,6 +1,6 @@
 import { FormEvent, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { api, setToken } from "../../../lib/api";
+import { api, setAdminToken, setToken } from "../../../lib/api";
 
 export function V0LoginPage(props: { onAuth: (me: any) => void }) {
   const nav = useNavigate();
@@ -14,7 +14,15 @@ export function V0LoginPage(props: { onAuth: (me: any) => void }) {
     setLoading(true);
     setError(null);
     try {
+      if (!email.includes("@")) {
+        const { token } = await api.adminLogin(email, password);
+        setAdminToken(token);
+        setToken(null);
+        nav("/admin");
+        return;
+      }
       const { token } = await api.login(email, password);
+      setAdminToken(null);
       setToken(token);
       const me = await api.me();
       props.onAuth(me);
@@ -34,7 +42,7 @@ export function V0LoginPage(props: { onAuth: (me: any) => void }) {
         <div className="rounded-xl border border-border bg-card p-6">
           <form onSubmit={onSubmit} className="space-y-4">
             <div className="space-y-2">
-              <label className="text-sm font-medium">Email</label>
+              <label className="text-sm font-medium">Email или логин администратора</label>
               <input
                 className="h-11 w-full rounded-md border border-border bg-secondary px-3 text-sm outline-none focus:ring-2 focus:ring-ring/50"
                 value={email}

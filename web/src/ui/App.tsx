@@ -10,6 +10,7 @@ import { V0RatingPage } from "./v0/pages/V0RatingPage";
 import { V0LoginPage } from "./v0/pages/V0LoginPage";
 import { V0RegisterPage } from "./v0/pages/V0RegisterPage";
 import { V0SurveyPage } from "./v0/pages/V0SurveyPage";
+import { V0AdminPage } from "./v0/pages/V0AdminPage";
 import { MainLayout } from "@/components/main-layout";
 
 export function App() {
@@ -102,6 +103,7 @@ export function App() {
           <Route path="create" element={<V0CreateEventPage me={me} meLoaded={meLoaded} />} />
           <Route path="profile" element={<V0ProfilePage me={me} meLoaded={meLoaded} />} />
           <Route path="events/:eventId" element={<V0EventPage me={me} meLoaded={meLoaded} />} />
+          <Route path="admin" element={<V0AdminPage />} />
         </Route>
       </Routes>
 

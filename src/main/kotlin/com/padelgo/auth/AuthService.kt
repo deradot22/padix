@@ -40,18 +40,20 @@ class AuthService(
                 publicId = generatePublicId()
             )
         )
-        return AuthResponse(jwt.createToken(user.id!!, user.email, user.playerId!!))
+        return AuthResponse(jwt.createToken(user.id!!, user.email, user.playerId!!, false))
     }
 
     fun login(req: LoginRequest): AuthResponse {
         val email = req.email.trim().lowercase()
         val user = users.findByEmailIgnoreCase(email) ?: throw ApiException(HttpStatus.UNAUTHORIZED, "Invalid credentials")
+        if (user.disabled) throw ApiException(HttpStatus.FORBIDDEN, "Account disabled")
         if (!encoder.matches(req.password, user.passwordHash)) throw ApiException(HttpStatus.UNAUTHORIZED, "Invalid credentials")
-        return AuthResponse(jwt.createToken(user.id!!, user.email, user.playerId!!))
+        return AuthResponse(jwt.createToken(user.id!!, user.email, user.playerId!!, false))
     }
 
     fun me(principal: JwtPrincipal): MeResponse {
         val user = users.findById(principal.userId).orElseThrow { ApiException(HttpStatus.UNAUTHORIZED, "User not found") }
+        if (user.disabled) throw ApiException(HttpStatus.FORBIDDEN, "Account disabled")
         val player = players.findById(user.playerId!!).orElseThrow { ApiException(HttpStatus.UNAUTHORIZED, "Player not found") }
         return MeResponse(
             email = user.email,

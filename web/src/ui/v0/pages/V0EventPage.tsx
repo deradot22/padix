@@ -205,6 +205,7 @@ export function V0EventPage(props: { me: any; meLoaded?: boolean }) {
 
     const e = data.event;
     const registered = data.registeredPlayers ?? [];
+    const pending = data.pendingCancelRequests ?? [];
     const meId = props.me?.playerId;
     const myPublicId = props.me?.publicId;
     const isRegistered = !!meId && registered.some((p) => p.id === meId);
@@ -659,6 +660,53 @@ export function V0EventPage(props: { me: any; meLoaded?: boolean }) {
             </div>
           </div>
         </div>
+
+        {isAuthor && pending.length > 0 ? (
+          <div className="rounded-2xl bg-card border border-border/50 overflow-hidden">
+            <div className="p-6 border-b border-border/50">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="p-2 rounded-lg bg-secondary">
+                    <Users className="h-5 w-5 text-foreground" />
+                  </div>
+                  <div>
+                    <h2 className="text-xl font-semibold">Запросы на отмену</h2>
+                    <p className="text-sm text-muted-foreground">Игроки хотят выйти из игры</p>
+                  </div>
+                </div>
+                <span className="px-3 py-1.5 text-sm rounded-md bg-secondary text-secondary-foreground">
+                  {pending.length}
+                </span>
+              </div>
+            </div>
+            <div className="p-6">
+              <div className="flex flex-wrap gap-2">
+                {pending.map((p) => (
+                  <div key={p.id} className="flex items-center gap-2 rounded-md border border-border bg-secondary/50 px-3 py-2">
+                    <span className="text-sm font-medium">{p.name}</span>
+                    <span className="text-xs text-muted-foreground">({p.rating})</span>
+                    <Button
+                      size="sm"
+                      variant="secondary"
+                      onClick={async () => {
+                        if (!eventId) return;
+                        try {
+                          await api.approveCancel(eventId, p.id);
+                          const refreshed = await api.getEventDetails(eventId);
+                          setData(refreshed);
+                        } catch (err: any) {
+                          setActionError(err?.message ?? "Ошибка подтверждения");
+                        }
+                      }}
+                    >
+                      Подтвердить
+                    </Button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        ) : null}
 
         <Dialog
           open={roundsOpen}

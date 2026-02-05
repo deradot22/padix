@@ -29,4 +29,7 @@ app:
     # В проде вынести в секрет/ENV. Для дев-старта ок.
     secret: ${APP_JWT_SECRET:change-me-in-prod-change-me-in-prod-change-me}
     ttlSeconds: ${APP_JWT_TTL_SECONDS:2592000} # 30 дней
+  admin:
+    username: ${APP_ADMIN_USERNAME:admin228}
+    password: ${APP_ADMIN_PASSWORD:admin228}
 

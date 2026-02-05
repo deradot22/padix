@@ -4,11 +4,13 @@ import { api, Player } from "../../../lib/api";
 import { ntrpLevel } from "../../../lib/rating";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { PlayerTooltip } from "@/components/player-tooltip";
 
 export function V0RatingPage(props: { authed: boolean }) {
   const [data, setData] = useState<Player[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [friends, setFriends] = useState<import("../../../lib/api").FriendsSnapshot | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -32,6 +34,14 @@ export function V0RatingPage(props: { authed: boolean }) {
       cancelled = true;
     };
   }, []);
+
+  useEffect(() => {
+    if (!props.authed) return;
+    api
+      .getFriends()
+      .then(setFriends)
+      .catch(() => setFriends(null));
+  }, [props.authed]);
 
   const content = useMemo(() => {
     if (loading) return <div className="text-sm text-muted-foreground">Загрузка…</div>;
@@ -66,6 +76,9 @@ export function V0RatingPage(props: { authed: boolean }) {
       return <span className="w-8 text-center text-muted-foreground">{rank}</span>;
     };
 
+    const friendPublicIds = new Set((friends?.friends ?? []).map((f) => f.publicId));
+    const outgoingPublicIds = new Set((friends?.outgoing ?? []).map((f) => f.publicId));
+
     return (
       <>
         <div className="grid gap-4 md:grid-cols-3">
@@ -88,9 +101,47 @@ export function V0RatingPage(props: { authed: boolean }) {
                     <div className={`mb-4 flex h-16 w-16 items-center justify-center rounded-full border-2 ${getRankStyle(rank)}`}>
                       {rank === 1 ? <Trophy className="h-8 w-8" /> : <span className="text-2xl font-bold">{rank}</span>}
                     </div>
-                    <Badge variant="secondary" className="mb-2 px-3">
-                      {player.name}
-                    </Badge>
+                    <PlayerTooltip
+                      player={{
+                        id: player.id,
+                        name: player.name,
+                        rating: player.rating,
+                        matches: player.gamesPlayed,
+                        ntrp: player.ntrp,
+                        odid: player.publicId,
+                      }}
+                      showAddFriend={props.authed}
+                      addFriendStatus={
+                        !player.publicId
+                          ? "none"
+                          : friendPublicIds.has(player.publicId)
+                            ? "friend"
+                            : outgoingPublicIds.has(player.publicId)
+                              ? "requested"
+                              : "none"
+                      }
+                      onAddFriend={async () => {
+                        if (!player.publicId) throw new Error("Не удалось определить публичный ID");
+                        await api.requestFriend(player.publicId);
+                        if (player.publicId) {
+                          setFriends((prev) =>
+                            prev
+                              ? {
+                                  ...prev,
+                                  outgoing: prev.outgoing.some((o) => o.publicId === player.publicId)
+                                    ? prev.outgoing
+                                    : [...prev.outgoing, { publicId: player.publicId, name: player.name }],
+                                }
+                              : prev,
+                          );
+                        }
+                        return "Заявка отправлена";
+                      }}
+                    >
+                      <Badge variant="secondary" className="mb-2 px-3 cursor-pointer">
+                        {player.name}
+                      </Badge>
+                    </PlayerTooltip>
                     <p className="text-3xl font-bold">{player.rating}</p>
                     <div className="mt-2 flex items-center gap-3 text-sm text-muted-foreground">
                       <span>NTRP {ntrpLevel(player.rating)}</span>
@@ -104,7 +155,7 @@ export function V0RatingPage(props: { authed: boolean }) {
           })}
         </div>
 
-        <Card className="mt-6">
+        <Card className="mt-6 w-full">
           <CardHeader className="pb-3">
             <CardTitle className="flex items-center gap-2 text-lg">
               <TrendingUp className="h-5 w-5 text-primary" />
@@ -112,15 +163,15 @@ export function V0RatingPage(props: { authed: boolean }) {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="overflow-x-auto">
-              <table className="w-full">
+            <div className="w-full">
+              <table className="w-full table-fixed text-sm sm:text-base">
                 <thead>
                   <tr className="border-b border-border text-left text-sm text-muted-foreground">
-                    <th className="pb-3 pr-4 font-medium">#</th>
-                    <th className="pb-3 pr-4 font-medium">Игрок</th>
-                    <th className="pb-3 pr-4 font-medium">Рейтинг</th>
-                    <th className="pb-3 pr-4 font-medium">NTRP</th>
-                    <th className="pb-3 font-medium">Матчей</th>
+                    <th className="pb-3 pr-3 font-medium w-10">#</th>
+                    <th className="pb-3 pr-3 font-medium">Игрок</th>
+                    <th className="pb-3 pr-3 font-medium w-20">Рейтинг</th>
+                    <th className="pb-3 pr-3 font-medium w-16 hidden sm:table-cell">NTRP</th>
+                    <th className="pb-3 font-medium w-16 hidden sm:table-cell">Матчей</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-border">
@@ -128,17 +179,55 @@ export function V0RatingPage(props: { authed: boolean }) {
                     const rank = idx + 4;
                     return (
                       <tr key={player.id} className="group transition-colors hover:bg-secondary/50">
-                        <td className="py-4 pr-4">{getRankIcon(rank)}</td>
-                        <td className="py-4 pr-4">
-                          <Badge variant="secondary" className="font-medium">
-                            {player.name}
-                          </Badge>
+                        <td className="py-4 pr-3 align-middle">{getRankIcon(rank)}</td>
+                        <td className="py-4 pr-3 align-middle">
+                          <PlayerTooltip
+                            player={{
+                              id: player.id,
+                              name: player.name,
+                              rating: player.rating,
+                              matches: player.gamesPlayed,
+                              ntrp: player.ntrp,
+                              odid: player.publicId,
+                            }}
+                            showAddFriend={props.authed}
+                            addFriendStatus={
+                              !player.publicId
+                                ? "none"
+                                : friendPublicIds.has(player.publicId)
+                                  ? "friend"
+                                  : outgoingPublicIds.has(player.publicId)
+                                    ? "requested"
+                                    : "none"
+                            }
+                            onAddFriend={async () => {
+                              if (!player.publicId) throw new Error("Не удалось определить публичный ID");
+                              await api.requestFriend(player.publicId);
+                              if (player.publicId) {
+                                setFriends((prev) =>
+                                  prev
+                                    ? {
+                                        ...prev,
+                                        outgoing: prev.outgoing.some((o) => o.publicId === player.publicId)
+                                          ? prev.outgoing
+                                          : [...prev.outgoing, { publicId: player.publicId, name: player.name }],
+                                      }
+                                    : prev,
+                                );
+                              }
+                              return "Заявка отправлена";
+                            }}
+                          >
+                            <Badge variant="secondary" className="font-medium max-w-full truncate cursor-pointer">
+                              {player.name}
+                            </Badge>
+                          </PlayerTooltip>
                         </td>
-                        <td className="py-4 pr-4">
+                        <td className="py-4 pr-3 align-middle">
                           <span className="font-semibold tabular-nums">{player.rating}</span>
                         </td>
-                        <td className="py-4 pr-4 text-muted-foreground">{ntrpLevel(player.rating)}</td>
-                        <td className="py-4 text-muted-foreground">{player.gamesPlayed}</td>
+                        <td className="py-4 pr-3 text-muted-foreground align-middle hidden sm:table-cell">{ntrpLevel(player.rating)}</td>
+                        <td className="py-4 text-muted-foreground align-middle hidden sm:table-cell">{player.gamesPlayed}</td>
                       </tr>
                     );
                   })}

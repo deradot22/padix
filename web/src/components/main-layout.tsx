@@ -16,7 +16,7 @@ export function MainLayout(props: {
         onRefreshNotifications={props.onRefreshNotifications}
         onLogout={props.onLogout}
       />
-      <main className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">{props.children}</main>
+      <main className="mx-auto max-w-7xl w-full px-4 py-8 sm:px-6 lg:px-8">{props.children}</main>
     </div>
   );
 }

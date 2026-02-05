@@ -213,4 +213,3 @@ class EventController(
 }
 
 private fun formatPublicId(publicId: Long?): String? = publicId?.let { "#$it" }
-

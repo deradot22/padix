@@ -40,6 +40,7 @@ class SecurityConfig(
             auth
                 .requestMatchers(
                     "/api/auth/**",
+                    "/api/admin/login",
                     "/api/players/rating",
                     "/swagger-ui.html",
                     "/swagger-ui/**",
@@ -130,7 +131,17 @@ class SurveyGateFilter(
         val path = request.requestURI
         val principal = SecurityContextHolder.getContext().authentication?.principal
         if (principal is JwtPrincipal) {
+            if (principal.isAdmin) {
+                filterChain.doFilter(request, response)
+                return
+            }
             val user = userRepo.findById(principal.userId).orElse(null)
+            if (user?.disabled == true) {
+                response.status = HttpStatus.FORBIDDEN.value()
+                response.contentType = "application/json"
+                response.writer.write("""{"status":403,"error":"Forbidden","message":"Account disabled"}""")
+                return
+            }
             val completed = user?.surveyCompleted == true
             val allowed = path.startsWith("/api/auth/") ||
                 path == "/api/players/rating" ||

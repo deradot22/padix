@@ -113,6 +113,18 @@ export type FriendRequestItem = {
   name: string;
 };
 
+export type AdminUser = {
+  userId: string;
+  email: string;
+  publicId: string;
+  name: string;
+  rating: number;
+  ntrp: string;
+  gamesPlayed: number;
+  surveyCompleted: boolean;
+  disabled: boolean;
+};
+
 export type FriendsSnapshot = {
   friends: FriendItem[];
   incoming: FriendRequestItem[];
@@ -139,9 +151,22 @@ function getToken(): string | null {
   return localStorage.getItem("padelgo_token");
 }
 
+function getAdminToken(): string | null {
+  return localStorage.getItem("padelgo_admin_token");
+}
+
 export function setToken(token: string | null) {
   if (!token) localStorage.removeItem("padelgo_token");
   else localStorage.setItem("padelgo_token", token);
+}
+
+export function setAdminToken(token: string | null) {
+  if (!token) localStorage.removeItem("padelgo_admin_token");
+  else localStorage.setItem("padelgo_admin_token", token);
+}
+
+export function adminToken() {
+  return getAdminToken();
 }
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
@@ -177,6 +202,18 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   // 204 / empty
   const text = await res.text();
   return (text ? (JSON.parse(text) as T) : (undefined as T));
+}
+
+async function adminRequest<T>(path: string, init?: RequestInit): Promise<T> {
+  const token = getAdminToken();
+  if (!token) throw new Error("Admin token missing");
+  return request<T>(path, {
+    ...init,
+    headers: {
+      ...(init?.headers ?? {}),
+      Authorization: `Bearer ${token}`,
+    },
+  });
 }
 
 export const api = {
@@ -279,5 +316,12 @@ export const api = {
   myHistory: () => request<EventHistoryItem[]>("/api/me/history"),
   myHistoryEvent: (eventId: string) =>
     request<EventHistoryMatch[]>(`/api/me/history/${eventId}`),
+
+  adminLogin: (username: string, password: string) =>
+    request<{ token: string }>("/api/admin/login", { method: "POST", body: JSON.stringify({ username, password }) }),
+  adminListUsers: () => adminRequest<AdminUser[]>("/api/admin/users"),
+  adminUpdateUser: (userId: string, payload: { email?: string; name?: string; password?: string; disabled?: boolean }) =>
+    adminRequest<AdminUser>(`/api/admin/users/${userId}`, { method: "PATCH", body: JSON.stringify(payload) }),
+  adminDeleteUser: (userId: string) => adminRequest<AdminUser>(`/api/admin/users/${userId}`, { method: "DELETE" }),
 };
 
