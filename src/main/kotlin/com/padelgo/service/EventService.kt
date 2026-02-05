@@ -520,15 +520,16 @@ class EventService(
         if (event.status != EventStatus.IN_PROGRESS) throw ApiException(HttpStatus.CONFLICT, "Event is not in progress")
 
         val matches = matchRepo.findAllByEventId(eventId)
-        if (matches.isEmpty()) throw ApiException(HttpStatus.CONFLICT, "No matches scheduled")
-
         val setsByMatch = matches.associate { m -> m.id!! to scoreRepo.findAllByMatchIdOrderBySetNumberAsc(m.id!!) }
-        val notFinished = matches.filter { it.status != MatchStatus.FINISHED || setsByMatch[it.id!!].isNullOrEmpty() }
-        if (notFinished.isNotEmpty()) {
-            throw ApiException(HttpStatus.CONFLICT, "Not all matches are finished (${notFinished.size} remaining)")
+        val finishedMatches = matches.filter { it.status == MatchStatus.FINISHED && !setsByMatch[it.id!!].isNullOrEmpty() }
+
+        if (finishedMatches.isEmpty()) {
+            event.status = EventStatus.FINISHED
+            eventRepo.save(event)
+            return
         }
 
-        val playerIds = matches.flatMap {
+        val playerIds = finishedMatches.flatMap {
             listOf(it.teamAPlayer1Id!!, it.teamAPlayer2Id!!, it.teamBPlayer1Id!!, it.teamBPlayer2Id!!)
         }.toSet()
         val players = playerRepo.findAllById(playerIds).associateBy { it.id!! }.toMutableMap()
@@ -536,38 +537,48 @@ class EventService(
 
         val calibrationByPlayer = accounts.associate { it.playerId!! to it.calibrationEventsRemaining }
 
-        matches.forEach { m ->
-            val sets = setsByMatch[m.id!!]!!.sortedBy { it.setNumber }
-            val a1 = players[m.teamAPlayer1Id!!]!!
-            val a2 = players[m.teamAPlayer2Id!!]!!
-            val b1 = players[m.teamBPlayer1Id!!]!!
-            val b2 = players[m.teamBPlayer2Id!!]!!
+        try {
+            finishedMatches.forEach { m ->
+                val sets = setsByMatch[m.id!!]!!.sortedBy { it.setNumber }
+                val a1 = players[m.teamAPlayer1Id!!] ?: return@forEach
+                val a2 = players[m.teamAPlayer2Id!!] ?: return@forEach
+                val b1 = players[m.teamBPlayer1Id!!] ?: return@forEach
+                val b2 = players[m.teamBPlayer2Id!!] ?: return@forEach
 
-            val teamARating = (a1.rating + a2.rating) / 2
-            val teamBRating = (b1.rating + b2.rating) / 2
-            val kTeam = ((EloRating.kFactor(a1.gamesPlayed) + EloRating.kFactor(a2.gamesPlayed)) / 2.0).toInt()
+                val teamARating = (a1.rating + a2.rating) / 2
+                val teamBRating = (b1.rating + b2.rating) / 2
+                val kTeam = ((EloRating.kFactor(a1.gamesPlayed) + EloRating.kFactor(a2.gamesPlayed)) / 2.0).toInt()
 
-            val scoreA = scoreAFromSets(event.scoringMode, sets)
+                val scoreA = scoreAFromSets(event.scoringMode, sets)
 
-            val deltaTeamA = EloRating.teamDelta(teamARating, teamBRating, kTeam, scoreA)
-            applyDelta(eventId, m.id!!, a1, a2, deltaTeamA, calibrationByPlayer)
-            applyDelta(eventId, m.id!!, b1, b2, -deltaTeamA, calibrationByPlayer)
+                val deltaTeamA = EloRating.teamDelta(teamARating, teamBRating, kTeam, scoreA)
+                applyDelta(eventId, m.id!!, a1, a2, deltaTeamA, calibrationByPlayer)
+                applyDelta(eventId, m.id!!, b1, b2, -deltaTeamA, calibrationByPlayer)
 
-            // gamesPlayed: считаем матч как 1 игру
-            listOf(a1, a2, b1, b2).forEach { it.gamesPlayed += 1 }
-        }
-
-        playerRepo.saveAll(players.values)
-
-        // Calibration: 1 "калибровочная игра" = 1 завершённый Event, не каждый матч внутри.
-        val participantIds = playerIds.toList()
-        accounts.forEach { u ->
-            if (u.calibrationEventsRemaining > 0) {
-                u.calibrationEventsRemaining = (u.calibrationEventsRemaining - 1).coerceAtLeast(0)
+                listOf(a1, a2, b1, b2).forEach { it.gamesPlayed += 1 }
             }
-        }
-        userRepo.saveAll(accounts)
 
+            playerRepo.saveAll(players.values)
+
+            accounts.forEach { u ->
+                if (u.calibrationEventsRemaining > 0) {
+                    u.calibrationEventsRemaining = (u.calibrationEventsRemaining - 1).coerceAtLeast(0)
+                }
+            }
+            userRepo.saveAll(accounts)
+        } finally {
+            event.status = EventStatus.FINISHED
+            eventRepo.save(event)
+        }
+    }
+
+    /** Завершает событие без проверки матчей (для обхода старой проверки "Not all matches are finished"). */
+    @Transactional
+    fun forceFinishEvent(eventId: UUID, userId: UUID) {
+        val event = getEvent(eventId)
+        requireAuthor(event, userId)
+        if (event.status == EventStatus.FINISHED) return
+        if (event.status != EventStatus.IN_PROGRESS) throw ApiException(HttpStatus.CONFLICT, "Event is not in progress")
         event.status = EventStatus.FINISHED
         eventRepo.save(event)
     }

@@ -11,6 +11,10 @@ export function V0RatingPage(props: { authed: boolean }) {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [friends, setFriends] = useState<import("../../../lib/api").FriendsSnapshot | null>(null);
+  const visiblePlayersCount = useMemo(
+    () => (data ?? []).filter((p) => p.name !== "Удалённый пользователь").length,
+    [data]
+  );
 
   useEffect(() => {
     let cancelled = false;
@@ -51,10 +55,11 @@ export function V0RatingPage(props: { authed: boolean }) {
           Не удалось загрузить: {error}
         </div>
       );
-    if (!data?.length) return <div className="text-sm text-muted-foreground">Пока нет участников.</div>;
+    const visiblePlayers = (data ?? []).filter((p) => !p.name.startsWith("Удалённый пользователь"));
+    if (!visiblePlayers.length) return <div className="text-sm text-muted-foreground">Пока нет участников.</div>;
 
-    const topPlayers = data.slice(0, 3);
-    const restPlayers = data.slice(3);
+    const topPlayers = visiblePlayers.slice(0, 3);
+    const restPlayers = visiblePlayers.slice(3);
 
     const getRankStyle = (rank: number) => {
       if (rank === 1) return "bg-amber-500/20 text-amber-400 border-amber-500/30";
@@ -79,6 +84,14 @@ export function V0RatingPage(props: { authed: boolean }) {
     const friendPublicIds = new Set((friends?.friends ?? []).map((f) => f.publicId));
     const outgoingPublicIds = new Set((friends?.outgoing ?? []).map((f) => f.publicId));
 
+    const initials = (name: string) =>
+      name
+        .trim()
+        .split(/\s+/)
+        .slice(0, 2)
+        .map((p) => p[0]?.toUpperCase())
+        .join("");
+
     return (
       <>
         <div className="grid gap-4 md:grid-cols-3">
@@ -96,7 +109,7 @@ export function V0RatingPage(props: { authed: boolean }) {
                     rank === 1 ? "bg-amber-500" : rank === 2 ? "bg-slate-400" : "bg-orange-600"
                   }`}
                 />
-                <CardContent className="relative pt-6">
+                <CardContent className="relative pt-8">
                   <div className="flex flex-col items-center text-center">
                     <div className={`mb-4 flex h-16 w-16 items-center justify-center rounded-full border-2 ${getRankStyle(rank)}`}>
                       {rank === 1 ? <Trophy className="h-8 w-8" /> : <span className="text-2xl font-bold">{rank}</span>}
@@ -139,9 +152,14 @@ export function V0RatingPage(props: { authed: boolean }) {
                         return "Заявка отправлена";
                       }}
                     >
-                      <Badge variant="secondary" className="mb-2 px-3 cursor-pointer">
-                        {player.name}
-                      </Badge>
+                      <div className="mb-3 flex w-full items-center justify-center gap-3">
+                        <div className="flex h-9 w-9 items-center justify-center rounded-full bg-secondary/60 text-sm font-semibold text-foreground border border-border">
+                          {initials(player.name) || "?"}
+                        </div>
+                        <Badge variant="secondary" className="px-4 py-1.5 text-lg font-semibold cursor-pointer max-w-full truncate">
+                          {player.name}
+                        </Badge>
+                      </div>
                     </PlayerTooltip>
                     <p className="text-3xl font-bold">{player.rating}</p>
                     <div className="mt-2 flex items-center gap-3 text-sm text-muted-foreground">
@@ -220,9 +238,14 @@ export function V0RatingPage(props: { authed: boolean }) {
                               return "Заявка отправлена";
                             }}
                           >
-                            <Badge variant="secondary" className="font-medium max-w-full truncate cursor-pointer">
-                              {player.name}
-                            </Badge>
+                            <div className="flex items-center gap-3">
+                              <div className="flex h-10 w-10 items-center justify-center rounded-full bg-secondary/60 text-sm font-semibold border border-border">
+                                {initials(player.name) || "?"}
+                              </div>
+                              <Badge variant="secondary" className="font-medium max-w-full truncate cursor-pointer">
+                                {player.name}
+                              </Badge>
+                            </div>
                           </PlayerTooltip>
                         </td>
                         <td className="py-4 pr-3 align-middle">
@@ -252,7 +275,7 @@ export function V0RatingPage(props: { authed: boolean }) {
         <div className="flex items-center gap-4 text-sm text-muted-foreground">
           <div className="flex items-center gap-2">
             <Users className="h-4 w-4" />
-            <span>{data?.length ?? 0} игроков</span>
+            <span>{visiblePlayersCount} игроков</span>
           </div>
         </div>
       </div>

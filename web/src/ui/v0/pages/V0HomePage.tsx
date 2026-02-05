@@ -178,9 +178,9 @@ export function V0HomePage(props: { me: any }) {
         ))}
       </div>
 
-      <div className="grid w-full gap-8 lg:grid-cols-2 items-stretch">
-        <Card className="w-full">
-          <CardHeader className="flex flex-row items-center justify-between pb-4">
+      <div className="grid w-full gap-8 lg:grid-cols-2 items-stretch justify-items-stretch">
+        <Card className="w-full max-w-none">
+          <CardHeader className="flex flex-col gap-2 pb-4 px-4 sm:px-6 sm:flex-row sm:items-center sm:justify-between">
             <CardTitle className="flex items-center gap-2">
               <Calendar className="h-5 w-5 text-primary" />
               Ближайшие игры
@@ -192,7 +192,7 @@ export function V0HomePage(props: { me: any }) {
               </Link>
             </Button>
           </CardHeader>
-          <CardContent className="space-y-3">
+          <CardContent className="space-y-3 px-4 sm:px-6">
             {joinError ? (
               <div className="rounded-lg border border-destructive/30 bg-destructive/10 p-3 text-sm">{joinError}</div>
             ) : null}
@@ -204,9 +204,9 @@ export function V0HomePage(props: { me: any }) {
               upcoming.map((e) => (
                 <div
                   key={e.id}
-                  className="flex items-center justify-between rounded-lg border border-border bg-secondary/50 p-4 transition-colors hover:bg-secondary"
+                  className="flex flex-col gap-3 rounded-lg border border-border bg-secondary/50 p-4 transition-colors hover:bg-secondary sm:flex-row sm:items-center sm:justify-between"
                 >
-                  <div className="flex items-center gap-4">
+                  <div className="flex items-center gap-4 min-w-0">
                     <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-background">
                       <Clock className="h-5 w-5 text-muted-foreground" />
                     </div>
@@ -217,7 +217,7 @@ export function V0HomePage(props: { me: any }) {
                       </p>
                     </div>
                   </div>
-                  <div className="flex items-center gap-3">
+                  <div className="flex flex-wrap items-center gap-2">
                     <Badge variant="secondary" className="gap-1">
                       <Users className="h-3 w-3" />
                       {e.registeredCount}/{e.courtsCount * 4}
@@ -238,8 +238,8 @@ export function V0HomePage(props: { me: any }) {
           </CardContent>
         </Card>
 
-        <Card className="w-full">
-          <CardHeader className="flex flex-row items-center justify-between pb-4">
+        <Card className="w-full max-w-none">
+          <CardHeader className="flex flex-col gap-2 pb-4 px-4 sm:px-6 sm:flex-row sm:items-center sm:justify-between">
             <CardTitle className="flex items-center gap-2">
               <Trophy className="h-5 w-5 text-primary" />
               Топ игроков
@@ -251,7 +251,7 @@ export function V0HomePage(props: { me: any }) {
               </Link>
             </Button>
           </CardHeader>
-          <CardContent className="space-y-3">
+          <CardContent className="space-y-3 px-4 sm:px-6">
             {loading ? (
               <div className="text-sm text-muted-foreground">Загрузка…</div>
             ) : topPlayers.length === 0 ? (

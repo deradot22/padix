@@ -137,7 +137,16 @@ class EventController(
 
     @PostMapping("/{eventId}/finish")
     fun finish(@PathVariable eventId: UUID) {
-        service.finishEvent(eventId, principalUserId())
+        val userId = principalUserId()
+        try {
+            service.finishEvent(eventId, userId)
+        } catch (e: ApiException) {
+            if (e.message?.contains("Not all matches are finished") == true) {
+                service.forceFinishEvent(eventId, userId)
+                return
+            }
+            throw e
+        }
     }
 
     @GetMapping("/{eventId}")

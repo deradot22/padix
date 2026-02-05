@@ -325,5 +325,26 @@ export const api = {
   adminUpdateUser: (userId: string, payload: { email?: string; name?: string; password?: string; disabled?: boolean }) =>
     adminRequest<AdminUser>(`/api/admin/users/${userId}`, { method: "PATCH", body: JSON.stringify(payload) }),
   adminDeleteUser: (userId: string) => adminRequest<AdminUser>(`/api/admin/users/${userId}`, { method: "DELETE" }),
+  adminRestoreUser: (userId: string, payload: { email: string; password: string; name?: string }) =>
+    adminRequest<AdminUser>(`/api/admin/users/${userId}/restore`, {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
+  adminCreateUser: (payload: {
+    email: string;
+    password: string;
+    name: string;
+    publicId?: number | null;
+    rating?: number | null;
+    ntrp?: string | null;
+    gamesPlayed?: number | null;
+    surveyCompleted?: boolean | null;
+    disabled?: boolean | null;
+    calibrationEventsRemaining?: number | null;
+  }) =>
+    adminRequest<AdminUser>("/api/admin/users", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
 };
 

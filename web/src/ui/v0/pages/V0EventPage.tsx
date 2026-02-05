@@ -108,6 +108,7 @@ export function V0EventPage(props: { me: any; meLoaded?: boolean }) {
 
   useEffect(() => {
     if (!data) return;
+    if (data.event?.status === "FINISHED") setActionError(null);
     const rounds = data.rounds ?? [];
     if (rounds.length > 0) {
       const fallbackRoundId = rounds[0].id;
@@ -369,7 +370,10 @@ export function V0EventPage(props: { me: any; meLoaded?: boolean }) {
                       <button
                         type="button"
                         className="h-12 px-6 rounded-md bg-primary text-primary-foreground text-base font-medium hover:bg-primary/90 transition-colors"
-                        onClick={() => setRoundsOpen(true)}
+                        onClick={() => {
+                          setActionError(null);
+                          setRoundsOpen(true);
+                        }}
                       >
                         Ввести счёт
                       </button>
@@ -823,7 +827,7 @@ export function V0EventPage(props: { me: any; meLoaded?: boolean }) {
                         {activeMatchId && scorePadOpen ? (
                           <div className="mt-4">
                             <div className="grid grid-cols-6 gap-2">
-                              {Array.from({ length: (e.pointsPerPlayerPerMatch ?? 6) * 4 }, (_, i) => i + 1).map((n) => (
+                              {[0, ...Array.from({ length: (e.pointsPerPlayerPerMatch ?? 6) * 4 }, (_, i) => i + 1)].map((n) => (
                                 <button
                                   key={n}
                                   type="button"
@@ -986,6 +990,7 @@ export function V0EventPage(props: { me: any; meLoaded?: boolean }) {
               </div>
               <Button
                 variant="destructive"
+                disabled={finishing}
                 onClick={async () => {
                   if (!eventId) return;
                   setFinishing(true);
@@ -996,13 +1001,13 @@ export function V0EventPage(props: { me: any; meLoaded?: boolean }) {
                     const refreshed = await api.getEventDetails(eventId);
                     setData(refreshed);
                     setInfo("Игра завершена. Рейтинг обновится автоматически.");
+                    setRoundsOpen(false);
                   } catch (err: any) {
                     setActionError(err?.message ?? "Ошибка завершения");
                   } finally {
                     setFinishing(false);
                   }
                 }}
-                disabled={finishing}
               >
                 {finishing ? "Завершаем…" : "Завершить игру"}
               </Button>

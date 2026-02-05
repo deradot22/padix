@@ -19,6 +19,7 @@ import org.springframework.web.bind.annotation.PostMapping
 import org.springframework.web.bind.annotation.RequestBody
 import org.springframework.web.bind.annotation.RequestMapping
 import org.springframework.web.bind.annotation.RestController
+import java.security.SecureRandom
 import java.util.UUID
 
 @RestController
@@ -33,10 +34,49 @@ class AdminController(
 ) {
     @PostMapping("/login")
     fun login(@RequestBody req: AdminLoginRequest): AdminLoginResponse {
+        if (adminUsername.isBlank() || adminPassword.isBlank()) {
+            throw ApiException(HttpStatus.UNAUTHORIZED, "Invalid credentials")
+        }
         val usernameOk = req.username.trim() == adminUsername.trim()
         val passwordOk = verifyPassword(req.password, adminPassword)
         if (!usernameOk || !passwordOk) throw ApiException(HttpStatus.UNAUTHORIZED, "Invalid credentials")
         return AdminLoginResponse(jwt.createAdminToken(adminUsername))
+    }
+
+    @PostMapping("/users")
+    fun createUser(@RequestBody req: AdminCreateUserRequest): AdminUserResponse {
+        requireAdmin()
+        val email = req.email.trim().lowercase()
+        if (email.isBlank()) throw ApiException(HttpStatus.BAD_REQUEST, "Email required")
+        if (users.findByEmailIgnoreCase(email) != null) throw ApiException(HttpStatus.CONFLICT, "Email already registered")
+        val name = req.name.trim()
+        if (name.isBlank()) throw ApiException(HttpStatus.BAD_REQUEST, "Name required")
+        if (players.findByNameIgnoreCase(name) != null) throw ApiException(HttpStatus.CONFLICT, "Player name already exists")
+        val password = req.password
+        if (password.isBlank()) throw ApiException(HttpStatus.BAD_REQUEST, "Password required")
+        val publicId = req.publicId?.takeIf { it in 100_000_000L..999_999_999L }
+            ?: generatePublicId()
+        if (users.findByPublicId(publicId) != null) throw ApiException(HttpStatus.CONFLICT, "Public id already taken")
+        val player = players.save(
+            Player(
+                name = name,
+                rating = req.rating ?: 1000,
+                ntrp = req.ntrp ?: "2.0",
+                gamesPlayed = req.gamesPlayed ?: 0
+            )
+        )
+        val user = users.save(
+            com.padelgo.auth.UserAccount(
+                email = email,
+                passwordHash = encoder.encode(password),
+                playerId = player.id!!,
+                publicId = publicId,
+                surveyCompleted = req.surveyCompleted ?: false,
+                disabled = req.disabled ?: false,
+                calibrationEventsRemaining = req.calibrationEventsRemaining ?: 0
+            )
+        )
+        return AdminUserResponse.from(user.id!!, user.email, user.publicId, user.disabled, user.surveyCompleted, player)
     }
 
     @GetMapping("/users")
@@ -84,8 +124,33 @@ class AdminController(
         user.email = "deleted-$userId@deleted.local"
         user.passwordHash = encoder.encode(UUID.randomUUID().toString())
         if (player != null) {
-            player.name = "Удалённый пользователь"
+            player.name = "Удалённый пользователь #${user.publicId}"
             players.save(player)
+        }
+        users.save(user)
+        return AdminUserResponse.from(user.id!!, user.email, user.publicId, user.disabled, user.surveyCompleted, player)
+    }
+
+    @PostMapping("/users/{userId}/restore")
+    fun restoreUser(@PathVariable userId: UUID, @RequestBody req: AdminRestoreUserRequest): AdminUserResponse {
+        requireAdmin()
+        val user = users.findById(userId).orElseThrow { ApiException(HttpStatus.NOT_FOUND, "User not found") }
+        if (!user.disabled || !user.email.startsWith("deleted-")) {
+            throw ApiException(HttpStatus.BAD_REQUEST, "User is not deleted")
+        }
+        val newEmail = req.email.trim().lowercase()
+        if (newEmail.isBlank()) throw ApiException(HttpStatus.BAD_REQUEST, "Email required")
+        val existing = users.findByEmailIgnoreCase(newEmail)
+        if (existing != null && existing.id != user.id) throw ApiException(HttpStatus.CONFLICT, "Email already registered")
+        user.email = newEmail
+        user.passwordHash = encoder.encode(req.password)
+        user.disabled = false
+        val player = user.playerId?.let { players.findById(it).orElse(null) }
+        req.name?.trim()?.takeIf { it.isNotBlank() }?.let { name ->
+            if (player != null) {
+                player.name = name
+                players.save(player)
+            }
         }
         users.save(user)
         return AdminUserResponse.from(user.id!!, user.email, user.publicId, user.disabled, user.surveyCompleted, player)
@@ -105,6 +170,15 @@ class AdminController(
             raw == trimmed
         }
     }
+
+    private fun generatePublicId(): Long {
+        val rng = SecureRandom()
+        repeat(10) {
+            val candidate = 100_000_000L + (rng.nextDouble() * 900_000_000L).toLong()
+            if (users.findByPublicId(candidate) == null) return candidate
+        }
+        throw ApiException(HttpStatus.CONFLICT, "Failed to generate public id")
+    }
 }
 
 data class AdminLoginRequest(
@@ -123,6 +197,25 @@ data class AdminUpdateUserRequest(
     val name: String? = null,
     val password: String? = null,
     val disabled: Boolean? = null
+)
+
+data class AdminRestoreUserRequest(
+    val email: String,
+    val password: String,
+    val name: String? = null
+)
+
+data class AdminCreateUserRequest(
+    val email: String,
+    val password: String,
+    val name: String,
+    val publicId: Long? = null,
+    val rating: Int? = null,
+    val ntrp: String? = null,
+    val gamesPlayed: Int? = null,
+    val surveyCompleted: Boolean? = null,
+    val disabled: Boolean? = null,
+    val calibrationEventsRemaining: Int? = null
 )
 
 data class AdminUserResponse(
