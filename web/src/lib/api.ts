@@ -239,6 +239,8 @@ export const api = {
     request<{ status: string; message: string }>(`/api/events/${eventId}/cancel`, { method: "POST" }),
   approveCancel: (eventId: string, playerId: string) =>
     request(`/api/events/${eventId}/cancel/${playerId}/approve`, { method: "POST" }),
+  removePlayerFromEvent: (eventId: string, playerId: string) =>
+    request(`/api/events/${eventId}/remove/${playerId}`, { method: "POST" }),
   submitScore: (matchId: string, points: { teamAPoints: number; teamBPoints: number }) =>
     request(`/api/events/matches/${matchId}/score`, {
       method: "POST",

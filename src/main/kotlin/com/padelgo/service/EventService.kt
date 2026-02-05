@@ -161,6 +161,62 @@ class EventService(
         }
     }
 
+    private fun clearSchedule(eventId: UUID) {
+        roundRepo.findAllByEventIdOrderByRoundNumberAsc(eventId).forEach { r ->
+            matchRepo.findAllByRoundIdOrderByCourtNumberAsc(r.id!!).forEach { m ->
+                scoreRepo.deleteAllByMatchId(m.id!!)
+                matchRepo.delete(m)
+            }
+            roundRepo.delete(r)
+        }
+    }
+
+    private fun planSchedule(event: Event, playerIds: List<UUID>) {
+        val players = playerRepo.findAllById(playerIds).associateBy { it.id!! }
+        if (event.autoRounds) {
+            val ratings = players.values.map { it.rating }
+            val capacity = event.courtsCount * 4
+            event.roundsPlanned = if (event.pairingMode == com.padelgo.domain.PairingMode.ROUND_ROBIN) {
+                computeRoundRobinRounds(capacity)
+            } else {
+                computeAutoRounds(ratings)
+            }
+            eventRepo.save(event)
+        }
+        val ratings = players.values.map { it.rating }
+        val maxDiff = if (event.pairingMode == com.padelgo.domain.PairingMode.BALANCED && ratings.isNotEmpty()) {
+            val max = ratings.maxOrNull() ?: 0
+            val min = ratings.minOrNull() ?: 0
+            maxOf(150, (max - min) / 2)
+        } else {
+            null
+        }
+        val planner = PairingPlanner(
+            ratingByPlayer = players.mapValues { it.value.rating },
+            courtsCount = event.courtsCount,
+            pairingMode = event.pairingMode,
+            maxTeamDiff = maxDiff
+        )
+        val plannedRounds = planner.planRounds(playerIds, event.roundsPlanned)
+
+        plannedRounds.forEachIndexed { idx, roundMatches ->
+            val round = roundRepo.save(Round(eventId = event.id!!, roundNumber = idx + 1))
+            roundMatches.forEach { pm ->
+                matchRepo.save(
+                    Match(
+                        roundId = round.id!!,
+                        courtNumber = pm.courtNumber,
+                        teamAPlayer1Id = pm.teamA.first,
+                        teamAPlayer2Id = pm.teamA.second,
+                        teamBPlayer1Id = pm.teamB.first,
+                        teamBPlayer2Id = pm.teamB.second,
+                        status = MatchStatus.SCHEDULED
+                    )
+                )
+            }
+        }
+    }
+
     private fun requireAuthorOrParticipant(event: Event, userId: UUID) {
         if (event.createdByUserId == userId) return
         val user = userRepo.findById(userId).orElseThrow {
@@ -275,6 +331,39 @@ class EventService(
     }
 
     @Transactional
+    fun removePlayer(eventId: UUID, userId: UUID, playerId: UUID) {
+        val event = getEvent(eventId)
+        requireAuthor(event, userId)
+        if (event.status == EventStatus.FINISHED || event.status == EventStatus.CANCELLED) {
+            throw ApiException(HttpStatus.CONFLICT, "Event is already завершено")
+        }
+        val reg = regRepo.findByEventIdAndPlayerId(eventId, playerId)
+            ?: throw ApiException(HttpStatus.NOT_FOUND, "Registration not found")
+        if (reg.status == RegistrationStatus.CANCELLED) return
+        reg.status = RegistrationStatus.CANCELLED
+        reg.cancelApproved = true
+        reg.cancelRequested = false
+        regRepo.save(reg)
+
+        if (event.status == EventStatus.IN_PROGRESS) {
+            val matches = matchRepo.findAllByEventId(eventId)
+            val hasFinished = matches.any { it.status == MatchStatus.FINISHED }
+            val hasScores = matches.any { m -> scoreRepo.findAllByMatchIdOrderBySetNumberAsc(m.id!!).isNotEmpty() }
+            if (hasFinished || hasScores) {
+                throw ApiException(HttpStatus.CONFLICT, "Нельзя перестроить план после ввода счета")
+            }
+            val regs = regRepo.findAllByEventIdAndStatus(eventId)
+            val remainingIds = regs.mapNotNull { it.playerId }
+            val capacity = event.courtsCount * 4
+            if (remainingIds.size < capacity) {
+                throw ApiException(HttpStatus.CONFLICT, "Нужно минимум $capacity игроков для перестроения")
+            }
+            clearSchedule(eventId)
+            planSchedule(event, remainingIds)
+        }
+    }
+
+    @Transactional
     fun approveCancel(eventId: UUID, userId: UUID, playerId: UUID) {
         val event = getEvent(eventId)
         if (event.createdByUserId != userId) throw ApiException(HttpStatus.FORBIDDEN, "Only author can approve cancellations")
@@ -335,56 +424,8 @@ class EventService(
         }
 
         // cleanup previous schedule if any (safety)
-        roundRepo.findAllByEventIdOrderByRoundNumberAsc(eventId).forEach { r ->
-            matchRepo.findAllByRoundIdOrderByCourtNumberAsc(r.id!!).forEach { m ->
-                scoreRepo.deleteAllByMatchId(m.id!!)
-                matchRepo.delete(m)
-            }
-            roundRepo.delete(r)
-        }
-
-        val players = playerRepo.findAllById(playerIds).associateBy { it.id!! }
-        if (event.autoRounds) {
-            val ratings = players.values.map { it.rating }
-            event.roundsPlanned = if (event.pairingMode == com.padelgo.domain.PairingMode.ROUND_ROBIN) {
-                computeRoundRobinRounds(capacity)
-            } else {
-                computeAutoRounds(ratings)
-            }
-            eventRepo.save(event)
-        }
-        val ratings = players.values.map { it.rating }
-        val maxDiff = if (event.pairingMode == com.padelgo.domain.PairingMode.BALANCED && ratings.isNotEmpty()) {
-            val max = ratings.maxOrNull() ?: 0
-            val min = ratings.minOrNull() ?: 0
-            maxOf(150, (max - min) / 2)
-        } else {
-            null
-        }
-        val planner = PairingPlanner(
-            ratingByPlayer = players.mapValues { it.value.rating },
-            courtsCount = event.courtsCount,
-            pairingMode = event.pairingMode,
-            maxTeamDiff = maxDiff
-        )
-        val plannedRounds = planner.planRounds(playerIds, event.roundsPlanned)
-
-        plannedRounds.forEachIndexed { idx, roundMatches ->
-            val round = roundRepo.save(Round(eventId = eventId, roundNumber = idx + 1))
-            roundMatches.forEach { pm ->
-                matchRepo.save(
-                    Match(
-                        roundId = round.id!!,
-                        courtNumber = pm.courtNumber,
-                        teamAPlayer1Id = pm.teamA.first,
-                        teamAPlayer2Id = pm.teamA.second,
-                        teamBPlayer1Id = pm.teamB.first,
-                        teamBPlayer2Id = pm.teamB.second,
-                        status = MatchStatus.SCHEDULED
-                    )
-                )
-            }
-        }
+        clearSchedule(eventId)
+        planSchedule(event, playerIds)
 
         event.status = EventStatus.IN_PROGRESS
         eventRepo.save(event)

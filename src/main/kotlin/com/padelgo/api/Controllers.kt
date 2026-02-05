@@ -115,6 +115,11 @@ class EventController(
         service.approveCancel(eventId, principalUserId(), playerId)
     }
 
+    @PostMapping("/{eventId}/remove/{playerId}")
+    fun removePlayer(@PathVariable eventId: UUID, @PathVariable playerId: UUID) {
+        service.removePlayer(eventId, principalUserId(), playerId)
+    }
+
     @DeleteMapping("/{eventId}")
     fun deleteEvent(@PathVariable eventId: UUID) {
         service.deleteEvent(eventId, principalUserId())

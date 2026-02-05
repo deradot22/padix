@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, useParams } from "react-router-dom";
-import { ArrowLeft, Check, ChevronDown, Clock, MapPin, Share2, Target, UserPlus, Users, Zap } from "lucide-react";
+import { ArrowLeft, Check, ChevronDown, Clock, MapPin, Share2, Target, UserPlus, Users, Zap, X } from "lucide-react";
 import { api, EventDetails, FriendItem, FriendsSnapshot, Match } from "../../../lib/api";
 import { PlayerTooltip } from "@/components/player-tooltip";
 import { Button } from "@/components/ui/button";
@@ -627,7 +627,31 @@ export function V0EventPage(props: { me: any; meLoaded?: boolean }) {
                     return "Заявка отправлена";
                   }}
                 >
-                  <button className="group relative w-full p-4 rounded-xl bg-gradient-to-br from-primary/10 to-primary/5 border border-primary/20 hover:border-primary/40 transition-all hover:shadow-lg hover:shadow-primary/10">
+                  <div className="group relative w-full p-4 rounded-xl bg-gradient-to-br from-primary/10 to-primary/5 border border-primary/20 hover:border-primary/40 transition-all hover:shadow-lg hover:shadow-primary/10">
+                    {isAuthor ? (
+                      <button
+                        type="button"
+                        className="absolute -top-2 -left-2 h-6 w-6 rounded-full bg-destructive text-white flex items-center justify-center shadow-sm"
+                        title="Исключить"
+                        aria-label="Исключить"
+                        onClick={async (ev) => {
+                          ev.stopPropagation();
+                          if (!eventId) return;
+                          setActionError(null);
+                          setInfo(null);
+                          try {
+                            await api.removePlayerFromEvent(eventId, p.id);
+                            const refreshed = await api.getEventDetails(eventId);
+                            setData(refreshed);
+                            setInfo("Игрок исключен");
+                          } catch (err: any) {
+                            setActionError(err?.message ?? "Ошибка исключения");
+                          }
+                        }}
+                      >
+                        <X className="h-3.5 w-3.5" />
+                      </button>
+                    ) : null}
                     <div className="absolute -top-2 -right-2 w-6 h-6 rounded-full bg-primary text-primary-foreground text-xs font-bold flex items-center justify-center">
                       {idx + 1}
                     </div>
@@ -636,7 +660,7 @@ export function V0EventPage(props: { me: any; meLoaded?: boolean }) {
                     </div>
                     <p className="text-sm font-medium text-center truncate">{p.name}</p>
                     <p className="text-xs text-muted-foreground text-center">{p.rating}</p>
-                  </button>
+                  </div>
                 </PlayerTooltip>
               ))}
 
