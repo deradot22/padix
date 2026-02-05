@@ -122,15 +122,16 @@ export function V0RatingPage(props: { authed: boolean }) {
                       }
                       onAddFriend={async () => {
                         if (!player.publicId) throw new Error("Не удалось определить публичный ID");
-                        await api.requestFriend(player.publicId);
-                        if (player.publicId) {
+                        const publicId = player.publicId;
+                        await api.requestFriend(publicId);
+                        if (publicId) {
                           setFriends((prev) =>
                             prev
                               ? {
                                   ...prev,
-                                  outgoing: prev.outgoing.some((o) => o.publicId === player.publicId)
+                                  outgoing: prev.outgoing.some((o) => o.publicId === publicId)
                                     ? prev.outgoing
-                                    : [...prev.outgoing, { publicId: player.publicId, name: player.name }],
+                                    : [...prev.outgoing, { publicId, name: player.name }],
                                 }
                               : prev,
                           );
@@ -202,15 +203,16 @@ export function V0RatingPage(props: { authed: boolean }) {
                             }
                             onAddFriend={async () => {
                               if (!player.publicId) throw new Error("Не удалось определить публичный ID");
-                              await api.requestFriend(player.publicId);
-                              if (player.publicId) {
+                              const publicId = player.publicId;
+                              await api.requestFriend(publicId);
+                              if (publicId) {
                                 setFriends((prev) =>
                                   prev
                                     ? {
                                         ...prev,
-                                        outgoing: prev.outgoing.some((o) => o.publicId === player.publicId)
+                                        outgoing: prev.outgoing.some((o) => o.publicId === publicId)
                                           ? prev.outgoing
-                                          : [...prev.outgoing, { publicId: player.publicId, name: player.name }],
+                                          : [...prev.outgoing, { publicId, name: player.name }],
                                       }
                                     : prev,
                                 );
