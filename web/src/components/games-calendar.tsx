@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -41,7 +41,20 @@ function getFirstDayOfMonth(year: number, month: number) {
 }
 
 export function GamesCalendar({ open, onOpenChange, onSelectDate, events, onMonthChange }: GamesCalendarProps) {
-  const [currentDate, setCurrentDate] = useState(new Date(2026, 0, 1));
+  const [currentDate, setCurrentDate] = useState(new Date());
+  const wasOpenRef = useRef(false);
+
+  useEffect(() => {
+    if (!open) {
+      wasOpenRef.current = false;
+      return;
+    }
+    if (wasOpenRef.current) return;
+    wasOpenRef.current = true;
+    const today = new Date();
+    setCurrentDate(today);
+    onMonthChange?.(today);
+  }, [open, onMonthChange]);
 
   const year = currentDate.getFullYear();
   const month = currentDate.getMonth();
@@ -84,7 +97,7 @@ export function GamesCalendar({ open, onOpenChange, onSelectDate, events, onMont
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[700px] p-0 bg-card border-border">
+      <DialogContent className="sm:max-w-[700px] p-0 bg-card border-border" showCloseButton={false}>
         <DialogHeader className="p-6 pb-0 flex flex-row items-center justify-between">
           <DialogTitle className="text-2xl font-bold">Календарь</DialogTitle>
           <Button variant="outline" size="sm" onClick={() => onOpenChange(false)}>

@@ -1,5 +1,6 @@
 package com.padelgo.service
 
+import com.padelgo.domain.Match
 import java.util.UUID
 import kotlin.math.abs
 
@@ -47,6 +48,26 @@ class PairingPlanner(
             result.add(matches)
         }
         return result
+    }
+
+    /**
+     * Заполняет статистику уже сыгранных/запланированных матчей,
+     * чтобы при добавлении нового раунда не повторять пары.
+     */
+    fun seedFromMatches(matches: List<Match>) {
+        matches.forEach { m ->
+            val a1 = m.teamAPlayer1Id
+            val a2 = m.teamAPlayer2Id
+            val b1 = m.teamBPlayer1Id
+            val b2 = m.teamBPlayer2Id
+            if (a1 == null || a2 == null || b1 == null || b2 == null) return@forEach
+            val planned = PlannedMatch(
+                courtNumber = m.courtNumber,
+                teamA = a1 to a2,
+                teamB = b1 to b2
+            )
+            applyRoundStats(listOf(planned))
+        }
     }
 
     private fun selectPlayersForRound(allPlayers: List<UUID>, capacity: Int): List<UUID> {

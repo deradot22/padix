@@ -56,6 +56,17 @@ export function V0CreateEventPage(props: {
   }, [roundsMode]);
 
   useEffect(() => {
+    if (date !== todayIso()) return;
+    const now = new Date();
+    const nextStartHour = now.getHours().toString().padStart(2, "0");
+    setStartHour(nextStartHour);
+    setStartMinute("00");
+    const end = Math.min(now.getHours() + 2, 23).toString().padStart(2, "0");
+    setEndHour(end);
+    setEndMinute("00");
+  }, [date]);
+
+  useEffect(() => {
     setCourtNames((prev) => {
       const next = [...prev];
       if (next.length < courts) {

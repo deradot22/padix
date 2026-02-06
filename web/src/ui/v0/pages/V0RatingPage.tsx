@@ -11,10 +11,10 @@ export function V0RatingPage(props: { authed: boolean }) {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [friends, setFriends] = useState<import("../../../lib/api").FriendsSnapshot | null>(null);
-  const visiblePlayersCount = useMemo(
-    () => (data ?? []).filter((p) => p.name !== "Удалённый пользователь").length,
-    [data]
-  );
+  const totalPlayersCount =
+    (data ?? []).filter(
+      (p) => !p.name.startsWith("Удалённый пользователь") && p.calibrationEventsRemaining === 0
+    ).length;
 
   useEffect(() => {
     let cancelled = false;
@@ -55,7 +55,12 @@ export function V0RatingPage(props: { authed: boolean }) {
           Не удалось загрузить: {error}
         </div>
       );
-    const visiblePlayers = (data ?? []).filter((p) => !p.name.startsWith("Удалённый пользователь"));
+    const visiblePlayers = (data ?? []).filter(
+      (p) =>
+        !p.name.startsWith("Удалённый пользователь") &&
+        p.calibrationEventsRemaining === 0 &&
+        (p.rating ?? 0) > 0
+    );
     if (!visiblePlayers.length) return <div className="text-sm text-muted-foreground">Пока нет участников.</div>;
 
     const topPlayers = visiblePlayers.slice(0, 3);
@@ -275,7 +280,7 @@ export function V0RatingPage(props: { authed: boolean }) {
         <div className="flex items-center gap-4 text-sm text-muted-foreground">
           <div className="flex items-center gap-2">
             <Users className="h-4 w-4" />
-            <span>{visiblePlayersCount} игроков</span>
+            <span>{totalPlayersCount} игроков</span>
           </div>
         </div>
       </div>

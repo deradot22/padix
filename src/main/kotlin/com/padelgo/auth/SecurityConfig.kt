@@ -151,7 +151,9 @@ class SurveyGateFilter(
                 (path.startsWith("/api/events/") && (
                     path.endsWith("/invites") ||
                     path.endsWith("/invites/accept") ||
-                    path.endsWith("/invites/decline")
+                    path.endsWith("/invites/decline") ||
+                    path.endsWith("/rounds/add") ||
+                    path.endsWith("/rounds/final")
                 )) ||
                 (path.startsWith("/api/events/matches/") && path.endsWith("/score"))
             if (!completed && !allowed) {

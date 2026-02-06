@@ -36,6 +36,14 @@ function formatPublicId(publicId?: string | null) {
   return trimmed.startsWith("#") ? trimmed : `#${trimmed}`;
 }
 
+function isPastDate(dateStr: string) {
+  const today = new Date();
+  const todayIso = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(
+    today.getDate()
+  ).padStart(2, "0")}`;
+  return dateStr < todayIso;
+}
+
 export function V0ProfilePage(props: { me: any; meLoaded?: boolean }) {
   const nav = useNavigate();
   const [meLive, setMeLive] = useState<any | null>(null);
@@ -44,6 +52,7 @@ export function V0ProfilePage(props: { me: any; meLoaded?: boolean }) {
   const [friendLoading, setFriendLoading] = useState(false);
   const [friendError, setFriendError] = useState<string | null>(null);
   const [invites, setInvites] = useState<EventInviteItem[] | null>(null);
+  const [inviteEventJoined, setInviteEventJoined] = useState<Set<string>>(new Set());
   const [history, setHistory] = useState<EventHistoryItem[] | null>(null);
   const [details, setDetails] = useState<EventHistoryMatch[] | null>(null);
   const [detailsTitle, setDetailsTitle] = useState<string | null>(null);
@@ -125,6 +134,35 @@ export function V0ProfilePage(props: { me: any; meLoaded?: boolean }) {
       .then(setInvites)
       .catch(() => setInvites([]));
   }, [props.me]);
+
+  useEffect(() => {
+    if (!props.me?.playerId) return;
+    const items = invites ?? [];
+    if (items.length === 0) {
+      setInviteEventJoined(new Set());
+      return;
+    }
+    let cancelled = false;
+    Promise.all(items.map((inv) => api.getEventDetails(inv.eventId)))
+      .then((details) => {
+        if (cancelled) return;
+        const joined = new Set<string>();
+        details.forEach((d) => {
+          const meId = props.me?.playerId;
+          const hasMe =
+            !!meId &&
+            (d.registeredPlayers ?? []).some((p) => p.id === meId);
+          if (hasMe) joined.add(d.event.id);
+        });
+        setInviteEventJoined(joined);
+      })
+      .catch(() => {
+        if (!cancelled) setInviteEventJoined(new Set());
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [invites, props.me?.playerId]);
 
   useEffect(() => {
     if (!props.me) return;
@@ -427,13 +465,23 @@ export function V0ProfilePage(props: { me: any; meLoaded?: boolean }) {
                 <Gamepad2 className="h-6 w-6 text-primary" />
                 Приглашения в игры
               </CardTitle>
-              <CardDescription>{(invites ?? []).length} новых приглашений</CardDescription>
+              <CardDescription>
+                {(invites ?? [])
+                  .filter((inv) => !isPastDate(inv.eventDate))
+                  .filter((inv) => !inviteEventJoined.has(inv.eventId)).length}{" "}
+                новых приглашений
+              </CardDescription>
             </CardHeader>
             <CardContent className="space-y-3 flex-1">
-              {(invites ?? []).length === 0 ? (
+              {(invites ?? [])
+                .filter((inv) => !isPastDate(inv.eventDate))
+                .filter((inv) => !inviteEventJoined.has(inv.eventId)).length === 0 ? (
                 <div className="text-sm text-muted-foreground">Пока приглашений нет.</div>
               ) : (
-                (invites ?? []).map((invite) => {
+                (invites ?? [])
+                  .filter((inv) => !isPastDate(inv.eventDate))
+                  .filter((inv) => !inviteEventJoined.has(inv.eventId))
+                  .map((invite) => {
                   const key = `${invite.eventId}-${invite.fromPublicId}`;
                   const accepted = acceptedInvites[key];
                   return (

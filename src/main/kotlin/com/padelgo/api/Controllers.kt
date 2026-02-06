@@ -149,6 +149,16 @@ class EventController(
         }
     }
 
+    @PostMapping("/{eventId}/rounds/add")
+    fun addRound(@PathVariable eventId: UUID) {
+        service.addRound(eventId, principalUserId())
+    }
+
+    @PostMapping("/{eventId}/rounds/final")
+    fun addFinalRound(@PathVariable eventId: UUID) {
+        service.addFinalRound(eventId, principalUserId())
+    }
+
     @GetMapping("/{eventId}")
     fun getDetails(@PathVariable eventId: UUID): EventDetailsResponse {
         val event = service.getEvent(eventId)

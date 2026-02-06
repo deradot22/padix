@@ -161,6 +161,114 @@ class EventService(
         }
     }
 
+    @Transactional
+    fun addRound(eventId: UUID, userId: UUID) {
+        val event = getEvent(eventId)
+        requireAuthor(event, userId)
+        if (event.status != EventStatus.IN_PROGRESS) throw ApiException(HttpStatus.CONFLICT, "Event is not in progress")
+
+        val regs = regRepo.findAllByEventIdAndStatus(eventId)
+        val playerIds = regs.mapNotNull { it.playerId }
+        val capacity = event.courtsCount * 4
+        if (playerIds.size < capacity) {
+            throw ApiException(HttpStatus.CONFLICT, "Нужно минимум $capacity игроков, сейчас ${playerIds.size}")
+        }
+        val players = playerRepo.findAllById(playerIds).associateBy { it.id!! }
+        val ratings = players.mapValues { it.value.rating }
+        val maxDiff = if (event.pairingMode == com.padelgo.domain.PairingMode.BALANCED && players.isNotEmpty()) {
+            val max = players.values.maxOf { it.rating }
+            val min = players.values.minOf { it.rating }
+            maxOf(150, (max - min) / 2)
+        } else {
+            null
+        }
+        val planner = PairingPlanner(ratingByPlayer = ratings, courtsCount = event.courtsCount, pairingMode = event.pairingMode, maxTeamDiff = maxDiff)
+        val existingMatches = matchRepo.findAllByEventId(eventId)
+        planner.seedFromMatches(existingMatches)
+        val planned = planner.planRounds(playerIds, 1).firstOrNull().orEmpty()
+
+        val lastRound = roundRepo.findAllByEventIdOrderByRoundNumberAsc(eventId).maxByOrNull { it.roundNumber }
+        val round = roundRepo.save(Round(eventId = eventId, roundNumber = (lastRound?.roundNumber ?: 0) + 1))
+        planned.forEach { pm ->
+            matchRepo.save(
+                Match(
+                    roundId = round.id!!,
+                    courtNumber = pm.courtNumber,
+                    teamAPlayer1Id = pm.teamA.first,
+                    teamAPlayer2Id = pm.teamA.second,
+                    teamBPlayer1Id = pm.teamB.first,
+                    teamBPlayer2Id = pm.teamB.second,
+                    status = MatchStatus.SCHEDULED
+                )
+            )
+        }
+    }
+
+    @Transactional
+    fun addFinalRound(eventId: UUID, userId: UUID) {
+        val event = getEvent(eventId)
+        requireAuthor(event, userId)
+        if (event.status != EventStatus.IN_PROGRESS) throw ApiException(HttpStatus.CONFLICT, "Event is not in progress")
+
+        val regs = regRepo.findAllByEventIdAndStatus(eventId)
+        val playerIds = regs.mapNotNull { it.playerId }
+        val capacity = event.courtsCount * 4
+        if (playerIds.size < capacity) {
+            throw ApiException(HttpStatus.CONFLICT, "Нужно минимум $capacity игроков, сейчас ${playerIds.size}")
+        }
+
+        val matches = matchRepo.findAllByEventId(eventId)
+        val scoresByMatch = matches.associate { m -> m.id!! to scoreRepo.findAllByMatchIdOrderBySetNumberAsc(m.id!!) }
+        val pointsByPlayer = mutableMapOf<UUID, Int>()
+        playerIds.forEach { pointsByPlayer[it] = 0 }
+
+        matches.forEach { m ->
+            val scores = scoresByMatch[m.id!!].orEmpty()
+            if (scores.isEmpty()) return@forEach
+            val (teamAPoints, teamBPoints) = if (event.scoringMode == ScoringMode.POINTS) {
+                val s1 = scores.first()
+                s1.teamAGames to s1.teamBGames
+            } else {
+                scores.sumOf { it.teamAGames } to scores.sumOf { it.teamBGames }
+            }
+            listOf(m.teamAPlayer1Id, m.teamAPlayer2Id).forEach { pid ->
+                if (pid != null) pointsByPlayer[pid] = (pointsByPlayer[pid] ?: 0) + teamAPoints
+            }
+            listOf(m.teamBPlayer1Id, m.teamBPlayer2Id).forEach { pid ->
+                if (pid != null) pointsByPlayer[pid] = (pointsByPlayer[pid] ?: 0) + teamBPoints
+            }
+        }
+
+        val players = playerRepo.findAllById(playerIds).associateBy { it.id!! }
+        val leaderboard = playerIds.sortedWith(
+            compareByDescending<UUID> { pointsByPlayer[it] ?: 0 }
+                .thenByDescending { players[it]?.rating ?: 0 }
+                .thenBy { players[it]?.name?.lowercase() ?: "" }
+        )
+
+        val selected = leaderboard.take(capacity)
+        val groups = selected.chunked(4).filter { it.size == 4 }
+        val lastRound = roundRepo.findAllByEventIdOrderByRoundNumberAsc(eventId).maxByOrNull { it.roundNumber }
+        val round = roundRepo.save(Round(eventId = eventId, roundNumber = (lastRound?.roundNumber ?: 0) + 1))
+        groups.forEachIndexed { idx, quad ->
+            val a = quad[0]
+            val b = quad[1]
+            val c = quad[2]
+            val d = quad[3]
+            matchRepo.save(
+                Match(
+                    roundId = round.id!!,
+                    courtNumber = idx + 1,
+                    teamAPlayer1Id = a,
+                    teamAPlayer2Id = d,
+                    teamBPlayer1Id = b,
+                    teamBPlayer2Id = c,
+                    status = MatchStatus.SCHEDULED
+                )
+            )
+        }
+    }
+
     private fun clearSchedule(eventId: UUID) {
         roundRepo.findAllByEventIdOrderByRoundNumberAsc(eventId).forEach { r ->
             matchRepo.findAllByRoundIdOrderByCourtNumberAsc(r.id!!).forEach { m ->

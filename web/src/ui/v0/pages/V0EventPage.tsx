@@ -50,6 +50,8 @@ export function V0EventPage(props: { me: any; meLoaded?: boolean }) {
   const [invitingId, setInvitingId] = useState<string | null>(null);
   const [startPromptOpen, setStartPromptOpen] = useState(false);
   const [roundsOpen, setRoundsOpen] = useState(false);
+  const [statsOpen, setStatsOpen] = useState(false);
+  const [finalRoundLocked, setFinalRoundLocked] = useState(false);
   const [expandedRoundId, setExpandedRoundId] = useState<string | null>(null);
   const [activeMatchId, setActiveMatchId] = useState<string | null>(null);
   const [activeTeam, setActiveTeam] = useState<"A" | "B">("A");
@@ -58,6 +60,46 @@ export function V0EventPage(props: { me: any; meLoaded?: boolean }) {
   const [scoreSavingId, setScoreSavingId] = useState<string | null>(null);
   const [scoreError, setScoreError] = useState<string | null>(null);
   const [scorePadOpen, setScorePadOpen] = useState(false);
+  const [myAvatar, setMyAvatar] = useState<string | null>(null);
+
+  useEffect(() => {
+    const stored = localStorage.getItem("padix_avatar");
+    setMyAvatar(stored);
+  }, []);
+
+  const renderTeamScore = (team: Match["teamA"], score: number) => {
+    const names = team.map((p) => p.name).join(" и ");
+    const left = team[0];
+    const right = team[1];
+    const currentPlayerId = props.me?.playerId;
+    const renderAvatar = (p?: { id?: string; name?: string }) => {
+      const isMe = !!p?.id && p.id === currentPlayerId;
+      if (isMe && myAvatar) {
+        return <img src={myAvatar} alt="Avatar" className="h-full w-full object-cover" />;
+      }
+      return (
+        <div className="h-full w-full rounded-lg bg-primary/20 text-primary text-sm font-semibold flex items-center justify-center">
+          {p?.name?.[0]?.toUpperCase?.() ?? "?"}
+        </div>
+      );
+    };
+    return (
+      <div className="w-full">
+        <div className="grid grid-cols-[48px_1fr_48px] items-center gap-3">
+          <div className="h-12 w-12 rounded-lg overflow-hidden border border-border/60 bg-secondary/40 flex items-center justify-center">
+            {renderAvatar(left)}
+          </div>
+          <div className="min-w-0 text-center">
+            <div className="text-xs text-muted-foreground truncate">{names}</div>
+            <div className="mt-0.5 text-2xl font-semibold">{score}</div>
+          </div>
+          <div className="h-12 w-12 rounded-lg overflow-hidden border border-border/60 bg-secondary/40 flex items-center justify-center">
+            {renderAvatar(right)}
+          </div>
+        </div>
+      </div>
+    );
+  };
 
   useEffect(() => {
     if (!props.me) return;
@@ -109,6 +151,10 @@ export function V0EventPage(props: { me: any; meLoaded?: boolean }) {
   useEffect(() => {
     if (!data) return;
     if (data.event?.status === "FINISHED") setActionError(null);
+    if (eventId) {
+      const stored = localStorage.getItem(`padelgo_final_round_${eventId}`);
+      setFinalRoundLocked(stored === "1");
+    }
     const rounds = data.rounds ?? [];
     if (rounds.length > 0) {
       const fallbackRoundId = rounds[0].id;
@@ -137,6 +183,35 @@ export function V0EventPage(props: { me: any; meLoaded?: boolean }) {
       return next;
     });
   }, [data, expandedRoundId, activeMatchId]);
+
+  const statsRows = useMemo(() => {
+    if (!data?.rounds?.length) return [];
+    const totals = new Map<string, { id: string; name: string; points: number }>();
+
+    data.rounds.flatMap((r) => r.matches).forEach((m) => {
+      const score = m.score;
+      if (!score) return;
+      const mode = score.mode;
+      if (mode !== "POINTS") return;
+      const pointsA = score.points?.teamAPoints ?? 0;
+      const pointsB = score.points?.teamBPoints ?? 0;
+
+      m.teamA.forEach((p) => {
+        if (!p?.id) return;
+        const row = totals.get(p.id) ?? { id: p.id, name: p.name, points: 0 };
+        row.points += pointsA;
+        totals.set(p.id, row);
+      });
+      m.teamB.forEach((p) => {
+        if (!p?.id) return;
+        const row = totals.get(p.id) ?? { id: p.id, name: p.name, points: 0 };
+        row.points += pointsB;
+        totals.set(p.id, row);
+      });
+    });
+
+    return Array.from(totals.values()).sort((a, b) => b.points - a.points || a.name.localeCompare(b.name));
+  }, [data]);
 
   const content = useMemo(() => {
     if (!props.me) {
@@ -388,6 +463,17 @@ export function V0EventPage(props: { me: any; meLoaded?: boolean }) {
                       </div>
                     ) : null}
                   </>
+                ) : e.status === "FINISHED" ? (
+                  <div className="flex flex-wrap items-center gap-2">
+                    <div className="text-sm text-muted-foreground">Игра завершена</div>
+                    <button
+                      type="button"
+                      className="h-10 px-4 rounded-md border border-border bg-secondary text-sm font-medium hover:bg-secondary/80 transition-colors"
+                      onClick={() => setStatsOpen(true)}
+                    >
+                      Статистика игры
+                    </button>
+                  </div>
                 ) : (
                   <div className="text-sm text-muted-foreground">Статус: {statusLabel(e.status)}</div>
                 )}
@@ -632,7 +718,7 @@ export function V0EventPage(props: { me: any; meLoaded?: boolean }) {
                   }}
                 >
                   <div className="group relative w-full p-4 rounded-xl bg-gradient-to-br from-primary/10 to-primary/5 border border-primary/20 hover:border-primary/40 transition-all hover:shadow-lg hover:shadow-primary/10">
-                    {isAuthor ? (
+                    {isAuthor && data?.event?.status === "OPEN_FOR_REGISTRATION" ? (
                       <button
                         type="button"
                         className="absolute -top-2 -left-2 h-6 w-6 rounded-full bg-destructive text-white flex items-center justify-center shadow-sm"
@@ -641,6 +727,7 @@ export function V0EventPage(props: { me: any; meLoaded?: boolean }) {
                         onClick={async (ev) => {
                           ev.stopPropagation();
                           if (!eventId) return;
+                          if (!window.confirm("Исключить игрока из регистрации?")) return;
                           setActionError(null);
                           setInfo(null);
                           try {
@@ -776,8 +863,6 @@ export function V0EventPage(props: { me: any; meLoaded?: boolean }) {
                           {r.matches.map((m) => {
                             const scores = scoreByMatch[m.id] ?? { a: 0, b: 0 };
                             const active = m.id === activeMatchId;
-                            const teamA = m.teamA.map((p) => p.name).join(" + ");
-                            const teamB = m.teamB.map((p) => p.name).join(" + ");
                             return (
                               <div
                                 key={m.id}
@@ -800,8 +885,7 @@ export function V0EventPage(props: { me: any; meLoaded?: boolean }) {
                                       setScorePadOpen(true);
                                     }}
                                   >
-                                    <div className="text-xs text-muted-foreground">{teamA}</div>
-                                    <div className="mt-1 text-2xl font-semibold">{scores.a}</div>
+                                    {renderTeamScore(m.teamA, scores.a)}
                                   </button>
                                   <button
                                     type="button"
@@ -815,8 +899,7 @@ export function V0EventPage(props: { me: any; meLoaded?: boolean }) {
                                       setScorePadOpen(true);
                                     }}
                                   >
-                                    <div className="text-xs text-muted-foreground">{teamB}</div>
-                                    <div className="mt-1 text-2xl font-semibold">{scores.b}</div>
+                                    {renderTeamScore(m.teamB, scores.b)}
                                   </button>
                                 </div>
                               </div>
@@ -981,10 +1064,44 @@ export function V0EventPage(props: { me: any; meLoaded?: boolean }) {
 
             <div className="mt-5 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
               <div className="flex flex-wrap items-center gap-2">
-                <Button variant="secondary" onClick={() => setInfo("Добавление раунда пока не поддержано.")}>
+                <Button
+                  variant="secondary"
+                  disabled={finalRoundLocked}
+                  onClick={async () => {
+                    if (!eventId) return;
+                    setInfo(null);
+                    setActionError(null);
+                    try {
+                      await api.addRound(eventId);
+                      const refreshed = await api.getEventDetails(eventId);
+                      setData(refreshed);
+                      setInfo("Раунд добавлен.");
+                    } catch (err: any) {
+                      setActionError(err?.message ?? "Ошибка добавления раунда");
+                    }
+                  }}
+                >
                   + Раунд
                 </Button>
-                <Button variant="secondary" onClick={() => setInfo("Финальный раунд пока не поддержан.")}>
+                <Button
+                  variant="secondary"
+                  disabled={finalRoundLocked}
+                  onClick={async () => {
+                    if (!eventId) return;
+                    setInfo(null);
+                    setActionError(null);
+                    try {
+                      await api.addFinalRound(eventId);
+                      const refreshed = await api.getEventDetails(eventId);
+                      setData(refreshed);
+                      setInfo("Финальный раунд добавлен.");
+                      localStorage.setItem(`padelgo_final_round_${eventId}`, "1");
+                      setFinalRoundLocked(true);
+                    } catch (err: any) {
+                      setActionError(err?.message ?? "Ошибка финального раунда");
+                    }
+                  }}
+                >
                   Финальный раунд
                 </Button>
               </div>
@@ -1015,6 +1132,29 @@ export function V0EventPage(props: { me: any; meLoaded?: boolean }) {
           </DialogContent>
         </Dialog>
 
+        <Dialog open={statsOpen} onOpenChange={setStatsOpen}>
+          <DialogContent className="sm:max-w-lg">
+            <DialogHeader>
+              <DialogTitle>Статистика игры</DialogTitle>
+            </DialogHeader>
+            {statsRows.length === 0 ? (
+              <div className="text-sm text-muted-foreground">Нет данных по очкам.</div>
+            ) : (
+              <div className="space-y-2">
+                {statsRows.map((row) => (
+                  <div
+                    key={row.id}
+                    className="flex items-center justify-between rounded-md border border-border/60 bg-secondary/40 px-3 py-2"
+                  >
+                    <div className="text-sm font-medium">{row.name}</div>
+                    <div className="text-sm font-semibold">{row.points}</div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </DialogContent>
+        </Dialog>
+
         {/* info/actionError are now shown near the actions */}
       </div>
     );
@@ -1024,6 +1164,8 @@ export function V0EventPage(props: { me: any; meLoaded?: boolean }) {
     closing,
     data,
     roundsOpen,
+    statsOpen,
+    statsRows,
     expandedRoundId,
     activeMatchId,
     activeTeam,

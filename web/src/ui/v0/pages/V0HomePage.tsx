@@ -26,6 +26,7 @@ function formatLabel(format: Event["format"]) {
 export function V0HomePage(props: { me: any }) {
   const nav = useNavigate();
   const [events, setEvents] = useState<Event[] | null>(null);
+  const [statsEvents, setStatsEvents] = useState<Event[] | null>(null);
   const [rating, setRating] = useState<Player[] | null>(null);
   const [loading, setLoading] = useState(true);
   const [joiningId, setJoiningId] = useState<string | null>(null);
@@ -36,23 +37,24 @@ export function V0HomePage(props: { me: any }) {
     if (props.me && !props.me.surveyCompleted) return;
     setLoading(true);
     const ratingReq = api.getRating();
-    const eventsReq = props.me
-      ? (() => {
-          const now = new Date();
-          const from = formatDate(now);
-          const to = formatDate(new Date(now.getFullYear(), now.getMonth(), now.getDate() + 14));
-          return api.getUpcomingEvents(from, to);
-        })()
-      : Promise.resolve([] as Event[]);
+    const now = new Date();
+    const upcomingFrom = formatDate(now);
+    const upcomingTo = formatDate(new Date(now.getFullYear(), now.getMonth(), now.getDate() + 14));
+    const statsFrom = formatDate(new Date(now.getFullYear(), now.getMonth(), now.getDate() - 6));
+    const statsTo = formatDate(now);
+    const eventsReq = api.getUpcomingEvents(upcomingFrom, upcomingTo);
+    const statsReq = api.getUpcomingEvents(statsFrom, statsTo);
 
-    Promise.all([eventsReq, ratingReq])
-      .then(([e, r]) => {
+    Promise.all([eventsReq, ratingReq, statsReq])
+      .then(([e, r, s]) => {
         setEvents(e ?? []);
         setRating(r ?? []);
+        setStatsEvents(s ?? []);
       })
       .catch(() => {
         setEvents([]);
         setRating([]);
+        setStatsEvents([]);
       })
       .finally(() => setLoading(false));
   }, [props.me]);
@@ -89,15 +91,11 @@ export function V0HomePage(props: { me: any }) {
   const stats = useMemo(() => {
     const now = new Date();
     const todayIso = formatDate(now);
-    const gamesToday = (events ?? []).filter((e) => e.date === todayIso).length;
-    const weekEnd = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 7);
-    const gamesWeek = (events ?? []).filter((e) => {
-      const d = new Date(e.date);
-      return d >= now && d <= weekEnd;
-    }).length;
+    const gamesToday = (statsEvents ?? []).filter((e) => e.date === todayIso).length;
+    const gamesWeek = (statsEvents ?? []).length;
     const activePlayers = rating?.length ?? 0;
     return { activePlayers, gamesToday, gamesWeek };
-  }, [events, rating]);
+  }, [statsEvents, rating]);
 
   const upcoming = (events ?? []).slice(0, 2);
   const topPlayers = (rating ?? []).slice(0, 3);
