@@ -746,8 +746,12 @@ export function V0EventPage(props: { me: any; meLoaded?: boolean }) {
                     <div className="absolute -top-2 -right-2 w-6 h-6 rounded-full bg-primary text-primary-foreground text-xs font-bold flex items-center justify-center">
                       {idx + 1}
                     </div>
-                    <div className="w-10 h-10 mx-auto rounded-full bg-gradient-to-br from-primary/30 to-primary/10 flex items-center justify-center text-primary font-bold text-lg mb-2">
-                      {p.name?.[0]?.toUpperCase?.() ?? "?"}
+                    <div className="w-10 h-10 mx-auto rounded-full bg-gradient-to-br from-primary/30 to-primary/10 flex items-center justify-center text-primary font-bold text-lg mb-2 overflow-hidden">
+                      {p.id === meId && myAvatar ? (
+                        <img src={myAvatar} alt="Avatar" className="h-full w-full object-cover" />
+                      ) : (
+                        p.name?.[0]?.toUpperCase?.() ?? "?"
+                      )}
                     </div>
                     <p className="text-sm font-medium text-center truncate">{p.name}</p>
                     <p className="text-xs text-muted-foreground text-center">{p.rating}</p>
