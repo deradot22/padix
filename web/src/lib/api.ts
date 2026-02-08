@@ -67,6 +67,20 @@ export type EventDetails = {
   authorName: string;
 };
 
+export type MeResponse = {
+  email: string;
+  playerId: string;
+  name: string;
+  rating: number;
+  ntrp: string;
+  gamesPlayed: number;
+  publicId: string;
+  surveyCompleted: boolean;
+  surveyLevel: number | null;
+  calibrationEventsRemaining: number;
+  avatarUrl?: string | null;
+};
+
 export type ApiError = {
   status: number;
   error: string;
@@ -287,22 +301,9 @@ export const api = {
       method: "POST",
       body: JSON.stringify({ email, password }),
     }),
-  me: () =>
-    request<{
-      email: string;
-      playerId: string;
-      name: string;
-      rating: number;
-      ntrp: string;
-      gamesPlayed: number;
-      publicId: string;
-      surveyCompleted: boolean;
-      surveyLevel: number | null;
-      calibrationEventsRemaining: number;
-      avatarUrl?: string | null;
-    }>("/api/me"),
+  me: () => request<MeResponse>("/api/me"),
   updateAvatar: (avatarDataUrl: string | null) =>
-    request("/api/me/avatar", { method: "PATCH", body: JSON.stringify({ avatarDataUrl }) }),
+    request<MeResponse>("/api/me/avatar", { method: "PATCH", body: JSON.stringify({ avatarDataUrl }) }),
   getFriends: () => request<FriendsSnapshot>("/api/friends"),
   requestFriend: (publicId: string) =>
     request("/api/friends/request", { method: "POST", body: JSON.stringify({ publicId }) }),
