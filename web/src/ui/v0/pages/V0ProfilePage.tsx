@@ -82,6 +82,38 @@ export function V0ProfilePage(props: { me: any; meLoaded?: boolean }) {
     }
   };
 
+  const compressAvatar = (file: File, maxSize = 256, quality = 0.8): Promise<string> =>
+    new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onerror = () => reject(new Error("Не удалось прочитать файл"));
+      reader.onload = () => {
+        const src = reader.result as string;
+        const img = new Image();
+        img.onerror = () => reject(new Error("Не удалось загрузить изображение"));
+        img.onload = () => {
+          const scale = Math.min(1, maxSize / Math.max(img.width, img.height));
+          const width = Math.max(1, Math.round(img.width * scale));
+          const height = Math.max(1, Math.round(img.height * scale));
+          const canvas = document.createElement("canvas");
+          canvas.width = width;
+          canvas.height = height;
+          const ctx = canvas.getContext("2d");
+          if (!ctx) {
+            reject(new Error("Нет контекста canvas"));
+            return;
+          }
+          ctx.drawImage(img, 0, 0, width, height);
+          try {
+            resolve(canvas.toDataURL("image/jpeg", quality));
+          } catch (e) {
+            reject(e);
+          }
+        };
+        img.src = src;
+      };
+      reader.readAsDataURL(file);
+    });
+
   const boyAvatars = useMemo(
     () => [
       "https://api.dicebear.com/8.x/avataaars/png?seed=boy1",
@@ -408,12 +440,11 @@ export function V0ProfilePage(props: { me: any; meLoaded?: boolean }) {
                       onChange={(e) => {
                         const file = e.target.files?.[0];
                         if (!file) return;
-                        const reader = new FileReader();
-                        reader.onload = () => {
-                          const result = reader.result as string;
-                          persistAvatar(result);
-                        };
-                        reader.readAsDataURL(file);
+                        compressAvatar(file)
+                          .then((result) => persistAvatar(result))
+                          .catch((err: any) => {
+                            setInfo(err?.message ?? "Не удалось обработать изображение");
+                          });
                       }}
                     />
                   </label>

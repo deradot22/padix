@@ -79,10 +79,11 @@ class AuthService(
         if (avatar.isNullOrEmpty()) {
             player.avatarUrl = null
         } else {
-            if (avatar.length > 500_000) {
-                throw ApiException(HttpStatus.BAD_REQUEST, "Avatar is too large")
-            }
-            if (!avatar.startsWith("data:image/")) {
+            if (avatar.startsWith("data:image/")) {
+                if (avatar.length > 500_000) {
+                    throw ApiException(HttpStatus.BAD_REQUEST, "Avatar is too large")
+                }
+            } else if (!(avatar.startsWith("http://") || avatar.startsWith("https://"))) {
                 throw ApiException(HttpStatus.BAD_REQUEST, "Invalid avatar format")
             }
             player.avatarUrl = avatar
