@@ -13,6 +13,7 @@ export type Player = {
   gamesPlayed: number;
   calibrationEventsRemaining?: number | null;
   publicId?: string;
+  avatarUrl?: string | null;
 };
 
 export type Event = {
@@ -246,6 +247,11 @@ export const api = {
       method: "POST",
       body: JSON.stringify({ points }),
     }),
+  saveDraftScore: (matchId: string, points: { teamAPoints: number; teamBPoints: number }) =>
+    request(`/api/events/matches/${matchId}/draft-score`, {
+      method: "POST",
+      body: JSON.stringify(points),
+    }),
   finishEvent: (eventId: string) =>
     request(`/api/events/${eventId}/finish`, { method: "POST" }),
   addRound: (eventId: string) =>
@@ -293,7 +299,10 @@ export const api = {
       surveyCompleted: boolean;
       surveyLevel: number | null;
       calibrationEventsRemaining: number;
+      avatarUrl?: string | null;
     }>("/api/me"),
+  updateAvatar: (avatarDataUrl: string | null) =>
+    request("/api/me/avatar", { method: "PATCH", body: JSON.stringify({ avatarDataUrl }) }),
   getFriends: () => request<FriendsSnapshot>("/api/friends"),
   requestFriend: (publicId: string) =>
     request("/api/friends/request", { method: "POST", body: JSON.stringify({ publicId }) }),

@@ -36,6 +36,7 @@ class EventService(
     private val roundRepo: RoundRepository,
     private val matchRepo: MatchRepository,
     private val scoreRepo: MatchSetScoreRepository,
+    private val draftScoreRepo: com.padelgo.repo.MatchDraftScoreRepository,
     private val ratingChangeRepo: RatingChangeRepository,
     private val userRepo: com.padelgo.auth.UserRepository,
     private val inviteRepo: com.padelgo.repo.EventInviteRepository,
@@ -562,7 +563,7 @@ class EventService(
 
         val round = roundRepo.findById(match.roundId!!).orElseThrow { ApiException(HttpStatus.NOT_FOUND, "Round not found") }
         val event = getEvent(round.eventId!!)
-        requireAuthorOrParticipant(event, userId)
+        requireAuthor(event, userId)
         if (event.status != EventStatus.IN_PROGRESS) {
             throw ApiException(HttpStatus.CONFLICT, "Event is not in progress (status=${event.status})")
         }
@@ -616,8 +617,33 @@ class EventService(
             scoreRepo.deleteAllByMatchId(matchId)
         }
 
+        draftScoreRepo.deleteByMatchId(matchId)
         match.status = MatchStatus.FINISHED
         matchRepo.save(match)
+    }
+
+    @Transactional
+    fun saveDraftScore(matchId: UUID, userId: UUID, req: com.padelgo.api.DraftScoreRequest) {
+        val match = matchRepo.findById(matchId).orElseThrow { ApiException(HttpStatus.NOT_FOUND, "Match not found") }
+        val round = roundRepo.findById(match.roundId!!).orElseThrow { ApiException(HttpStatus.NOT_FOUND, "Round not found") }
+        val event = getEvent(round.eventId!!)
+        requireAuthor(event, userId)
+        if (event.status != EventStatus.IN_PROGRESS) {
+            throw ApiException(HttpStatus.CONFLICT, "Event is not in progress (status=${event.status})")
+        }
+        if (event.scoringMode != ScoringMode.POINTS) {
+            throw ApiException(HttpStatus.BAD_REQUEST, "Draft score is supported only for POINTS mode")
+        }
+        val total = req.teamAPoints + req.teamBPoints
+        val expectedTotal = event.pointsPerPlayerPerMatch * 4
+        if (total > expectedTotal) {
+            throw ApiException(HttpStatus.BAD_REQUEST, "Total points must be <= $expectedTotal (now $total)")
+        }
+        val existing = draftScoreRepo.findByMatchId(matchId)
+        val draft = existing ?: com.padelgo.domain.MatchDraftScore(matchId = matchId)
+        draft.teamAPoints = req.teamAPoints
+        draft.teamBPoints = req.teamBPoints
+        draftScoreRepo.save(draft)
     }
 
     @Transactional

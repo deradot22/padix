@@ -36,6 +36,9 @@ class Player(
     @Column(name = "games_played", nullable = false)
     var gamesPlayed: Int = 0,
 
+    @Column(name = "avatar_url")
+    var avatarUrl: String? = null,
+
     @CreationTimestamp
     @Column(name = "created_at", nullable = false)
     var createdAt: Instant? = null
@@ -225,6 +228,28 @@ class MatchSetScore(
 
     @Column(name = "team_b_games", nullable = false)
     var teamBGames: Int = 0
+)
+
+@Entity
+@Table(name = "match_draft_scores")
+class MatchDraftScore(
+    @Id
+    @UuidGenerator
+    @Column(name = "id", nullable = false)
+    var id: UUID? = null,
+
+    @Column(name = "match_id", nullable = false, unique = true)
+    var matchId: UUID? = null,
+
+    @Column(name = "team_a_points", nullable = false)
+    var teamAPoints: Int = 0,
+
+    @Column(name = "team_b_points", nullable = false)
+    var teamBPoints: Int = 0,
+
+    @CreationTimestamp
+    @Column(name = "updated_at", nullable = false)
+    var updatedAt: Instant? = null
 )
 
 @Entity

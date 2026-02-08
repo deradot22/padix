@@ -27,7 +27,8 @@ data class PlayerResponse(
     val ntrp: String,
     val gamesPlayed: Int,
     val calibrationEventsRemaining: Int? = null,
-    val publicId: String? = null
+    val publicId: String? = null,
+    val avatarUrl: String? = null
 ) {
     companion object {
         fun from(p: Player, calibrationEventsRemaining: Int? = null, publicId: String? = null) = PlayerResponse(
@@ -37,7 +38,8 @@ data class PlayerResponse(
             ntrp = p.ntrp,
             gamesPlayed = p.gamesPlayed,
             calibrationEventsRemaining = calibrationEventsRemaining,
-            publicId = publicId
+            publicId = publicId,
+            avatarUrl = p.avatarUrl
         )
     }
 }
@@ -131,6 +133,13 @@ data class SetScoreRequest(
 )
 
 data class PointsScoreRequest(
+    @field:Min(0)
+    val teamAPoints: Int,
+    @field:Min(0)
+    val teamBPoints: Int
+)
+
+data class DraftScoreRequest(
     @field:Min(0)
     val teamAPoints: Int,
     @field:Min(0)

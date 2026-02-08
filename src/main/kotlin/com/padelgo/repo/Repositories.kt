@@ -87,6 +87,11 @@ interface MatchSetScoreRepository : JpaRepository<MatchSetScore, UUID> {
     )
 }
 
+interface MatchDraftScoreRepository : JpaRepository<com.padelgo.domain.MatchDraftScore, UUID> {
+    fun findByMatchId(matchId: UUID): com.padelgo.domain.MatchDraftScore?
+    fun deleteByMatchId(matchId: UUID)
+}
+
 interface RatingChangeRepository : JpaRepository<RatingChange, UUID> {
     fun deleteAllByEventId(eventId: UUID)
     fun findAllByPlayerId(playerId: UUID): List<RatingChange>

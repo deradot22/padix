@@ -65,6 +65,23 @@ export function V0ProfilePage(props: { me: any; meLoaded?: boolean }) {
   const [info, setInfo] = useState<string | null>(null);
   const [idCopied, setIdCopied] = useState(false);
 
+  const persistAvatar = async (next: string | null) => {
+    setAvatar(next);
+    try {
+      if (next) localStorage.setItem("padix_avatar", next);
+      else localStorage.removeItem("padix_avatar");
+    } catch {
+      // ignore
+    }
+    try {
+      const updated = await api.updateAvatar(next);
+      setMeLive(updated);
+      if (updated.avatarUrl) setAvatar(updated.avatarUrl);
+    } catch (e: any) {
+      setInfo(e?.message ?? "Ошибка обновления аватара");
+    }
+  };
+
   const boyAvatars = useMemo(
     () => [
       "https://api.dicebear.com/8.x/avataaars/png?seed=boy1",
@@ -118,7 +135,10 @@ export function V0ProfilePage(props: { me: any; meLoaded?: boolean }) {
     if (!props.me) return;
     api
       .me()
-      .then((m) => setMeLive(m))
+      .then((m) => {
+        setMeLive(m);
+        if (m.avatarUrl) setAvatar(m.avatarUrl);
+      })
       .catch(() => setMeLive(null));
   }, [props.me]);
 
@@ -391,12 +411,7 @@ export function V0ProfilePage(props: { me: any; meLoaded?: boolean }) {
                         const reader = new FileReader();
                         reader.onload = () => {
                           const result = reader.result as string;
-                          setAvatar(result);
-                          try {
-                            localStorage.setItem("padix_avatar", result);
-                          } catch {
-                            // ignore
-                          }
+                          persistAvatar(result);
                         };
                         reader.readAsDataURL(file);
                       }}
@@ -415,12 +430,7 @@ export function V0ProfilePage(props: { me: any; meLoaded?: boolean }) {
                             avatar === src ? "border-primary ring-2 ring-primary/40" : "border-border"
                           }`}
                           onClick={() => {
-                            setAvatar(src);
-                            try {
-                              localStorage.setItem("padix_avatar", src);
-                            } catch {
-                              // ignore
-                            }
+                            persistAvatar(src);
                           }}
                         >
                           <img src={src} alt="" className="h-full w-full rounded-full object-cover" />
@@ -439,12 +449,7 @@ export function V0ProfilePage(props: { me: any; meLoaded?: boolean }) {
                             avatar === src ? "border-primary ring-2 ring-primary/40" : "border-border"
                           }`}
                           onClick={() => {
-                            setAvatar(src);
-                            try {
-                              localStorage.setItem("padix_avatar", src);
-                            } catch {
-                              // ignore
-                            }
+                            persistAvatar(src);
                           }}
                         >
                           <img src={src} alt="" className="h-full w-full rounded-full object-cover" />

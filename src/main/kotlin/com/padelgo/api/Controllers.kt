@@ -45,6 +45,7 @@ class EventController(
     private val roundRepo: RoundRepository,
     private val matchRepo: MatchRepository,
     private val scoreRepo: MatchSetScoreRepository,
+    private val draftScoreRepo: com.padelgo.repo.MatchDraftScoreRepository,
     private val playerRepo: PlayerRepository,
     private val userRepo: com.padelgo.auth.UserRepository,
     private val courtRepo: com.padelgo.repo.EventCourtRepository
@@ -135,6 +136,11 @@ class EventController(
         service.submitScore(matchId, principalUserId(), req)
     }
 
+    @PostMapping("/matches/{matchId}/draft-score")
+    fun saveDraftScore(@PathVariable matchId: UUID, @Valid @RequestBody req: DraftScoreRequest) {
+        service.saveDraftScore(matchId, principalUserId(), req)
+    }
+
     @PostMapping("/{eventId}/finish")
     fun finish(@PathVariable eventId: UUID) {
         val userId = principalUserId()
@@ -182,6 +188,9 @@ class EventController(
         val scoresByMatch = matches.values.flatten().associate { m ->
             m.id!! to scoreRepo.findAllByMatchIdOrderBySetNumberAsc(m.id!!)
         }
+        val draftScoresByMatch = matches.values.flatten().associate { m ->
+            m.id!! to draftScoreRepo.findByMatchId(m.id!!)
+        }
 
         val roundDtos = rounds.map { r ->
             val ms = matches[r.id!!].orEmpty().map { m ->
@@ -190,7 +199,19 @@ class EventController(
                     .map { SetScoreRequest(it.teamAGames, it.teamBGames) }
 
                 val score = if (setEntities.isEmpty()) {
-                    null
+                    if (event.scoringMode == ScoringMode.POINTS) {
+                        val draft = draftScoresByMatch[m.id!!]
+                        if (draft == null) {
+                            null
+                        } else {
+                            ScoreResponse(
+                                mode = ScoringMode.POINTS,
+                                points = PointsScoreRequest(teamAPoints = draft.teamAPoints, teamBPoints = draft.teamBPoints)
+                            )
+                        }
+                    } else {
+                        null
+                    }
                 } else if (event.scoringMode == ScoringMode.POINTS) {
                     val s1 = setEntities.first()
                     ScoreResponse(

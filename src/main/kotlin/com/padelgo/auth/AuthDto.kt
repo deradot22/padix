@@ -38,6 +38,11 @@ data class MeResponse(
     val publicId: String,
     val surveyCompleted: Boolean,
     val surveyLevel: Double?,
-    val calibrationEventsRemaining: Int
+    val calibrationEventsRemaining: Int,
+    val avatarUrl: String? = null
+)
+
+data class UpdateAvatarRequest(
+    val avatarDataUrl: String?
 )
 

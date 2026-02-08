@@ -62,20 +62,21 @@ export function V0EventPage(props: { me: any; meLoaded?: boolean }) {
   const [scorePadOpen, setScorePadOpen] = useState(false);
   const [myAvatar, setMyAvatar] = useState<string | null>(null);
 
+
   useEffect(() => {
     const stored = localStorage.getItem("padix_avatar");
     setMyAvatar(stored);
   }, []);
 
-  const renderTeamScore = (team: Match["teamA"], score: number) => {
-    const names = team.map((p) => p.name).join(" и ");
-    const left = team[0];
-    const right = team[1];
+  const renderTeamScore = (team: Match["teamA"], score: number, side: "left" | "right") => {
+    const first = team[0];
+    const second = team[1];
     const currentPlayerId = props.me?.playerId;
-    const renderAvatar = (p?: { id?: string; name?: string }) => {
+    const renderAvatar = (p?: { id?: string; name?: string; avatarUrl?: string | null }) => {
       const isMe = !!p?.id && p.id === currentPlayerId;
-      if (isMe && myAvatar) {
-        return <img src={myAvatar} alt="Avatar" className="h-full w-full object-cover" />;
+      const src = p?.avatarUrl || (isMe ? myAvatar : null);
+      if (src) {
+        return <img src={src} alt="Avatar" className="h-full w-full object-cover" />;
       }
       return (
         <div className="h-full w-full rounded-lg bg-primary/20 text-primary text-sm font-semibold flex items-center justify-center">
@@ -83,19 +84,58 @@ export function V0EventPage(props: { me: any; meLoaded?: boolean }) {
         </div>
       );
     };
+    const avatars = (
+      <div className="flex flex-col gap-2">
+        <div className="h-11 w-11 rounded-lg overflow-hidden border border-border/60 bg-secondary/40 flex items-center justify-center">
+          {renderAvatar(first)}
+        </div>
+        <div className="h-11 w-11 rounded-lg overflow-hidden border border-border/60 bg-secondary/40 flex items-center justify-center">
+          {renderAvatar(second)}
+        </div>
+      </div>
+    );
+    const names = (
+      <div className="grid w-full min-w-0 grid-rows-[44px_44px] items-center gap-2 px-1 text-xs text-muted-foreground text-left">
+        <div className="flex h-full items-center truncate w-full">{first?.name ?? "?"}</div>
+        <div className="flex h-full items-center truncate w-full">{second?.name ?? "?"}</div>
+      </div>
+    );
+    const mobileCenter = (
+      <div className="flex min-w-0 flex-col items-center justify-center text-xs text-muted-foreground">
+        <div className="truncate w-full text-center">{first?.name ?? "?"}</div>
+        <div className="text-2xl font-semibold text-foreground">{score}</div>
+        <div className="truncate w-full text-center">{second?.name ?? "?"}</div>
+      </div>
+    );
     return (
       <div className="w-full">
-        <div className="grid grid-cols-[48px_1fr_48px] items-center gap-3">
-          <div className="h-12 w-12 rounded-lg overflow-hidden border border-border/60 bg-secondary/40 flex items-center justify-center">
-            {renderAvatar(left)}
-          </div>
-          <div className="min-w-0 text-center">
-            <div className="text-xs text-muted-foreground truncate">{names}</div>
-            <div className="mt-0.5 text-2xl font-semibold">{score}</div>
-          </div>
-          <div className="h-12 w-12 rounded-lg overflow-hidden border border-border/60 bg-secondary/40 flex items-center justify-center">
-            {renderAvatar(right)}
-          </div>
+        <div className="sm:hidden">
+          {side === "left" ? (
+            <div className="grid grid-cols-[44px_minmax(0,1fr)] items-center gap-2">
+              <div className="flex items-center justify-center">{avatars}</div>
+              {mobileCenter}
+            </div>
+          ) : (
+            <div className="grid grid-cols-[minmax(0,1fr)_44px] items-center gap-2">
+              {mobileCenter}
+              <div className="flex items-center justify-center">{avatars}</div>
+            </div>
+          )}
+        </div>
+        <div className="hidden sm:block">
+          {side === "left" ? (
+            <div className="grid grid-cols-[44px_minmax(0,1fr)_48px] items-center gap-2">
+              <div className="flex items-center justify-center">{avatars}</div>
+              <div className="min-w-0">{names}</div>
+              <div className="text-center text-3xl font-semibold">{score}</div>
+            </div>
+          ) : (
+            <div className="grid grid-cols-[48px_minmax(0,1fr)_44px] items-center gap-2">
+              <div className="text-center text-3xl font-semibold">{score}</div>
+              <div className="min-w-0">{names}</div>
+              <div className="flex items-center justify-center">{avatars}</div>
+            </div>
+          )}
         </div>
       </div>
     );
@@ -175,10 +215,14 @@ export function V0EventPage(props: { me: any; meLoaded?: boolean }) {
       rounds.flatMap((r) => r.matches).forEach((m) => {
         if (next[m.id]) return;
         const points = m.score?.points;
-        next[m.id] = {
-          a: points?.teamAPoints ?? 0,
-          b: points?.teamBPoints ?? 0,
-        };
+        if (points) {
+          next[m.id] = {
+            a: points.teamAPoints ?? 0,
+            b: points.teamBPoints ?? 0,
+          };
+          return;
+        }
+        next[m.id] = { a: 0, b: 0 };
       });
       return next;
     });
@@ -747,8 +791,8 @@ export function V0EventPage(props: { me: any; meLoaded?: boolean }) {
                       {idx + 1}
                     </div>
                     <div className="w-10 h-10 mx-auto rounded-full bg-gradient-to-br from-primary/30 to-primary/10 flex items-center justify-center text-primary font-bold text-lg mb-2 overflow-hidden">
-                      {p.id === meId && myAvatar ? (
-                        <img src={myAvatar} alt="Avatar" className="h-full w-full object-cover" />
+                      {p.avatarUrl || (p.id === meId && myAvatar) ? (
+                        <img src={p.avatarUrl || myAvatar || ""} alt="Avatar" className="h-full w-full object-cover" />
                       ) : (
                         p.name?.[0]?.toUpperCase?.() ?? "?"
                       )}
@@ -889,7 +933,7 @@ export function V0EventPage(props: { me: any; meLoaded?: boolean }) {
                                       setScorePadOpen(true);
                                     }}
                                   >
-                                    {renderTeamScore(m.teamA, scores.a)}
+                                    {renderTeamScore(m.teamA, scores.a, "left")}
                                   </button>
                                   <button
                                     type="button"
@@ -903,7 +947,7 @@ export function V0EventPage(props: { me: any; meLoaded?: boolean }) {
                                       setScorePadOpen(true);
                                     }}
                                   >
-                                    {renderTeamScore(m.teamB, scores.b)}
+                                    {renderTeamScore(m.teamB, scores.b, "right")}
                                   </button>
                                 </div>
                               </div>
@@ -962,6 +1006,32 @@ export function V0EventPage(props: { me: any; meLoaded?: boolean }) {
                                   const current = scoreByMatch[activeMatchId];
                                   if (!current) return;
                                   if (!eventId) return;
+                                  const totalPoints = (e.pointsPerPlayerPerMatch ?? 6) * 4;
+                                  if (current.a + current.b !== totalPoints) {
+                                    setScoreSavingId(activeMatchId);
+                                    try {
+                                      await api.saveDraftScore(activeMatchId, { teamAPoints: current.a, teamBPoints: current.b });
+                                      const refreshed = await api.getEventDetails(eventId);
+                                      setData(refreshed);
+                                      setInfo("Черновик счёта сохранён");
+                                      const rounds = refreshed.rounds ?? [];
+                                      const currentIdx = rounds.findIndex((round) =>
+                                        round.matches.some((m) => m.id === activeMatchId),
+                                      );
+                                      const nextRound = currentIdx >= 0 ? rounds[currentIdx + 1] : null;
+                                      if (nextRound) {
+                                        setExpandedRoundId(nextRound.id);
+                                        setActiveMatchId(nextRound.matches[0]?.id ?? null);
+                                      }
+                                      setScorePadOpen(false);
+                                    } catch (e: any) {
+                                      const msg = e?.message ?? "Не удалось сохранить черновик";
+                                      setScoreError(msg);
+                                    } finally {
+                                      setScoreSavingId(null);
+                                    }
+                                    return;
+                                  }
                                   setScoreSavingId(activeMatchId);
                                   setScoreError(null);
                                   try {
@@ -1019,6 +1089,31 @@ export function V0EventPage(props: { me: any; meLoaded?: boolean }) {
                                 const current = scoreByMatch[activeMatchId];
                                 if (!current) return;
                                 if (current.a === 0 && current.b === 0) return;
+                                  const totalPoints = (e.pointsPerPlayerPerMatch ?? 6) * 4;
+                                  if (current.a + current.b !== totalPoints) {
+                                    setScoreSavingId(activeMatchId);
+                                    try {
+                                      await api.saveDraftScore(activeMatchId, { teamAPoints: current.a, teamBPoints: current.b });
+                                      const refreshed = await api.getEventDetails(eventId);
+                                      setData(refreshed);
+                                      setInfo("Черновик счёта сохранён");
+                                      const rounds = refreshed.rounds ?? [];
+                                      const currentIdx = rounds.findIndex((round) =>
+                                        round.matches.some((m) => m.id === activeMatchId),
+                                      );
+                                      const nextRound = currentIdx >= 0 ? rounds[currentIdx + 1] : null;
+                                      if (nextRound) {
+                                        setExpandedRoundId(nextRound.id);
+                                        setActiveMatchId(nextRound.matches[0]?.id ?? null);
+                                      }
+                                    } catch (e: any) {
+                                      const msg = e?.message ?? "Не удалось сохранить черновик";
+                                      setScoreError(msg);
+                                    } finally {
+                                      setScoreSavingId(null);
+                                    }
+                                    return;
+                                  }
                                 setScoreSavingId(activeMatchId);
                                 setScoreError(null);
                                 try {

@@ -65,8 +65,30 @@ class AuthService(
             publicId = formatPublicId(user.publicId),
             surveyCompleted = user.surveyCompleted,
             surveyLevel = user.surveyLevel,
-            calibrationEventsRemaining = user.calibrationEventsRemaining
+            calibrationEventsRemaining = user.calibrationEventsRemaining,
+            avatarUrl = player.avatarUrl
         )
+    }
+
+    @Transactional
+    fun updateAvatar(principal: JwtPrincipal, req: UpdateAvatarRequest): MeResponse {
+        val user = users.findById(principal.userId).orElseThrow { ApiException(HttpStatus.UNAUTHORIZED, "User not found") }
+        if (user.disabled) throw ApiException(HttpStatus.FORBIDDEN, "Account disabled")
+        val player = players.findById(user.playerId!!).orElseThrow { ApiException(HttpStatus.UNAUTHORIZED, "Player not found") }
+        val avatar = req.avatarDataUrl?.trim()
+        if (avatar.isNullOrEmpty()) {
+            player.avatarUrl = null
+        } else {
+            if (avatar.length > 500_000) {
+                throw ApiException(HttpStatus.BAD_REQUEST, "Avatar is too large")
+            }
+            if (!avatar.startsWith("data:image/")) {
+                throw ApiException(HttpStatus.BAD_REQUEST, "Invalid avatar format")
+            }
+            player.avatarUrl = avatar
+        }
+        players.save(player)
+        return me(principal)
     }
 
     private fun generatePublicId(): Long {
