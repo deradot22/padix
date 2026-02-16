@@ -90,12 +90,14 @@ export function V0CreateEventPage(props: {
       const startTime = `${startHour}:${startMinute}`;
       const endTime = `${endHour}:${endMinute}`;
       const startDt = new Date(`${date}T${startTime}`);
-      const endDt = new Date(`${date}T${endTime}`);
-      if (Number.isNaN(startDt.getTime()) || startDt.getTime() < Date.now()) {
-        throw new Error("Дата и время должны быть в будущем");
+      let endDt = new Date(`${date}T${endTime}`);
+      // Если окончание раньше начала — значит игра переходит за полночь
+      if (endDt.getTime() <= startDt.getTime()) {
+        endDt = new Date(endDt.getTime() + 24 * 60 * 60 * 1000);
       }
-      if (Number.isNaN(endDt.getTime()) || endDt.getTime() <= startDt.getTime()) {
-        throw new Error("Время окончания должно быть позже начала");
+      const todayStr = todayIso();
+      if (Number.isNaN(startDt.getTime()) || date < todayStr) {
+        throw new Error("Дата игры не может быть в прошлом");
       }
       const created = await api.createEvent({
         title,
@@ -166,9 +168,21 @@ export function V0CreateEventPage(props: {
                   <Label htmlFor="date" className="font-medium">
                     Дата проведения
                   </Label>
-                  <div className="relative">
-                    <Calendar className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground pointer-events-none" />
-                    <Input id="date" type="date" value={date} onChange={(e) => setDate(e.target.value)} className="bg-secondary border-border pl-10 h-11" />
+                  <div
+                    className="relative flex items-center gap-2 rounded-md border border-border bg-secondary px-3 h-11 cursor-pointer"
+                    onClick={() => (document.getElementById("date-hidden") as HTMLInputElement)?.showPicker?.()}
+                  >
+                    <Calendar className="h-4 w-4 text-muted-foreground shrink-0" />
+                    <span className="text-sm flex-1">
+                      {new Date(date + "T00:00:00").toLocaleDateString("ru-RU", { day: "2-digit", month: "2-digit", year: "numeric" })}
+                    </span>
+                    <input
+                      id="date-hidden"
+                      type="date"
+                      value={date}
+                      onChange={(e) => { if (e.target.value) setDate(e.target.value); }}
+                      className="absolute inset-0 opacity-0 cursor-pointer"
+                    />
                   </div>
                 </div>
               </div>

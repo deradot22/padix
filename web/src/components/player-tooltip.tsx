@@ -12,6 +12,7 @@ export interface PlayerTooltipPlayer {
   rating: number;
   matches?: number;
   ntrp?: string;
+  avatarUrl?: string | null;
 }
 
 export interface PlayerTooltipProps {
@@ -108,9 +109,20 @@ export function PlayerTooltip({
       {open ? (
         <div className="absolute left-1/2 -translate-x-1/2 bottom-full mb-2 z-50">
           <div className="p-3 min-w-[180px] rounded-lg bg-card border border-border shadow-xl">
-            <div className="mb-3">
-              <p className="font-semibold text-foreground">{player.name}</p>
-              {publicId ? <p className="text-xs text-muted-foreground">{publicId}</p> : null}
+            <div className="mb-3 flex items-center gap-3">
+              {player.avatarUrl ? (
+                <div className="h-10 w-10 shrink-0 overflow-hidden rounded-full border border-border">
+                  <img src={player.avatarUrl} alt="" className="h-full w-full object-cover" />
+                </div>
+              ) : (
+                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-secondary/60 text-sm font-semibold border border-border">
+                  {player.name?.trim().split(/\s+/).slice(0, 2).map((w) => w[0]?.toUpperCase()).join("") || "?"}
+                </div>
+              )}
+              <div>
+                <p className="font-semibold text-foreground">{player.name}</p>
+                {publicId ? <p className="text-xs text-muted-foreground">{publicId}</p> : null}
+              </div>
             </div>
 
             <div className="space-y-1.5 text-sm">

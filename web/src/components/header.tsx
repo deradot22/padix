@@ -23,7 +23,7 @@ export function Header(props: {
 }) {
   const { pathname } = useLocation();
   const nav = useNavigate();
-  const [isDark, setIsDark] = useState(false);
+  const [isDark, setIsDark] = useState(() => document.documentElement.classList.contains("dark"));
   const [notificationsOpen, setNotificationsOpen] = useState(false);
   const [loadingNotifications, setLoadingNotifications] = useState(false);
   const [notificationsError, setNotificationsError] = useState<string | null>(null);
@@ -36,10 +36,10 @@ export function Header(props: {
 
   useEffect(() => {
     const stored = localStorage.getItem("theme");
-    if (stored === "dark") {
-      setIsDark(true);
-      document.documentElement.classList.add("dark");
-    }
+    const shouldBeDark = stored === "dark";
+    setIsDark(shouldBeDark);
+    if (shouldBeDark) document.documentElement.classList.add("dark");
+    else document.documentElement.classList.remove("dark");
   }, []);
 
   const totalNotifications = useMemo(
@@ -288,9 +288,15 @@ export function Header(props: {
                                 key={req.publicId}
                                 className="flex items-center justify-between gap-3 rounded-xl border border-border bg-secondary/30 p-3"
                               >
-                                <div className="min-w-0">
+                                <div className="flex items-center gap-3 min-w-0">
+                                  <div className="h-9 w-9 shrink-0 rounded-full bg-secondary/60 border border-border overflow-hidden flex items-center justify-center text-sm font-semibold">
+                                    {req.avatarUrl ? (
+                                      <img src={req.avatarUrl} alt="" className="h-full w-full object-cover" />
+                                    ) : (
+                                      req.name?.trim().split(/\s+/).slice(0, 2).map((w: string) => w[0]?.toUpperCase()).join("") || "?"
+                                    )}
+                                  </div>
                                   <div className="font-medium truncate">{req.name}</div>
-                                  <div className="text-xs text-muted-foreground">{req.publicId}</div>
                                 </div>
                                 <div className="flex gap-2">
                                   <Button

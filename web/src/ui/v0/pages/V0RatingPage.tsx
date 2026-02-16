@@ -1,20 +1,36 @@
-import { useEffect, useMemo, useState } from "react";
-import { Trophy, TrendingUp, Users } from "lucide-react";
-import { api, Player } from "../../../lib/api";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { Search, Trophy, TrendingUp, Users } from "lucide-react";
+import { api, hasToken, Player } from "../../../lib/api";
 import { ntrpLevel } from "../../../lib/rating";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { PlayerTooltip } from "@/components/player-tooltip";
 
-export function V0RatingPage(props: { authed: boolean }) {
+const NTRP_LEVELS = ["1.0", "1.5", "2.0", "2.5", "3.0", "3.5", "4.0", "4.5", "5.0+"];
+
+export function V0RatingPage(props: { authed: boolean; me?: { playerId?: string } | null }) {
   const [data, setData] = useState<Player[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [friends, setFriends] = useState<import("../../../lib/api").FriendsSnapshot | null>(null);
-  const totalPlayersCount =
-    (data ?? []).filter(
-      (p) => !p.name.startsWith("Удалённый пользователь") && p.calibrationEventsRemaining === 0
-    ).length;
+  const [search, setSearch] = useState("");
+  const [calibrationFilter, setCalibrationFilter] = useState<"all" | "calibrated" | "in_calibration">("calibrated");
+  const [ntrpMin, setNtrpMin] = useState<string>("");
+  const [ntrpMax, setNtrpMax] = useState<string>("");
+  const [ratingHistory, setRatingHistory] = useState<{ date: string; rating: number; delta: number | null }[]>([]);
+  const [graphOpen, setGraphOpen] = useState(false);
+  const myRowRef = useRef<HTMLTableRowElement | null>(null);
+  const meId = props.me?.playerId;
+
+  const ratingStats = useMemo(() => {
+    const list = (data ?? []).filter((p) => !p.name.startsWith("Удалённый пользователь"));
+    const calibrated = list.filter((p) => (p.calibrationEventsRemaining ?? 0) === 0).length;
+    const notCalibrated = list.filter((p) => (p.calibrationEventsRemaining ?? 0) > 0).length;
+    return { calibrated, notCalibrated, total: list.length };
+  }, [data]);
 
   useEffect(() => {
     let cancelled = false;
@@ -40,12 +56,183 @@ export function V0RatingPage(props: { authed: boolean }) {
   }, []);
 
   useEffect(() => {
-    if (!props.authed) return;
+    if (!props.authed || !hasToken()) return;
+    let cancelled = false;
     api
       .getFriends()
-      .then(setFriends)
-      .catch(() => setFriends(null));
+      .then((f) => { if (!cancelled) setFriends(f); })
+      .catch(() => { if (!cancelled) setFriends(null); });
+    return () => { cancelled = true; };
   }, [props.authed]);
+
+  useEffect(() => {
+    if (!props.authed || !meId || !hasToken()) return;
+    let cancelled = false;
+    api
+      .getRatingHistory()
+      .then((h) => { if (!cancelled) setRatingHistory(h); })
+      .catch(() => { if (!cancelled) setRatingHistory([]); });
+    return () => { cancelled = true; };
+  }, [props.authed, meId]);
+
+  // Базовый список (только калибровочный фильтр, без поиска/NTRP), для вычисления глобального ранга
+  const basePlayers = useMemo(() => {
+    let list = (data ?? []).filter((p) => !p.name.startsWith("Удалённый пользователь") && (p.rating ?? 0) > 0);
+    if (calibrationFilter === "calibrated") list = list.filter((p) => (p.calibrationEventsRemaining ?? 0) === 0);
+    else if (calibrationFilter === "in_calibration") list = list.filter((p) => (p.calibrationEventsRemaining ?? 0) > 0);
+    return list.sort((a, b) => (b.rating ?? 0) - (a.rating ?? 0));
+  }, [data, calibrationFilter]);
+
+  // Глобальный ранг каждого игрока (id → rank)
+  const globalRankMap = useMemo(() => {
+    const map = new Map<string, number>();
+    basePlayers.forEach((p, idx) => map.set(p.id, idx + 1));
+    return map;
+  }, [basePlayers]);
+
+  const filteredPlayers = useMemo(() => {
+    let list = basePlayers;
+    if (search.trim()) {
+      const q = search.trim().toLowerCase();
+      list = list.filter((p) => p.name.toLowerCase().includes(q));
+    }
+    if (ntrpMin) {
+      const idx = NTRP_LEVELS.indexOf(ntrpMin);
+      list = list.filter((p) => NTRP_LEVELS.indexOf(ntrpLevel(p.rating)) >= idx);
+    }
+    if (ntrpMax) {
+      const idx = NTRP_LEVELS.indexOf(ntrpMax);
+      list = list.filter((p) => NTRP_LEVELS.indexOf(ntrpLevel(p.rating)) <= idx);
+    }
+    return list;
+  }, [basePlayers, search, ntrpMin, ntrpMax]);
+
+  const myRank = useMemo(() => {
+    if (!meId) return null;
+    return globalRankMap.get(meId) ?? null;
+  }, [globalRankMap, meId]);
+
+  const isSearchActive = !!(search.trim() || ntrpMin || ntrpMax);
+  const topCount = 10;
+  const topPlayers = filteredPlayers.slice(0, topCount);
+  const showMyRowSeparately = !isSearchActive && meId && myRank !== null && myRank > topCount;
+  const myPlayer = showMyRowSeparately ? basePlayers.find((p) => p.id === meId) : null;
+  const playersAboveMe = showMyRowSeparately && myRank != null && myRank > 2
+    ? basePlayers.slice(Math.max(0, myRank - 3), myRank - 1)
+    : [];
+  const playersBelowMe = showMyRowSeparately && myRank != null && myRank < basePlayers.length
+    ? basePlayers.slice(myRank, Math.min(basePlayers.length, myRank + 2))
+    : [];
+
+  const scrollToMe = () => myRowRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+
+  const getRankStyle = (rank: number) => {
+    if (rank === 1) return "bg-amber-500/20 text-amber-400 border-amber-500/30";
+    if (rank === 2) return "bg-slate-400/20 text-slate-300 border-slate-400/30";
+    if (rank === 3) return "bg-orange-600/20 text-orange-400 border-orange-600/30";
+    return "bg-secondary text-muted-foreground border-border";
+  };
+
+  const getRankIcon = (rank: number) => {
+    if (rank <= 3) {
+      return (
+        <div className={`flex h-8 w-8 items-center justify-center rounded-full ${getRankStyle(rank)} border`}>
+          {rank === 1 && <Trophy className="h-4 w-4" />}
+          {rank === 2 && <span className="text-sm font-bold">2</span>}
+          {rank === 3 && <span className="text-sm font-bold">3</span>}
+        </div>
+      );
+    }
+    return <span className="w-8 text-center text-muted-foreground">{rank}</span>;
+  };
+
+  const friendPublicIds = new Set((friends?.friends ?? []).map((f) => f.publicId));
+  const outgoingPublicIds = new Set((friends?.outgoing ?? []).map((f) => f.publicId));
+
+  const initials = (name: string) =>
+    name
+      .trim()
+      .split(/\s+/)
+      .slice(0, 2)
+      .map((p) => p[0]?.toUpperCase())
+      .join("");
+
+  const renderPlayerRow = (player: Player, rank: number, isMe?: boolean) => (
+    <tr
+      key={player.id}
+      ref={isMe ? myRowRef : undefined}
+      className={`group transition-colors hover:bg-secondary/50 ${isMe ? "bg-primary/10 border-l-4 border-l-primary" : ""}`}
+    >
+      <td className={`py-4 pr-3 align-middle ${isMe ? "pl-4" : ""}`}>{getRankIcon(rank)}</td>
+      <td className="py-4 pr-3 align-middle">
+        <PlayerTooltip
+          player={{
+            id: player.id,
+            name: player.name,
+            rating: player.rating,
+            matches: player.gamesPlayed,
+            ntrp: player.ntrp,
+            odid: player.publicId,
+            avatarUrl: player.avatarUrl,
+          }}
+          showAddFriend={props.authed}
+          addFriendStatus={
+            !player.publicId
+              ? "none"
+              : friendPublicIds.has(player.publicId)
+                ? "friend"
+                : outgoingPublicIds.has(player.publicId)
+                  ? "requested"
+                  : "none"
+          }
+          onAddFriend={async () => {
+            if (!player.publicId) throw new Error("Не удалось определить публичный ID");
+            const publicId = player.publicId;
+            await api.requestFriend(publicId);
+            if (publicId) {
+              setFriends((prev) =>
+                prev
+                  ? {
+                      ...prev,
+                      outgoing: prev.outgoing.some((o) => o.publicId === publicId)
+                        ? prev.outgoing
+                        : [...prev.outgoing, { publicId, name: player.name }],
+                    }
+                  : prev,
+              );
+            }
+            return "Заявка отправлена";
+          }}
+        >
+          <div className="flex items-center gap-3">
+            <div className="flex h-10 w-10 items-center justify-center rounded-full bg-secondary/60 text-sm font-semibold border border-border overflow-hidden">
+              {player.avatarUrl ? (
+                <img src={player.avatarUrl} alt="" className="h-full w-full object-cover" />
+              ) : (
+                initials(player.name) || "?"
+              )}
+            </div>
+            <Badge variant="secondary" className="font-medium max-w-full truncate cursor-pointer">
+              {player.name}
+              {isMe ? " (вы)" : ""}
+            </Badge>
+          </div>
+        </PlayerTooltip>
+      </td>
+      <td className="py-4 pr-3 align-middle">
+        <span className="font-semibold tabular-nums">
+          {(player.calibrationEventsRemaining ?? 0) > 0 && isMe ? "—" : player.rating}
+        </span>
+        {(player.calibrationEventsRemaining ?? 0) > 0 && !isMe ? (
+          <span className="text-amber-500/80 ml-1" title="В калибровке">?</span>
+        ) : null}
+      </td>
+      <td className="py-4 pr-3 text-muted-foreground align-middle hidden sm:table-cell">
+        {(player.calibrationEventsRemaining ?? 0) > 0 && isMe ? "—" : ntrpLevel(player.rating)}
+      </td>
+      <td className="py-4 text-muted-foreground align-middle hidden sm:table-cell">{player.gamesPlayed}</td>
+    </tr>
+  );
 
   const content = useMemo(() => {
     if (loading) return <div className="text-sm text-muted-foreground">Загрузка…</div>;
@@ -55,53 +242,14 @@ export function V0RatingPage(props: { authed: boolean }) {
           Не удалось загрузить: {error}
         </div>
       );
-    const visiblePlayers = (data ?? []).filter(
-      (p) =>
-        !p.name.startsWith("Удалённый пользователь") &&
-        p.calibrationEventsRemaining === 0 &&
-        (p.rating ?? 0) > 0
-    );
-    if (!visiblePlayers.length) return <div className="text-sm text-muted-foreground">Пока нет участников.</div>;
-
-    const topPlayers = visiblePlayers.slice(0, 3);
-    const restPlayers = visiblePlayers.slice(3);
-
-    const getRankStyle = (rank: number) => {
-      if (rank === 1) return "bg-amber-500/20 text-amber-400 border-amber-500/30";
-      if (rank === 2) return "bg-slate-400/20 text-slate-300 border-slate-400/30";
-      if (rank === 3) return "bg-orange-600/20 text-orange-400 border-orange-600/30";
-      return "bg-secondary text-muted-foreground border-border";
-    };
-
-    const getRankIcon = (rank: number) => {
-      if (rank <= 3) {
-        return (
-          <div className={`flex h-8 w-8 items-center justify-center rounded-full ${getRankStyle(rank)} border`}>
-            {rank === 1 && <Trophy className="h-4 w-4" />}
-            {rank === 2 && <span className="text-sm font-bold">2</span>}
-            {rank === 3 && <span className="text-sm font-bold">3</span>}
-          </div>
-        );
-      }
-      return <span className="w-8 text-center text-muted-foreground">{rank}</span>;
-    };
-
-    const friendPublicIds = new Set((friends?.friends ?? []).map((f) => f.publicId));
-    const outgoingPublicIds = new Set((friends?.outgoing ?? []).map((f) => f.publicId));
-
-    const initials = (name: string) =>
-      name
-        .trim()
-        .split(/\s+/)
-        .slice(0, 2)
-        .map((p) => p[0]?.toUpperCase())
-        .join("");
+    const topPlayersLocal = filteredPlayers.slice(0, 3);
+    if (!topPlayersLocal.length) return <div className="text-sm text-muted-foreground">Пока нет участников.</div>;
 
     return (
       <>
         <div className="grid gap-4 md:grid-cols-3">
-          {topPlayers.map((player, index) => {
-            const rank = index + 1;
+          {topPlayersLocal.map((player, index) => {
+            const rank = globalRankMap.get(player.id) ?? (index + 1);
             return (
               <Card
                 key={player.id}
@@ -127,6 +275,7 @@ export function V0RatingPage(props: { authed: boolean }) {
                         matches: player.gamesPlayed,
                         ntrp: player.ntrp,
                         odid: player.publicId,
+                        avatarUrl: player.avatarUrl,
                       }}
                       showAddFriend={props.authed}
                       addFriendStatus={
@@ -140,35 +289,40 @@ export function V0RatingPage(props: { authed: boolean }) {
                       }
                       onAddFriend={async () => {
                         if (!player.publicId) throw new Error("Не удалось определить публичный ID");
-                        const publicId = player.publicId;
-                        await api.requestFriend(publicId);
-                        if (publicId) {
-                          setFriends((prev) =>
-                            prev
-                              ? {
-                                  ...prev,
-                                  outgoing: prev.outgoing.some((o) => o.publicId === publicId)
-                                    ? prev.outgoing
-                                    : [...prev.outgoing, { publicId, name: player.name }],
-                                }
-                              : prev,
-                          );
-                        }
+                        await api.requestFriend(player.publicId);
+                        setFriends((prev) =>
+                          prev
+                            ? {
+                                ...prev,
+                                outgoing: prev.outgoing.some((o) => o.publicId === player.publicId)
+                                  ? prev.outgoing
+                                  : [...prev.outgoing, { publicId: player.publicId!, name: player.name }],
+                              }
+                            : prev,
+                        );
                         return "Заявка отправлена";
                       }}
                     >
                       <div className="mb-3 flex w-full items-center justify-center gap-3">
-                        <div className="flex h-9 w-9 items-center justify-center rounded-full bg-secondary/60 text-sm font-semibold text-foreground border border-border">
-                          {initials(player.name) || "?"}
+                        <div className="flex h-9 w-9 items-center justify-center rounded-full bg-secondary/60 text-sm font-semibold border border-border overflow-hidden">
+                          {player.avatarUrl ? (
+                            <img src={player.avatarUrl} alt="" className="h-full w-full object-cover" />
+                          ) : (
+                            initials(player.name) || "?"
+                          )}
                         </div>
                         <Badge variant="secondary" className="px-4 py-1.5 text-lg font-semibold cursor-pointer max-w-full truncate">
                           {player.name}
                         </Badge>
                       </div>
                     </PlayerTooltip>
-                    <p className="text-3xl font-bold">{player.rating}</p>
+                    <p className="text-3xl font-bold">
+                      {(player.calibrationEventsRemaining ?? 0) > 0 && player.id === meId ? "—" : player.rating}
+                    </p>
                     <div className="mt-2 flex items-center gap-3 text-sm text-muted-foreground">
-                      <span>NTRP {ntrpLevel(player.rating)}</span>
+                      <span>
+                        NTRP {(player.calibrationEventsRemaining ?? 0) > 0 && player.id === meId ? "—" : ntrpLevel(player.rating)}
+                      </span>
                       <span className="text-border">|</span>
                       <span>{player.gamesPlayed} матчей</span>
                     </div>
@@ -187,7 +341,7 @@ export function V0RatingPage(props: { authed: boolean }) {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="w-full">
+            <div className="w-full overflow-x-auto">
               <table className="w-full table-fixed text-sm sm:text-base">
                 <thead>
                   <tr className="border-b border-border text-left text-sm text-muted-foreground">
@@ -199,80 +353,77 @@ export function V0RatingPage(props: { authed: boolean }) {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-border">
-                  {restPlayers.map((player, idx) => {
-                    const rank = idx + 4;
-                    return (
-                      <tr key={player.id} className="group transition-colors hover:bg-secondary/50">
-                        <td className="py-4 pr-3 align-middle">{getRankIcon(rank)}</td>
-                        <td className="py-4 pr-3 align-middle">
-                          <PlayerTooltip
-                            player={{
-                              id: player.id,
-                              name: player.name,
-                              rating: player.rating,
-                              matches: player.gamesPlayed,
-                              ntrp: player.ntrp,
-                              odid: player.publicId,
-                            }}
-                            showAddFriend={props.authed}
-                            addFriendStatus={
-                              !player.publicId
-                                ? "none"
-                                : friendPublicIds.has(player.publicId)
-                                  ? "friend"
-                                  : outgoingPublicIds.has(player.publicId)
-                                    ? "requested"
-                                    : "none"
-                            }
-                            onAddFriend={async () => {
-                              if (!player.publicId) throw new Error("Не удалось определить публичный ID");
-                              const publicId = player.publicId;
-                              await api.requestFriend(publicId);
-                              if (publicId) {
-                                setFriends((prev) =>
-                                  prev
-                                    ? {
-                                        ...prev,
-                                        outgoing: prev.outgoing.some((o) => o.publicId === publicId)
-                                          ? prev.outgoing
-                                          : [...prev.outgoing, { publicId, name: player.name }],
-                                      }
-                                    : prev,
-                                );
-                              }
-                              return "Заявка отправлена";
-                            }}
-                          >
-                            <div className="flex items-center gap-3">
-                              <div className="flex h-10 w-10 items-center justify-center rounded-full bg-secondary/60 text-sm font-semibold border border-border">
-                                {initials(player.name) || "?"}
-                              </div>
-                              <Badge variant="secondary" className="font-medium max-w-full truncate cursor-pointer">
-                                {player.name}
-                              </Badge>
-                            </div>
-                          </PlayerTooltip>
+                  {topPlayers.map((player) =>
+                    renderPlayerRow(player, globalRankMap.get(player.id) ?? 0, player.id === meId)
+                  )}
+                  {showMyRowSeparately && myPlayer && (
+                    <>
+                      <tr>
+                        <td colSpan={5} className="py-5">
+                          <div className="-mx-16 border-t border-primary/40" />
                         </td>
-                        <td className="py-4 pr-3 align-middle">
-                          <span className="font-semibold tabular-nums">{player.rating}</span>
-                        </td>
-                        <td className="py-4 pr-3 text-muted-foreground align-middle hidden sm:table-cell">{ntrpLevel(player.rating)}</td>
-                        <td className="py-4 text-muted-foreground align-middle hidden sm:table-cell">{player.gamesPlayed}</td>
                       </tr>
-                    );
-                  })}
+                      {playersAboveMe.map((player) =>
+                        renderPlayerRow(player, globalRankMap.get(player.id) ?? 0, false)
+                      )}
+                      <tr className="bg-primary/5">
+                        <td colSpan={5} className="py-2 text-center text-xs font-medium text-primary">
+                          Вы здесь
+                        </td>
+                      </tr>
+                      {renderPlayerRow(myPlayer, myRank!, true)}
+                      {playersBelowMe.map((player) =>
+                        renderPlayerRow(player, globalRankMap.get(player.id) ?? 0, false)
+                      )}
+                    </>
+                  )}
                 </tbody>
               </table>
             </div>
           </CardContent>
         </Card>
+
+        {props.authed && ratingHistory.length > 1 && (
+          <Card className="mt-6 w-full">
+            <CardHeader className="pb-3">
+              <Button variant="ghost" className="w-full justify-between" onClick={() => setGraphOpen((o) => !o)}>
+                <CardTitle className="flex items-center gap-2 text-lg">
+                  <TrendingUp className="h-5 w-5 text-primary" />
+                  График рейтинга
+                </CardTitle>
+                <span className="text-muted-foreground">{graphOpen ? "−" : "+"}</span>
+              </Button>
+            </CardHeader>
+            {graphOpen && (
+              <CardContent>
+                <RatingGraph points={ratingHistory} />
+              </CardContent>
+            )}
+          </Card>
+        )}
       </>
     );
-  }, [data, error, loading]);
+  }, [
+    loading,
+    error,
+    filteredPlayers,
+    topPlayers,
+    showMyRowSeparately,
+    myPlayer,
+    myRank,
+    playersAboveMe,
+    playersBelowMe,
+    meId,
+    friends,
+    ratingHistory,
+    props.authed,
+    graphOpen,
+    globalRankMap,
+  ]);
 
   return (
     <div className="space-y-8">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="text-3xl font-bold tracking-tight">Рейтинг</h1>
           <p className="mt-1 text-muted-foreground">Таблица лидеров падел-игроков</p>
@@ -280,9 +431,67 @@ export function V0RatingPage(props: { authed: boolean }) {
         <div className="flex items-center gap-4 text-sm text-muted-foreground">
           <div className="flex items-center gap-2">
             <Users className="h-4 w-4" />
-            <span>{totalPlayersCount} игроков</span>
+            <span>{ratingStats.calibrated} откалибровано</span>
           </div>
+          {ratingStats.notCalibrated > 0 ? (
+            <div className="flex items-center gap-2">
+              <span>{ratingStats.notCalibrated} в калибровке</span>
+            </div>
+          ) : null}
         </div>
+      </div>
+
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+        <div className="relative flex-1">
+          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            placeholder="Поиск по имени..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="pl-9"
+          />
+        </div>
+        <Select value={calibrationFilter} onValueChange={(v: any) => setCalibrationFilter(v)}>
+          <SelectTrigger className="w-full sm:w-[180px]">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="calibrated">Только откалиброванные</SelectItem>
+            <SelectItem value="in_calibration">В калибровке</SelectItem>
+            <SelectItem value="all">Все</SelectItem>
+          </SelectContent>
+        </Select>
+        <Select value={ntrpMin || "min"} onValueChange={(v) => setNtrpMin(v === "min" ? "" : v)}>
+          <SelectTrigger className="w-full sm:w-[100px]">
+            <SelectValue placeholder="NTRP от" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="min">—</SelectItem>
+            {NTRP_LEVELS.map((n) => (
+              <SelectItem key={n} value={n}>
+                {n}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <Select value={ntrpMax || "max"} onValueChange={(v) => setNtrpMax(v === "max" ? "" : v)}>
+          <SelectTrigger className="w-full sm:w-[100px]">
+            <SelectValue placeholder="NTRP до" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="max">—</SelectItem>
+            {NTRP_LEVELS.map((n) => (
+              <SelectItem key={n} value={n}>
+                {n}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        {meId && myRank !== null && myRank > topCount && (
+          <Button variant="outline" size="sm" onClick={scrollToMe}>
+            К моему рейтингу (#{myRank})
+          </Button>
+        )}
       </div>
 
       {content}
@@ -290,3 +499,45 @@ export function V0RatingPage(props: { authed: boolean }) {
   );
 }
 
+function RatingGraph(props: { points: { date: string; rating: number }[] }) {
+  const pts = props.points;
+  if (pts.length < 2) return null;
+  const ratings = pts.map((p) => p.rating);
+  const minR = Math.min(...ratings);
+  const maxR = Math.max(...ratings);
+  const range = maxR - minR || 1;
+  const pad = range * 0.1;
+  const lo = minR - pad;
+  const hi = maxR + pad;
+  const h = 200;
+  const w = 400;
+  const toY = (r: number) => h - ((r - lo) / (hi - lo)) * h;
+  const path = pts.map((p, i) => `${i === 0 ? "M" : "L"} ${(i / (pts.length - 1)) * w} ${toY(p.rating)}`).join(" ");
+  return (
+    <div className="overflow-x-auto">
+      <svg viewBox={`0 0 ${w} ${h}`} className="w-full min-h-[200px]" preserveAspectRatio="none">
+        <polyline
+          fill="none"
+          stroke="hsl(var(--primary))"
+          strokeWidth="2"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          points={pts.map((p, i) => `${(i / (pts.length - 1)) * w},${toY(p.rating)}`).join(" ")}
+        />
+        {pts.map((p, i) => (
+          <circle
+            key={i}
+            cx={(i / (pts.length - 1)) * w}
+            cy={toY(p.rating)}
+            r="4"
+            fill="hsl(var(--primary))"
+          />
+        ))}
+      </svg>
+      <div className="mt-2 flex justify-between text-xs text-muted-foreground">
+        <span>{pts[0]?.date?.slice(0, 10)}</span>
+        <span>{pts[pts.length - 1]?.date?.slice(0, 10)}</span>
+      </div>
+    </div>
+  );
+}

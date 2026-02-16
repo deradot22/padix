@@ -79,6 +79,7 @@ export type MeResponse = {
   surveyLevel: number | null;
   calibrationEventsRemaining: number;
   avatarUrl?: string | null;
+  gender?: string | null;
 };
 
 export type ApiError = {
@@ -121,11 +122,13 @@ export type FriendItem = {
   ntrp?: string;
   gamesPlayed: number;
   calibrationEventsRemaining: number;
+  avatarUrl?: string | null;
 };
 
 export type FriendRequestItem = {
   publicId: string;
   name: string;
+  avatarUrl?: string | null;
 };
 
 export type AdminUser = {
@@ -163,7 +166,8 @@ export type EventInviteStatusItem = {
 };
 
 function getToken(): string | null {
-  return localStorage.getItem("padelgo_token");
+  const t = localStorage.getItem("padelgo_token");
+  return t?.trim() || null;
 }
 
 function getAdminToken(): string | null {
@@ -173,6 +177,10 @@ function getAdminToken(): string | null {
 export function setToken(token: string | null) {
   if (!token) localStorage.removeItem("padelgo_token");
   else localStorage.setItem("padelgo_token", token);
+}
+
+export function hasToken(): boolean {
+  return !!getToken();
 }
 
 export function setAdminToken(token: string | null) {
@@ -291,10 +299,10 @@ export const api = {
       body: JSON.stringify(payload),
     }),
 
-  register: (email: string, password: string, name: string) =>
+  register: (email: string, password: string, name: string, gender?: string) =>
     request<{ token: string }>("/api/auth/register", {
       method: "POST",
-      body: JSON.stringify({ email, password, name }),
+      body: JSON.stringify({ email, password, name, gender: gender || null }),
     }),
   login: (email: string, password: string) =>
     request<{ token: string }>("/api/auth/login", {
@@ -304,6 +312,8 @@ export const api = {
   me: () => request<MeResponse>("/api/me"),
   updateAvatar: (avatarDataUrl: string | null) =>
     request<MeResponse>("/api/me/avatar", { method: "PATCH", body: JSON.stringify({ avatarDataUrl }) }),
+  updateProfile: (payload: { name?: string; email?: string; password?: string; gender?: string }) =>
+    request<MeResponse>("/api/me/profile", { method: "PATCH", body: JSON.stringify(payload) }),
   getFriends: () => request<FriendsSnapshot>("/api/friends"),
   requestFriend: (publicId: string) =>
     request("/api/friends/request", { method: "POST", body: JSON.stringify({ publicId }) }),
@@ -332,6 +342,12 @@ export const api = {
   myHistory: () => request<EventHistoryItem[]>("/api/me/history"),
   myHistoryEvent: (eventId: string) =>
     request<EventHistoryMatch[]>(`/api/me/history/${eventId}`),
+  getRatingHistory: () =>
+    request<{ date: string; rating: number; delta: number | null; eventId: string | null }[]>("/api/me/rating-history"),
+  getRatingNotification: () =>
+    request<{ id: string; newRating: number; eventId: string } | null>("/api/me/rating-notification"),
+  markRatingNotificationSeen: (id: string) =>
+    request(`/api/me/rating-notification/${id}/seen`, { method: "POST" }),
 
   adminLogin: (username: string, password: string) =>
     request<{ token: string }>("/api/admin/login", { method: "POST", body: JSON.stringify({ username, password }) }),

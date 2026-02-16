@@ -1,5 +1,6 @@
 package com.padelgo.service
 
+import kotlin.math.min
 import kotlin.math.pow
 import kotlin.math.roundToInt
 
@@ -22,6 +23,17 @@ object EloRating {
     fun teamDelta(teamARating: Int, teamBRating: Int, k: Int, scoreA: Double): Int {
         val expected = expectedScore(teamARating, teamBRating)
         return (k * (scoreA - expected)).roundToInt()
+    }
+
+    /**
+     * Множитель за разницу счёта (margin of victory).
+     * Крупная победа даёт больший сдвиг рейтинга.
+     * multiplier = 1 + 0.15 * min(margin/expectedTotal, 1), макс 1.15
+     */
+    fun marginMultiplier(teamAPoints: Int, teamBPoints: Int, expectedTotal: Int): Double {
+        if (expectedTotal <= 0) return 1.0
+        val margin = kotlin.math.abs(teamAPoints - teamBPoints)
+        return 1.0 + 0.15 * min(margin.toDouble() / expectedTotal, 1.0)
     }
 }
 

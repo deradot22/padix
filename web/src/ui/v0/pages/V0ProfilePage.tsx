@@ -9,6 +9,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { PlayerTooltip } from "@/components/player-tooltip";
 import {
   Calendar,
   CheckCircle,
@@ -17,6 +18,7 @@ import {
   Hash,
   Mail,
   MapPin,
+  Pencil,
   Upload,
   TrendingDown,
   TrendingUp,
@@ -44,7 +46,7 @@ function isPastDate(dateStr: string) {
   return dateStr < todayIso;
 }
 
-export function V0ProfilePage(props: { me: any; meLoaded?: boolean }) {
+export function V0ProfilePage(props: { me: any; meLoaded?: boolean; onMeUpdate?: (me: any) => void }) {
   const nav = useNavigate();
   const [meLive, setMeLive] = useState<any | null>(null);
   const [friends, setFriends] = useState<FriendsSnapshot | null>(null);
@@ -62,21 +64,23 @@ export function V0ProfilePage(props: { me: any; meLoaded?: boolean }) {
   const [inviteActionId, setInviteActionId] = useState<string | null>(null);
   const [avatar, setAvatar] = useState<string | null>(null);
   const [avatarOpen, setAvatarOpen] = useState(false);
+  const [editOpen, setEditOpen] = useState(false);
+  const [editName, setEditName] = useState("");
+  const [editEmail, setEditEmail] = useState("");
+  const [editPassword, setEditPassword] = useState("");
+  const [editGender, setEditGender] = useState("");
+  const [editLoading, setEditLoading] = useState(false);
+  const [editError, setEditError] = useState<string | null>(null);
   const [info, setInfo] = useState<string | null>(null);
   const [idCopied, setIdCopied] = useState(false);
 
   const persistAvatar = async (next: string | null) => {
     setAvatar(next);
     try {
-      if (next) localStorage.setItem("padix_avatar", next);
-      else localStorage.removeItem("padix_avatar");
-    } catch {
-      // ignore
-    }
-    try {
       const updated = await api.updateAvatar(next);
       setMeLive(updated);
       if (updated.avatarUrl) setAvatar(updated.avatarUrl);
+      else if (!next) setAvatar(null);
     } catch (e: any) {
       setInfo(e?.message ?? "Ошибка обновления аватара");
     }
@@ -155,21 +159,12 @@ export function V0ProfilePage(props: { me: any; meLoaded?: boolean }) {
   }, [info]);
 
   useEffect(() => {
-    try {
-      const stored = localStorage.getItem("padix_avatar");
-      if (stored) setAvatar(stored);
-    } catch {
-      // ignore
-    }
-  }, []);
-
-  useEffect(() => {
     if (!props.me) return;
     api
       .me()
       .then((m) => {
         setMeLive(m);
-        if (m.avatarUrl) setAvatar(m.avatarUrl);
+        setAvatar(m.avatarUrl ?? null);
       })
       .catch(() => setMeLive(null));
   }, [props.me]);
@@ -368,17 +363,43 @@ export function V0ProfilePage(props: { me: any; meLoaded?: boolean }) {
                   </p>
                 </div>
               </div>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  setEditName(viewMe.name ?? "");
+                  setEditEmail(viewMe.email ?? "");
+                  setEditPassword("");
+                  setEditGender(viewMe.gender ?? "");
+                  setEditError(null);
+                  setEditOpen(true);
+                }}
+              >
+                <Pencil className="h-4 w-4 mr-1" />
+                Редактировать профиль
+              </Button>
             </div>
 
             <div className="mt-6 flex flex-wrap gap-3">
               <Badge className="gap-2 px-4 py-2 bg-primary/10 text-primary border border-primary/20 text-base">
                 <Trophy className="h-4 w-4" />
-                {viewMe.rating} (NTRP {ntrpLevel(viewMe.rating)})
+                {calibration ? (
+                  "на калибровке"
+                ) : (
+                  <>
+                    {viewMe.rating} (NTRP {ntrpLevel(viewMe.rating)})
+                  </>
+                )}
               </Badge>
               <Badge className="gap-2 px-4 py-2 bg-accent/10 text-accent border border-accent/20 text-base">
                 <Gamepad2 className="h-4 w-4" />
                 {viewMe.gamesPlayed} матчей
               </Badge>
+              {viewMe.gender ? (
+                <Badge variant="secondary" className="gap-2 px-4 py-2 text-base">
+                  {viewMe.gender === "M" ? "М" : "Ж"}
+                </Badge>
+              ) : null}
               <div className="relative">
                 <button
                   type="button"
@@ -489,6 +510,92 @@ export function V0ProfilePage(props: { me: any; meLoaded?: boolean }) {
                     </div>
                   </div>
                 </div>
+              </DialogContent>
+            </Dialog>
+
+            <Dialog open={editOpen} onOpenChange={setEditOpen}>
+              <DialogContent className="sm:max-w-md">
+                <DialogHeader>
+                  <DialogTitle>Редактировать профиль</DialogTitle>
+                </DialogHeader>
+                <form
+                  className="space-y-4"
+                  onSubmit={async (e) => {
+                    e.preventDefault();
+                    setEditLoading(true);
+                    setEditError(null);
+                    try {
+                      const payload: { name?: string; email?: string; password?: string; gender?: string } = {};
+                      if (editName.trim()) payload.name = editName.trim();
+                      if (editEmail.trim()) payload.email = editEmail.trim();
+                      if (editPassword) payload.password = editPassword;
+                      if (editGender) payload.gender = editGender;
+                      const updated = await api.updateProfile(payload);
+                      setMeLive(updated);
+                      props.onMeUpdate?.(updated);
+                      setEditOpen(false);
+                    } catch (err: any) {
+                      setEditError(err?.message ?? "Ошибка");
+                    } finally {
+                      setEditLoading(false);
+                    }
+                  }}
+                >
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium">Имя</label>
+                    <Input
+                      value={editName}
+                      onChange={(e) => setEditName(e.target.value)}
+                      placeholder="Имя"
+                      autoComplete="name"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium">Email</label>
+                    <Input
+                      type="email"
+                      value={editEmail}
+                      onChange={(e) => setEditEmail(e.target.value)}
+                      placeholder="email@example.com"
+                      autoComplete="email"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium">Новый пароль (оставьте пустым, чтобы не менять)</label>
+                    <Input
+                      type="password"
+                      value={editPassword}
+                      onChange={(e) => setEditPassword(e.target.value)}
+                      placeholder="••••••••"
+                      autoComplete="new-password"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium">Пол</label>
+                    <select
+                      className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                      value={editGender}
+                      onChange={(e) => setEditGender(e.target.value)}
+                    >
+                      <option value="">Не указан</option>
+                      <option value="M">М</option>
+                      <option value="F">Ж</option>
+                    </select>
+                  </div>
+                  {editError ? (
+                    <div className="rounded-lg border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive">
+                      {editError}
+                    </div>
+                  ) : null}
+                  <div className="flex gap-2">
+                    <Button type="submit" disabled={editLoading}>
+                      {editLoading ? "Сохранение…" : "Сохранить"}
+                    </Button>
+                    <Button type="button" variant="outline" onClick={() => setEditOpen(false)}>
+                      Отмена
+                    </Button>
+                  </div>
+                </form>
               </DialogContent>
             </Dialog>
           </CardContent>
@@ -670,20 +777,33 @@ export function V0ProfilePage(props: { me: any; meLoaded?: boolean }) {
                 <div className="space-y-2 pt-2 border-t border-border">
                   <p className="text-xs font-medium text-muted-foreground uppercase">Ваши друзья</p>
                   {(friends?.friends ?? []).map((friend) => (
-                    <div
+                    <PlayerTooltip
                       key={friend.userId}
-                      className="flex items-center justify-between gap-2 rounded-lg bg-secondary/50 p-2 px-3"
+                      player={{
+                        id: friend.userId,
+                        name: friend.name,
+                        rating: friend.rating,
+                        matches: friend.gamesPlayed,
+                        ntrp: friend.ntrp,
+                        odid: friend.publicId,
+                        avatarUrl: friend.avatarUrl,
+                      }}
+                      showAddFriend={false}
                     >
-                      <div className="flex items-center gap-2 flex-1 min-w-0">
-                        <div className="h-6 w-6 rounded-full bg-primary/20 flex items-center justify-center shrink-0">
-                          <Users className="h-3 w-3 text-primary" />
+                      <div className="flex items-center gap-3 rounded-lg bg-secondary/50 p-2 px-3 cursor-pointer hover:bg-secondary transition-colors">
+                        <div className="h-8 w-8 shrink-0 rounded-full bg-secondary/60 border border-border overflow-hidden flex items-center justify-center text-sm font-semibold">
+                          {friend.avatarUrl ? (
+                            <img src={friend.avatarUrl} alt="" className="h-full w-full object-cover" />
+                          ) : (
+                            friend.name?.trim().split(/\s+/).slice(0, 2).map((w) => w[0]?.toUpperCase()).join("") || "?"
+                          )}
                         </div>
-                        <div className="truncate">
+                        <div className="min-w-0">
                           <p className="text-sm font-medium truncate">{friend.name}</p>
-                        <p className="text-xs text-muted-foreground truncate">{formatPublicId(friend.publicId)}</p>
+                          <p className="text-xs text-muted-foreground">{friend.rating} • {friend.ntrp ?? ntrpLevel(friend.rating)}</p>
                         </div>
                       </div>
-                    </div>
+                    </PlayerTooltip>
                   ))}
                 </div>
               ) : (
@@ -695,9 +815,15 @@ export function V0ProfilePage(props: { me: any; meLoaded?: boolean }) {
                   <p className="text-xs font-medium text-muted-foreground uppercase">Входящие заявки</p>
                   {(friends?.incoming ?? []).map((r) => (
                     <div key={r.publicId} className="flex items-center justify-between gap-2 rounded-lg bg-secondary/50 p-2 px-3">
-                      <div className="min-w-0">
+                      <div className="flex items-center gap-3 min-w-0">
+                        <div className="h-8 w-8 shrink-0 rounded-full bg-secondary/60 border border-border overflow-hidden flex items-center justify-center text-sm font-semibold">
+                          {r.avatarUrl ? (
+                            <img src={r.avatarUrl} alt="" className="h-full w-full object-cover" />
+                          ) : (
+                            r.name?.trim().split(/\s+/).slice(0, 2).map((w) => w[0]?.toUpperCase()).join("") || "?"
+                          )}
+                        </div>
                         <p className="text-sm font-medium truncate">{r.name}</p>
-                        <p className="text-xs text-muted-foreground truncate">{formatPublicId(r.publicId)}</p>
                       </div>
                       <div className="flex gap-2">
                         <Button

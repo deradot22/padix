@@ -23,7 +23,7 @@ export function V0LoginPage(props: { onAuth: (me: any) => void }) {
       }
       const { token } = await api.login(email, password);
       setAdminToken(null);
-      setToken(token);
+      setToken(token?.trim() || null);
       const me = await api.me();
       props.onAuth(me);
       if (!me.surveyCompleted) nav("/survey");

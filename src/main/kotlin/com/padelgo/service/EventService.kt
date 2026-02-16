@@ -27,6 +27,7 @@ import org.springframework.stereotype.Service
 import java.time.LocalDate
 import java.util.UUID
 import kotlin.math.abs
+import kotlin.math.roundToInt
 
 @Service
 class EventService(
@@ -40,7 +41,8 @@ class EventService(
     private val ratingChangeRepo: RatingChangeRepository,
     private val userRepo: com.padelgo.auth.UserRepository,
     private val inviteRepo: com.padelgo.repo.EventInviteRepository,
-    private val courtRepo: EventCourtRepository
+    private val courtRepo: EventCourtRepository,
+    private val ratingNotificationRepo: com.padelgo.repo.UserRatingNotificationRepository
 ) {
     fun getToday(date: LocalDate = LocalDate.now()): List<Event> =
         eventRepo.findAllByDateOrderByStartTimeAsc(date)
@@ -65,12 +67,13 @@ class EventService(
     fun createEvent(event: Event, creatorUserId: UUID, courtNames: List<String>? = null): Event {
         val now = java.time.LocalDateTime.now()
         val eventDateTime = java.time.LocalDateTime.of(event.date, event.startTime)
-        val eventEndDateTime = java.time.LocalDateTime.of(event.date, event.endTime)
-        if (eventDateTime.isBefore(now)) {
-            throw ApiException(HttpStatus.BAD_REQUEST, "Event date/time must be in the future")
-        }
+        var eventEndDateTime = java.time.LocalDateTime.of(event.date, event.endTime)
+        // Если время окончания <= времени начала — игра переходит за полночь
         if (!eventEndDateTime.isAfter(eventDateTime)) {
-            throw ApiException(HttpStatus.BAD_REQUEST, "endTime must be after startTime")
+            eventEndDateTime = eventEndDateTime.plusDays(1)
+        }
+        if (event.date.isBefore(java.time.LocalDate.now())) {
+            throw ApiException(HttpStatus.BAD_REQUEST, "Дата игры не может быть в прошлом")
         }
         if (event.courtsCount <= 0) throw ApiException(HttpStatus.BAD_REQUEST, "courtsCount must be > 0")
         if (!event.autoRounds && event.roundsPlanned <= 0) {
@@ -653,7 +656,23 @@ class EventService(
         if (event.status == EventStatus.FINISHED) return
         if (event.status != EventStatus.IN_PROGRESS) throw ApiException(HttpStatus.CONFLICT, "Event is not in progress")
 
+        // Promote draft scores to actual scores before finishing
         val matches = matchRepo.findAllByEventId(eventId)
+        matches.forEach { m ->
+            if (m.status == MatchStatus.SCHEDULED) {
+                val existingScores = scoreRepo.findAllByMatchIdOrderBySetNumberAsc(m.id!!)
+                if (existingScores.isEmpty()) {
+                    val draft = draftScoreRepo.findByMatchId(m.id!!)
+                    if (draft != null && (draft.teamAPoints > 0 || draft.teamBPoints > 0)) {
+                        scoreRepo.upsertScore(m.id!!, 1, draft.teamAPoints, draft.teamBPoints)
+                        draftScoreRepo.deleteByMatchId(m.id!!)
+                        m.status = MatchStatus.FINISHED
+                        matchRepo.save(m)
+                    }
+                }
+            }
+        }
+
         val setsByMatch = matches.associate { m -> m.id!! to scoreRepo.findAllByMatchIdOrderBySetNumberAsc(m.id!!) }
         val finishedMatches = matches.filter { it.status == MatchStatus.FINISHED && !setsByMatch[it.id!!].isNullOrEmpty() }
 
@@ -684,8 +703,22 @@ class EventService(
                 val kTeam = ((EloRating.kFactor(a1.gamesPlayed) + EloRating.kFactor(a2.gamesPlayed)) / 2.0).toInt()
 
                 val scoreA = scoreAFromSets(event.scoringMode, sets)
+                val (teamAPoints, teamBPoints, expectedTotal) = when (event.scoringMode) {
+                    ScoringMode.POINTS -> {
+                        val s1 = sets.first()
+                        Triple(s1.teamAGames, s1.teamBGames, event.pointsPerPlayerPerMatch * 4)
+                    }
+                    ScoringMode.SETS -> {
+                        val totalA = sets.sumOf { it.teamAGames }
+                        val totalB = sets.sumOf { it.teamBGames }
+                        val maxGames = (event.gamesPerSet * event.setsPerMatch) * 2
+                        Triple(totalA, totalB, maxOf(maxGames, 1))
+                    }
+                }
+                val marginMult = EloRating.marginMultiplier(teamAPoints, teamBPoints, expectedTotal)
+                val baseDelta = EloRating.teamDelta(teamARating, teamBRating, kTeam, scoreA)
+                val deltaTeamA = (baseDelta * marginMult).roundToInt()
 
-                val deltaTeamA = EloRating.teamDelta(teamARating, teamBRating, kTeam, scoreA)
                 applyDelta(eventId, m.id!!, a1, a2, deltaTeamA, calibrationByPlayer)
                 applyDelta(eventId, m.id!!, b1, b2, -deltaTeamA, calibrationByPlayer)
 
@@ -700,6 +733,17 @@ class EventService(
                 }
             }
             userRepo.saveAll(accounts)
+
+            accounts.forEach { acc ->
+                val player = acc.playerId?.let { players[it] } ?: return@forEach
+                ratingNotificationRepo.save(
+                    com.padelgo.domain.UserRatingNotification(
+                        userId = acc.id!!,
+                        eventId = eventId,
+                        newRating = player.rating
+                    )
+                )
+            }
         } finally {
             event.status = EventStatus.FINISHED
             eventRepo.save(event)
@@ -891,6 +935,47 @@ class EventService(
             .sortedWith(compareByDescending<PlayerEventHistoryItem> { it.eventDate })
     }
 
+    fun getRatingHistoryForPlayer(playerId: UUID): List<RatingHistoryPoint> {
+        val changes = ratingChangeRepo.findAllByPlayerIdOrderByCreatedAtAsc(playerId)
+        if (changes.isEmpty()) {
+            val player = playerRepo.findById(playerId).orElse(null) ?: return emptyList()
+            return listOf(
+                RatingHistoryPoint(
+                    date = java.time.Instant.now().toString(),
+                    rating = player.rating,
+                    delta = null,
+                    eventId = null
+                )
+            )
+        }
+        val eventIds = changes.mapNotNull { it.eventId }.toSet()
+        val events = eventRepo.findAllById(eventIds).associateBy { it.id!! }
+        val byEvent = changes.groupBy { it.eventId!! }.mapValues { (_, list) -> list.maxByOrNull { it.createdAt!! }!! }
+        val sortedEvents = byEvent.keys.sortedBy { events[it]?.date }
+        val result = mutableListOf<RatingHistoryPoint>()
+        val first = byEvent[sortedEvents.first()]!!
+        result.add(
+            RatingHistoryPoint(
+                date = events[first.eventId]?.date?.toString() ?: first.createdAt!!.toString(),
+                rating = first.oldRating,
+                delta = null,
+                eventId = null
+            )
+        )
+        sortedEvents.forEach { eid ->
+            val c = byEvent[eid]!!
+            result.add(
+                RatingHistoryPoint(
+                    date = events[eid]?.date?.toString() ?: c.createdAt!!.toString(),
+                    rating = c.newRating,
+                    delta = c.delta,
+                    eventId = c.eventId
+                )
+            )
+        }
+        return result
+    }
+
     private fun scoreToText(mode: com.padelgo.domain.ScoringMode, sets: List<com.padelgo.domain.MatchSetScore>): String =
         if (mode == com.padelgo.domain.ScoringMode.POINTS) {
             val s1 = sets.first()
@@ -914,6 +999,13 @@ data class PlayerMatchHistoryItem(
     val teamText: String,
     val opponentText: String,
     val result: String
+)
+
+data class RatingHistoryPoint(
+    val date: String,
+    val rating: Int,
+    val delta: Int?,
+    val eventId: UUID?
 )
 
 data class PlayerEventHistoryItem(

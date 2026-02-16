@@ -65,6 +65,7 @@ class AdminController(
                 gamesPlayed = req.gamesPlayed ?: 0
             )
         )
+        val gender = req.gender?.trim()?.uppercase()?.takeIf { it in listOf("M", "F") }
         val user = users.save(
             com.padelgo.auth.UserAccount(
                 email = email,
@@ -73,7 +74,8 @@ class AdminController(
                 publicId = publicId,
                 surveyCompleted = req.surveyCompleted ?: false,
                 disabled = req.disabled ?: false,
-                calibrationEventsRemaining = req.calibrationEventsRemaining ?: 0
+                calibrationEventsRemaining = req.calibrationEventsRemaining ?: 0,
+                gender = gender
             )
         )
         return AdminUserResponse.from(user.id!!, user.email, user.publicId, user.disabled, user.surveyCompleted, player)
@@ -215,7 +217,8 @@ data class AdminCreateUserRequest(
     val gamesPlayed: Int? = null,
     val surveyCompleted: Boolean? = null,
     val disabled: Boolean? = null,
-    val calibrationEventsRemaining: Int? = null
+    val calibrationEventsRemaining: Int? = null,
+    val gender: String? = null
 )
 
 data class AdminUserResponse(

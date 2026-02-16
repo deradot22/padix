@@ -7,6 +7,7 @@ export function V0RegisterPage(props: { onAuth: (me: any) => void }) {
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [gender, setGender] = useState<string>("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -15,8 +16,8 @@ export function V0RegisterPage(props: { onAuth: (me: any) => void }) {
     setLoading(true);
     setError(null);
     try {
-      const { token } = await api.register(email, password, name);
-      setToken(token);
+      const { token } = await api.register(email, password, name, gender || undefined);
+      setToken(token?.trim() || null);
       const me = await api.me();
       props.onAuth(me);
       nav("/survey");
@@ -41,6 +42,18 @@ export function V0RegisterPage(props: { onAuth: (me: any) => void }) {
                 onChange={(e) => setName(e.target.value)}
                 autoComplete="name"
               />
+            </div>
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Пол</label>
+              <select
+                className="h-11 w-full rounded-md border border-border bg-secondary px-3 text-sm outline-none focus:ring-2 focus:ring-ring/50"
+                value={gender}
+                onChange={(e) => setGender(e.target.value)}
+              >
+                <option value="">Не указан</option>
+                <option value="M">М</option>
+                <option value="F">Ж</option>
+              </select>
             </div>
             <div className="space-y-2">
               <label className="text-sm font-medium">Email</label>

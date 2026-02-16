@@ -283,3 +283,28 @@ class RatingChange(
     var createdAt: Instant? = null
 )
 
+@Entity
+@Table(name = "user_rating_notifications")
+class UserRatingNotification(
+    @Id
+    @UuidGenerator
+    @Column(name = "id", nullable = false)
+    var id: UUID? = null,
+
+    @Column(name = "user_id", nullable = false)
+    var userId: UUID? = null,
+
+    @Column(name = "event_id", nullable = false)
+    var eventId: UUID? = null,
+
+    @Column(name = "new_rating", nullable = false)
+    var newRating: Int = 0,
+
+    @CreationTimestamp
+    @Column(name = "created_at", nullable = false)
+    var createdAt: Instant? = null,
+
+    @Column(name = "seen_at")
+    var seenAt: Instant? = null
+)
+

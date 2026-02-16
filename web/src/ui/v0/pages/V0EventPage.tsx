@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { ArrowLeft, Check, ChevronDown, Clock, MapPin, Share2, Target, UserPlus, Users, Zap, X } from "lucide-react";
 import { api, EventDetails, FriendItem, FriendsSnapshot, Match } from "../../../lib/api";
@@ -62,11 +62,94 @@ export function V0EventPage(props: { me: any; meLoaded?: boolean }) {
   const [scorePadOpen, setScorePadOpen] = useState(false);
   const [myAvatar, setMyAvatar] = useState<string | null>(null);
 
+  /** After saving score for activeMatchId, navigate to the next unscored match in the same round,
+   *  or to the first match of the next round if all matches in the current round are done. */
+  const navigateAfterScore = (rounds: EventDetails["rounds"], savedMatchId: string) => {
+    const currentIdx = rounds.findIndex((round) =>
+      round.matches.some((m) => m.id === savedMatchId),
+    );
+    if (currentIdx < 0) return;
+    const currentRound = rounds[currentIdx];
+    // Find next unscored match in the same round (skip current)
+    const nextUnscored = currentRound.matches.find(
+      (m) => m.id !== savedMatchId && m.status !== "FINISHED" && !m.score?.points,
+    );
+    if (nextUnscored) {
+      setActiveMatchId(nextUnscored.id);
+      setScorePadOpen(false);
+    } else {
+      const nextRound = rounds[currentIdx + 1];
+      if (nextRound) {
+        setExpandedRoundId(nextRound.id);
+        setActiveMatchId(nextRound.matches[0]?.id ?? null);
+      }
+      setScorePadOpen(false);
+    }
+  };
 
   useEffect(() => {
-    const stored = localStorage.getItem("padix_avatar");
-    setMyAvatar(stored);
-  }, []);
+    // Load current user's avatar from backend (via props.me)
+    setMyAvatar(props.me?.avatarUrl ?? null);
+  }, [props.me?.avatarUrl]);
+
+  /** Auto-save score as draft whenever the user enters/changes points */
+  const lastAutoSavedRef = useRef<Record<string, string>>({});
+  const prevActiveMatchIdRef = useRef<string | null>(null);
+
+  const saveDraftIfNeeded = (matchId: string, a: number, b: number) => {
+    const e = data?.event;
+    if (!eventId || !data?.isAuthor || !e || e.status !== "IN_PROGRESS" || e.scoringMode !== "POINTS") return;
+    const key = `${matchId}:${a},${b}`;
+    if (lastAutoSavedRef.current[matchId] === key) return;
+    api
+      .saveDraftScore(matchId, { teamAPoints: a, teamBPoints: b })
+      .then(() => {
+        lastAutoSavedRef.current[matchId] = key;
+      })
+      .catch(() => {});
+  };
+
+  useEffect(() => {
+    if (!activeMatchId) return;
+    const prev = prevActiveMatchIdRef.current;
+    if (prev && prev !== activeMatchId) {
+      const s = scoreByMatch[prev];
+      if (s && (s.a > 0 || s.b > 0)) saveDraftIfNeeded(prev, s.a, s.b);
+    }
+    prevActiveMatchIdRef.current = activeMatchId;
+  }, [activeMatchId]);
+
+  useEffect(() => {
+    const e = data?.event;
+    if (
+      !eventId ||
+      !activeMatchId ||
+      !data?.isAuthor ||
+      !e ||
+      e.status !== "IN_PROGRESS" ||
+      e.scoringMode !== "POINTS"
+    ) return;
+    const current = scoreByMatch[activeMatchId];
+    if (!current) return;
+    const key = `${activeMatchId}:${current.a},${current.b}`;
+    if (lastAutoSavedRef.current[activeMatchId] === key) return;
+    const timer = setTimeout(() => saveDraftIfNeeded(activeMatchId, current.a, current.b), 700);
+    return () => clearTimeout(timer);
+  }, [eventId, activeMatchId, scoreByMatch, data?.event, data?.isAuthor]);
+
+  /** Label for the "save score" button; null = hide the button entirely */
+  const nextButtonLabel = useMemo<string | null>(() => {
+    if (!data?.rounds || !activeMatchId) return null;
+    const currentRoundIdx = data.rounds.findIndex((r) => r.matches.some((m) => m.id === activeMatchId));
+    if (currentRoundIdx < 0) return null;
+    const currentRound = data.rounds[currentRoundIdx];
+    const otherUnscored = currentRound.matches.some(
+      (m) => m.id !== activeMatchId && m.status !== "FINISHED" && !m.score?.points,
+    );
+    if (otherUnscored) return "Следующий корт";
+    const isLastRound = currentRoundIdx === data.rounds.length - 1;
+    return isLastRound ? null : "Следующий раунд";
+  }, [data, activeMatchId]);
 
   const renderTeamScore = (team: Match["teamA"], score: number, side: "left" | "right") => {
     const first = team[0];
@@ -216,10 +299,10 @@ export function V0EventPage(props: { me: any; meLoaded?: boolean }) {
         if (next[m.id]) return;
         const points = m.score?.points;
         if (points) {
-          next[m.id] = {
-            a: points.teamAPoints ?? 0,
-            b: points.teamBPoints ?? 0,
-          };
+          const a = points.teamAPoints ?? 0;
+          const b = points.teamBPoints ?? 0;
+          next[m.id] = { a, b };
+          lastAutoSavedRef.current[m.id] = `${m.id}:${a},${b}`;
           return;
         }
         next[m.id] = { a: 0, b: 0 };
@@ -729,6 +812,7 @@ export function V0EventPage(props: { me: any; meLoaded?: boolean }) {
                     rating: p.rating,
                     matches: p.gamesPlayed,
                     odid: p.publicId,
+                    avatarUrl: p.avatarUrl,
                   }}
                   showAddFriend={p.id !== meId}
                   addFriendStatus={
@@ -999,6 +1083,7 @@ export function V0EventPage(props: { me: any; meLoaded?: boolean }) {
                               ) : (
                                 <div className="text-xs text-muted-foreground">Выберите значение для активной команды</div>
                               )}
+                              {nextButtonLabel && (
                               <Button
                                 size="sm"
                                 disabled={scoreSavingId === activeMatchId}
@@ -1014,16 +1099,7 @@ export function V0EventPage(props: { me: any; meLoaded?: boolean }) {
                                       const refreshed = await api.getEventDetails(eventId);
                                       setData(refreshed);
                                       setInfo("Черновик счёта сохранён");
-                                      const rounds = refreshed.rounds ?? [];
-                                      const currentIdx = rounds.findIndex((round) =>
-                                        round.matches.some((m) => m.id === activeMatchId),
-                                      );
-                                      const nextRound = currentIdx >= 0 ? rounds[currentIdx + 1] : null;
-                                      if (nextRound) {
-                                        setExpandedRoundId(nextRound.id);
-                                        setActiveMatchId(nextRound.matches[0]?.id ?? null);
-                                      }
-                                      setScorePadOpen(false);
+                                      navigateAfterScore(refreshed.rounds ?? [], activeMatchId);
                                     } catch (e: any) {
                                       const msg = e?.message ?? "Не удалось сохранить черновик";
                                       setScoreError(msg);
@@ -1039,16 +1115,7 @@ export function V0EventPage(props: { me: any; meLoaded?: boolean }) {
                                     const refreshed = await api.getEventDetails(eventId);
                                     setData(refreshed);
                                     setInfo("Счёт сохранён");
-                                    const rounds = refreshed.rounds ?? [];
-                                    const currentIdx = rounds.findIndex((round) =>
-                                      round.matches.some((m) => m.id === activeMatchId),
-                                    );
-                                    const nextRound = currentIdx >= 0 ? rounds[currentIdx + 1] : null;
-                                    if (nextRound) {
-                                      setExpandedRoundId(nextRound.id);
-                                      setActiveMatchId(nextRound.matches[0]?.id ?? null);
-                                    }
-                                    setScorePadOpen(false);
+                                    navigateAfterScore(refreshed.rounds ?? [], activeMatchId);
                                   } catch (e: any) {
                                     const msg = e?.message ?? "Не удалось сохранить счёт";
                                     if (msg.includes("Survey is required")) {
@@ -1069,13 +1136,15 @@ export function V0EventPage(props: { me: any; meLoaded?: boolean }) {
                                   }
                                 }}
                               >
-                                {scoreSavingId === activeMatchId ? "Сохраняем…" : "Следующий раунд"}
+                                {scoreSavingId === activeMatchId ? "Сохраняем…" : nextButtonLabel}
                               </Button>
+                              )}
                             </div>
                           </div>
                         ) : (
                           <div className="mt-4 flex items-center justify-between gap-3">
                             <div className="text-xs text-muted-foreground">Нажмите на счёт команды, чтобы выбрать очки.</div>
+                            {nextButtonLabel && (
                             <Button
                               size="sm"
                               variant="default"
@@ -1097,15 +1166,7 @@ export function V0EventPage(props: { me: any; meLoaded?: boolean }) {
                                       const refreshed = await api.getEventDetails(eventId);
                                       setData(refreshed);
                                       setInfo("Черновик счёта сохранён");
-                                      const rounds = refreshed.rounds ?? [];
-                                      const currentIdx = rounds.findIndex((round) =>
-                                        round.matches.some((m) => m.id === activeMatchId),
-                                      );
-                                      const nextRound = currentIdx >= 0 ? rounds[currentIdx + 1] : null;
-                                      if (nextRound) {
-                                        setExpandedRoundId(nextRound.id);
-                                        setActiveMatchId(nextRound.matches[0]?.id ?? null);
-                                      }
+                                      navigateAfterScore(refreshed.rounds ?? [], activeMatchId);
                                     } catch (e: any) {
                                       const msg = e?.message ?? "Не удалось сохранить черновик";
                                       setScoreError(msg);
@@ -1121,15 +1182,7 @@ export function V0EventPage(props: { me: any; meLoaded?: boolean }) {
                                   const refreshed = await api.getEventDetails(eventId);
                                   setData(refreshed);
                                   setInfo("Счёт сохранён");
-                                  const rounds = refreshed.rounds ?? [];
-                                  const currentIdx = rounds.findIndex((round) =>
-                                    round.matches.some((m) => m.id === activeMatchId),
-                                  );
-                                  const nextRound = currentIdx >= 0 ? rounds[currentIdx + 1] : null;
-                                  if (nextRound) {
-                                    setExpandedRoundId(nextRound.id);
-                                    setActiveMatchId(nextRound.matches[0]?.id ?? null);
-                                  }
+                                  navigateAfterScore(refreshed.rounds ?? [], activeMatchId);
                                 } catch (e: any) {
                                   const msg = e?.message ?? "Не удалось сохранить счёт";
                                   if (msg.includes("Survey is required")) {
@@ -1150,8 +1203,9 @@ export function V0EventPage(props: { me: any; meLoaded?: boolean }) {
                                 }
                               }}
                             >
-                              {scoreSavingId === activeMatchId ? "Сохраняем…" : "Следующий раунд"}
+                              {scoreSavingId === activeMatchId ? "Сохраняем…" : nextButtonLabel}
                             </Button>
+                            )}
                           </div>
                         )}
                       </div>

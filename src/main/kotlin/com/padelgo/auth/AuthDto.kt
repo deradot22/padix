@@ -12,7 +12,9 @@ data class RegisterRequest(
     val password: String,
 
     @field:NotBlank
-    val name: String
+    val name: String,
+
+    val gender: String? = null
 )
 
 data class LoginRequest(
@@ -39,7 +41,15 @@ data class MeResponse(
     val surveyCompleted: Boolean,
     val surveyLevel: Double?,
     val calibrationEventsRemaining: Int,
-    val avatarUrl: String? = null
+    val avatarUrl: String? = null,
+    val gender: String? = null
+)
+
+data class UpdateProfileRequest(
+    val name: String? = null,
+    val email: String? = null,
+    val password: String? = null,
+    val gender: String? = null
 )
 
 data class UpdateAvatarRequest(

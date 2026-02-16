@@ -50,6 +50,9 @@ class UserAccount(
     @Column(name = "calibration_events_remaining", nullable = false)
     var calibrationEventsRemaining: Int = 0,
 
+    @Column(name = "gender", length = 1)
+    var gender: String? = null,
+
     @CreationTimestamp
     @Column(name = "created_at", nullable = false)
     var createdAt: Instant? = null

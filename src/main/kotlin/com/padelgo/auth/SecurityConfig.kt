@@ -38,6 +38,7 @@ class SecurityConfig(
 
         http.authorizeHttpRequests { auth ->
             auth
+                .requestMatchers(org.springframework.http.HttpMethod.OPTIONS, "/**").permitAll()
                 .requestMatchers(
                     "/api/auth/**",
                     "/api/admin/login",
@@ -136,13 +137,19 @@ class SurveyGateFilter(
                 return
             }
             val user = userRepo.findById(principal.userId).orElse(null)
-            if (user?.disabled == true) {
+            if (user == null) {
+                // Token references a user that no longer exists — clear auth and continue
+                SecurityContextHolder.clearContext()
+                filterChain.doFilter(request, response)
+                return
+            }
+            if (user.disabled) {
                 response.status = HttpStatus.FORBIDDEN.value()
                 response.contentType = "application/json"
                 response.writer.write("""{"status":403,"error":"Forbidden","message":"Account disabled"}""")
                 return
             }
-            val completed = user?.surveyCompleted == true
+            val completed = user.surveyCompleted
             val allowed = path.startsWith("/api/auth/") ||
                 path == "/api/players/rating" ||
                 path.startsWith("/api/survey/") ||

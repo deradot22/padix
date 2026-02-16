@@ -93,12 +93,22 @@ export function V0HomePage(props: { me: any }) {
     const todayIso = formatDate(now);
     const gamesToday = (statsEvents ?? []).filter((e) => e.date === todayIso).length;
     const gamesWeek = (statsEvents ?? []).length;
-    const activePlayers = rating?.length ?? 0;
-    return { activePlayers, gamesToday, gamesWeek };
+    const list = (rating ?? []).filter((p) => !p.name.startsWith("Удалённый пользователь"));
+    const calibrated = list.filter((p) => (p.calibrationEventsRemaining ?? 0) === 0).length;
+    const notCalibrated = list.filter((p) => (p.calibrationEventsRemaining ?? 0) > 0).length;
+    return { activePlayers: list.length, calibrated, notCalibrated, gamesToday, gamesWeek };
   }, [statsEvents, rating]);
 
   const upcoming = (events ?? []).slice(0, 2);
-  const topPlayers = (rating ?? []).slice(0, 3);
+  const topPlayers = useMemo(() => {
+    const list = (rating ?? []).filter(
+      (p) =>
+        !p.name.startsWith("Удалённый пользователь") &&
+        p.calibrationEventsRemaining === 0 &&
+        (p.rating ?? 0) > 0,
+    );
+    return list.slice(0, 3);
+  }, [rating]);
 
   async function joinEvent(eventId: string) {
     if (!props.me) {
@@ -122,7 +132,13 @@ export function V0HomePage(props: { me: any }) {
   }
 
   const quickStats = [
-    { label: "Активных игроков", value: String(stats.activePlayers), icon: Users, color: "text-primary" },
+    {
+      label: "Активных игроков",
+      value: String(stats.activePlayers),
+      sublabel: stats.notCalibrated > 0 ? `${stats.calibrated} откалибровано, ${stats.notCalibrated} в калибровке` : undefined,
+      icon: Users,
+      color: "text-primary",
+    },
     { label: "Игр сегодня", value: String(stats.gamesToday), icon: Gamepad2, color: "text-amber-400" },
     { label: "Матчей за неделю", value: String(stats.gamesWeek), icon: TrendingUp, color: "text-emerald-400" },
   ];
@@ -170,6 +186,9 @@ export function V0HomePage(props: { me: any }) {
               <div>
                 <p className="text-3xl font-bold tabular-nums">{stat.value}</p>
                 <p className="text-sm text-muted-foreground">{stat.label}</p>
+                {"sublabel" in stat && stat.sublabel ? (
+                  <p className="text-xs text-muted-foreground mt-0.5">{stat.sublabel}</p>
+                ) : null}
               </div>
             </CardContent>
           </Card>
@@ -273,6 +292,13 @@ export function V0HomePage(props: { me: any }) {
                         }`}
                       >
                         {rank === 1 ? <Trophy className="h-5 w-5" /> : <span className="font-bold">{rank}</span>}
+                      </div>
+                      <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-secondary/60 text-sm font-semibold border border-border overflow-hidden">
+                        {player.avatarUrl ? (
+                          <img src={player.avatarUrl} alt="" className="h-full w-full object-cover" />
+                        ) : (
+                          player.name?.trim().split(/\s+/).slice(0, 2).map((w) => w[0]?.toUpperCase()).join("") || "?"
+                        )}
                       </div>
                       <div>
                         <Badge variant="secondary" className="font-medium">

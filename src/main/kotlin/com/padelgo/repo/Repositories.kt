@@ -94,7 +94,13 @@ interface MatchDraftScoreRepository : JpaRepository<com.padelgo.domain.MatchDraf
 
 interface RatingChangeRepository : JpaRepository<RatingChange, UUID> {
     fun deleteAllByEventId(eventId: UUID)
+    fun findAllByPlayerIdOrderByCreatedAtAsc(playerId: UUID): List<RatingChange>
     fun findAllByPlayerId(playerId: UUID): List<RatingChange>
     fun findAllByPlayerIdAndEventId(playerId: UUID, eventId: UUID): List<RatingChange>
+}
+
+interface UserRatingNotificationRepository : JpaRepository<com.padelgo.domain.UserRatingNotification, UUID> {
+    fun findFirstByUserIdAndSeenAtIsNullOrderByCreatedAtDesc(userId: UUID): com.padelgo.domain.UserRatingNotification?
+    fun findAllByUserIdOrderByCreatedAtDesc(userId: UUID, pageable: org.springframework.data.domain.Pageable): List<com.padelgo.domain.UserRatingNotification>
 }
 

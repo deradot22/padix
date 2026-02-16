@@ -32,12 +32,14 @@ class AuthService(
                 gamesPlayed = 0
             )
         )
+        val gender = req.gender?.trim()?.uppercase()?.takeIf { it in listOf("M", "F") }
         val user = users.save(
             UserAccount(
                 email = email,
                 passwordHash = encoder.encode(req.password),
                 playerId = player.id!!,
-                publicId = generatePublicId()
+                publicId = generatePublicId(),
+                gender = gender
             )
         )
         return AuthResponse(jwt.createToken(user.id!!, user.email, user.playerId!!, false))
@@ -45,9 +47,9 @@ class AuthService(
 
     fun login(req: LoginRequest): AuthResponse {
         val email = req.email.trim().lowercase()
-        val user = users.findByEmailIgnoreCase(email) ?: throw ApiException(HttpStatus.UNAUTHORIZED, "Invalid credentials")
-        if (user.disabled) throw ApiException(HttpStatus.FORBIDDEN, "Account disabled")
-        if (!encoder.matches(req.password, user.passwordHash)) throw ApiException(HttpStatus.UNAUTHORIZED, "Invalid credentials")
+        val user = users.findByEmailIgnoreCase(email) ?: throw ApiException(HttpStatus.UNAUTHORIZED, "Неверный email или пароль")
+        if (user.disabled) throw ApiException(HttpStatus.FORBIDDEN, "Аккаунт заблокирован")
+        if (!encoder.matches(req.password, user.passwordHash)) throw ApiException(HttpStatus.UNAUTHORIZED, "Неверный email или пароль")
         return AuthResponse(jwt.createToken(user.id!!, user.email, user.playerId!!, false))
     }
 
@@ -66,7 +68,8 @@ class AuthService(
             surveyCompleted = user.surveyCompleted,
             surveyLevel = user.surveyLevel,
             calibrationEventsRemaining = user.calibrationEventsRemaining,
-            avatarUrl = player.avatarUrl
+            avatarUrl = player.avatarUrl,
+            gender = user.gender
         )
     }
 
@@ -89,6 +92,44 @@ class AuthService(
             player.avatarUrl = avatar
         }
         players.save(player)
+        return me(principal)
+    }
+
+    @Transactional
+    fun updateProfile(principal: JwtPrincipal, req: UpdateProfileRequest): MeResponse {
+        val user = users.findById(principal.userId).orElseThrow { ApiException(HttpStatus.UNAUTHORIZED, "User not found") }
+        if (user.disabled) throw ApiException(HttpStatus.FORBIDDEN, "Account disabled")
+        val player = players.findById(user.playerId!!).orElseThrow { ApiException(HttpStatus.UNAUTHORIZED, "Player not found") }
+
+        req.name?.trim()?.takeIf { it.isNotBlank() }?.let { name ->
+            val existing = players.findByNameIgnoreCase(name)
+            if (existing != null && existing.id != player.id) {
+                throw ApiException(HttpStatus.CONFLICT, "Имя уже занято")
+            }
+            player.name = name
+        }
+
+        req.email?.trim()?.lowercase()?.takeIf { it.isNotBlank() }?.let { email ->
+            val existing = users.findByEmailIgnoreCase(email)
+            if (existing != null && existing.id != user.id) {
+                throw ApiException(HttpStatus.CONFLICT, "Email уже занят")
+            }
+            user.email = email
+        }
+
+        req.password?.takeIf { it.isNotBlank() }?.let { password ->
+            user.passwordHash = encoder.encode(password)
+        }
+
+        when {
+            req.gender == null -> { /* no change */ }
+            req.gender.trim().isEmpty() -> user.gender = null
+            req.gender.trim().uppercase() in listOf("M", "F") -> user.gender = req.gender.trim().uppercase()
+            else -> { /* invalid, no change */ }
+        }
+
+        players.save(player)
+        users.save(user)
         return me(principal)
     }
 

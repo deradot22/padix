@@ -77,7 +77,8 @@ class SocialService(
                 rating = player?.rating ?: 0,
                 ntrp = player?.ntrp ?: "1.0",
                 gamesPlayed = player?.gamesPlayed ?: 0,
-                calibrationEventsRemaining = user.calibrationEventsRemaining
+                calibrationEventsRemaining = user.calibrationEventsRemaining,
+                avatarUrl = player?.avatarUrl
             )
         }.sortedBy { it.name.lowercase() }
 
@@ -186,7 +187,8 @@ class SocialService(
             val player = user.playerId?.let { playersById[it] }
             FriendRequestItem(
                 publicId = formatPublicId(user.publicId),
-                name = player?.name ?: user.email
+                name = player?.name ?: user.email,
+                avatarUrl = player?.avatarUrl
             )
         }.sortedBy { it.name.lowercase() }
     }
@@ -199,12 +201,14 @@ data class FriendItem(
     val rating: Int,
     val ntrp: String,
     val gamesPlayed: Int,
-    val calibrationEventsRemaining: Int
+    val calibrationEventsRemaining: Int,
+    val avatarUrl: String? = null
 )
 
 data class FriendRequestItem(
     val publicId: String,
-    val name: String
+    val name: String,
+    val avatarUrl: String? = null
 )
 
 data class FriendsSnapshot(
