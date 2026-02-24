@@ -64,7 +64,7 @@ export function V0HomePage(props: { me: any }) {
       setRegisteredIds({});
       return;
     }
-    const upcomingIds = (events ?? []).slice(0, 2).map((e) => e.id);
+    const upcomingIds = (events ?? []).filter((e) => e.status !== "FINISHED").slice(0, 2).map((e) => e.id);
     if (upcomingIds.length === 0) {
       setRegisteredIds({});
       return;
@@ -99,7 +99,7 @@ export function V0HomePage(props: { me: any }) {
     return { activePlayers: list.length, calibrated, notCalibrated, gamesToday, gamesWeek };
   }, [statsEvents, rating]);
 
-  const upcoming = (events ?? []).slice(0, 2);
+  const upcoming = (events ?? []).filter((e) => e.status !== "FINISHED").slice(0, 2);
   const topPlayers = useMemo(() => {
     const list = (rating ?? []).filter(
       (p) =>

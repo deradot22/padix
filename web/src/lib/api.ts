@@ -93,6 +93,9 @@ export type EventHistoryItem = {
   eventId: string;
   eventTitle: string;
   eventDate: string;
+  eventStartTime?: string;
+  eventEndTime?: string;
+  participants?: string[];
   matchesCount: number;
   totalPoints: number | null;
   ratingDelta: number;
@@ -102,6 +105,8 @@ export type EventHistoryMatch = {
   eventId: string;
   eventTitle: string;
   eventDate: string;
+  eventStartTime?: string;
+  eventEndTime?: string;
   roundNumber: number;
   matchId: string;
   courtNumber: number;

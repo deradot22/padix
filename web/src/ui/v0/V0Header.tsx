@@ -61,32 +61,30 @@ export function V0Header(props: {
             ) : null}
           </button>
 
-          <div className="flex items-center rounded-full border border-border bg-secondary p-1">
-            <button
-              type="button"
-              onClick={() => props.theme === "dark" && props.onToggleTheme()}
+          <button
+            type="button"
+            onClick={props.onToggleTheme}
+            className="flex items-center rounded-full border border-border bg-secondary p-1 cursor-pointer hover:bg-secondary/80 transition-colors"
+            aria-label={props.theme === "dark" ? "Переключить на светлую тему" : "Переключить на тёмную тему"}
+            title={props.theme === "dark" ? "Светлая тема" : "Тёмная тема"}
+          >
+            <span
               className={cn(
-                "rounded-full p-1.5 transition-colors",
+                "rounded-full p-1.5 transition-colors flex items-center justify-center",
                 props.theme !== "dark" ? "bg-background text-foreground shadow-sm" : "text-muted-foreground",
               )}
-              aria-label="Светлая тема"
-              title="Светлая тема"
             >
               <Sun className="h-4 w-4" />
-            </button>
-            <button
-              type="button"
-              onClick={() => props.theme !== "dark" && props.onToggleTheme()}
+            </span>
+            <span
               className={cn(
-                "rounded-full p-1.5 transition-colors",
+                "rounded-full p-1.5 transition-colors flex items-center justify-center",
                 props.theme === "dark" ? "bg-background text-foreground shadow-sm" : "text-muted-foreground",
               )}
-              aria-label="Тёмная тема"
-              title="Тёмная тема"
             >
               <Moon className="h-4 w-4" />
-            </button>
-          </div>
+            </span>
+          </button>
 
           {props.authed ? (
             <button

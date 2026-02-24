@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { api, EventHistoryItem, EventHistoryMatch, EventInviteItem, FriendsSnapshot } from "../../../lib/api";
+import { api, EventHistoryItem, EventHistoryMatch, EventInviteItem, FriendsSnapshot, hasToken } from "../../../lib/api";
 import { ntrpLevel } from "../../../lib/rating";
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
@@ -10,6 +10,7 @@ import { Input } from "@/components/ui/input";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { PlayerTooltip } from "@/components/player-tooltip";
+import { RatingGraph } from "@/components/rating-graph";
 import {
   Calendar,
   CheckCircle,
@@ -58,6 +59,9 @@ export function V0ProfilePage(props: { me: any; meLoaded?: boolean; onMeUpdate?:
   const [history, setHistory] = useState<EventHistoryItem[] | null>(null);
   const [details, setDetails] = useState<EventHistoryMatch[] | null>(null);
   const [detailsTitle, setDetailsTitle] = useState<string | null>(null);
+  const [detailsEventId, setDetailsEventId] = useState<string | null>(null);
+  const [detailsStatsOpen, setDetailsStatsOpen] = useState(false);
+  const [detailsStats, setDetailsStats] = useState<{ id: string; name: string; points: number }[]>([]);
   const [historyError, setHistoryError] = useState<string | null>(null);
   const [historyLoading, setHistoryLoading] = useState(true);
   const [acceptedInvites, setAcceptedInvites] = useState<Record<string, boolean>>({});
@@ -73,6 +77,8 @@ export function V0ProfilePage(props: { me: any; meLoaded?: boolean; onMeUpdate?:
   const [editError, setEditError] = useState<string | null>(null);
   const [info, setInfo] = useState<string | null>(null);
   const [idCopied, setIdCopied] = useState(false);
+  const [ratingHistory, setRatingHistory] = useState<{ date: string; rating: number; delta: number | null }[]>([]);
+  const [graphOpen, setGraphOpen] = useState(false);
 
   const persistAvatar = async (next: string | null) => {
     setAvatar(next);
@@ -235,6 +241,16 @@ export function V0ProfilePage(props: { me: any; meLoaded?: boolean; onMeUpdate?:
     };
   }, [props.me]);
 
+  useEffect(() => {
+    if (!props.me?.playerId || !hasToken()) return;
+    let cancelled = false;
+    api
+      .getRatingHistory()
+      .then((h) => { if (!cancelled) setRatingHistory(h); })
+      .catch(() => { if (!cancelled) setRatingHistory([]); });
+    return () => { cancelled = true; };
+  }, [props.me?.playerId]);
+
   const historyContent = useMemo(() => {
     if (historyLoading) return <div className="text-sm text-muted-foreground">Загрузка…</div>;
     if (historyError)
@@ -267,14 +283,35 @@ export function V0ProfilePage(props: { me: any; meLoaded?: boolean; onMeUpdate?:
                   try {
                     const res = await api.myHistoryEvent(it.eventId);
                     setDetails(res);
-                    setDetailsTitle(it.eventTitle);
+                    setDetailsEventId(it.eventId);
+                    setDetailsStatsOpen(false);
+                    setDetailsStats([]);
+                    const timeStr = it.eventStartTime
+                      ? ` ${it.eventStartTime.slice(0, 5)}${it.eventEndTime ? "–" + it.eventEndTime.slice(0, 5) : ""}`
+                      : "";
+                    setDetailsTitle(it.eventTitle + timeStr);
                   } catch (err: any) {
                     setHistoryError(err?.message ?? "Ошибка");
                   }
                 }}
               >
-                <td className="py-4 pr-6 text-sm text-muted-foreground font-medium">{it.eventDate}</td>
-                <td className="py-4 pr-6 font-semibold">{it.eventTitle}</td>
+                <td className="py-4 pr-6 text-sm text-muted-foreground font-medium">
+                  <div>{it.eventDate}</div>
+                  {it.eventStartTime ? (
+                    <div className="text-xs">
+                      {it.eventStartTime.slice(0, 5)}
+                      {it.eventEndTime ? `–${it.eventEndTime.slice(0, 5)}` : ""}
+                    </div>
+                  ) : null}
+                </td>
+                <td className="py-4 pr-6">
+                  <div className="font-semibold">{it.eventTitle}</div>
+                  {it.participants?.length ? (
+                    <div className="text-xs text-muted-foreground mt-0.5 max-w-[260px] truncate">
+                      {it.participants.join(", ")}
+                    </div>
+                  ) : null}
+                </td>
                 <td className="py-4 pr-6 text-sm tabular-nums font-medium">{it.matchesCount}</td>
                 <td className="py-4 pr-6 text-sm tabular-nums font-semibold">
                   {it.totalPoints ?? "—"}
@@ -856,6 +893,25 @@ export function V0ProfilePage(props: { me: any; meLoaded?: boolean; onMeUpdate?:
           </Card>
         </div>
 
+        {ratingHistory.length > 1 && (
+          <Card className="border-border/50">
+            <CardHeader className="pb-3">
+              <Button variant="ghost" className="w-full justify-between" onClick={() => setGraphOpen((o) => !o)}>
+                <CardTitle className="flex items-center gap-2 text-lg">
+                  <TrendingUp className="h-5 w-5 text-primary" />
+                  График рейтинга
+                </CardTitle>
+                <span className="text-muted-foreground">{graphOpen ? "−" : "+"}</span>
+              </Button>
+            </CardHeader>
+            {graphOpen && (
+              <CardContent>
+                <RatingGraph points={ratingHistory} />
+              </CardContent>
+            )}
+          </Card>
+        )}
+
         <Card className="border-border/50">
           <CardHeader className="pb-4">
             <CardTitle className="flex items-center gap-2">
@@ -868,17 +924,85 @@ export function V0ProfilePage(props: { me: any; meLoaded?: boolean; onMeUpdate?:
         </Card>
 
         {details ? (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-6" onClick={() => setDetails(null)}>
-            <div className="w-full max-w-5xl rounded-xl border border-border bg-card p-6" onClick={(e) => e.stopPropagation()}>
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-6" onClick={() => { setDetails(null); setDetailsStatsOpen(false); }}>
+            <div className="w-full max-w-5xl max-h-[90vh] overflow-y-auto rounded-xl border border-border bg-card p-6" onClick={(e) => e.stopPropagation()}>
               <div className="flex items-center justify-between gap-3">
                 <div className="text-lg font-semibold">
-                  Американка: {detailsTitle}{" "}
-                  {details?.[0]?.eventDate ? <span className="text-sm text-muted-foreground">{details[0].eventDate}</span> : null}
+                  {detailsTitle}{" "}
+                  {details?.[0]?.eventStartTime ? (
+                    <span className="text-sm text-muted-foreground">
+                      {details[0].eventStartTime.slice(0, 5)}
+                      {details[0].eventEndTime ? `–${details[0].eventEndTime.slice(0, 5)}` : ""}
+                      {" "}{details[0].eventDate}
+                    </span>
+                  ) : details?.[0]?.eventDate ? (
+                    <span className="text-sm text-muted-foreground">{details[0].eventDate}</span>
+                  ) : null}
                 </div>
-                <Button variant="outline" onClick={() => setDetails(null)}>
-                  Закрыть
-                </Button>
+                <div className="flex items-center gap-2">
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    onClick={async () => {
+                      if (detailsStatsOpen) {
+                        setDetailsStatsOpen(false);
+                        return;
+                      }
+                      if (detailsStats.length > 0) {
+                        setDetailsStatsOpen(true);
+                        return;
+                      }
+                      if (!detailsEventId) return;
+                      try {
+                        const d = await api.getEventDetails(detailsEventId);
+                        const totals = new Map<string, { id: string; name: string; points: number }>();
+                        d.rounds.flatMap((r: any) => r.matches).forEach((m: any) => {
+                          const score = m.score;
+                          if (!score || score.mode !== "POINTS") return;
+                          const ptsA = score.points?.teamAPoints ?? 0;
+                          const ptsB = score.points?.teamBPoints ?? 0;
+                          m.teamA.forEach((p: any) => {
+                            if (!p?.id) return;
+                            const row = totals.get(p.id) ?? { id: p.id, name: p.name, points: 0 };
+                            row.points += ptsA;
+                            totals.set(p.id, row);
+                          });
+                          m.teamB.forEach((p: any) => {
+                            if (!p?.id) return;
+                            const row = totals.get(p.id) ?? { id: p.id, name: p.name, points: 0 };
+                            row.points += ptsB;
+                            totals.set(p.id, row);
+                          });
+                        });
+                        const rows = Array.from(totals.values()).sort((a, b) => b.points - a.points || a.name.localeCompare(b.name));
+                        setDetailsStats(rows);
+                        setDetailsStatsOpen(true);
+                      } catch {}
+                    }}
+                  >
+                    <Trophy className="h-4 w-4 mr-1.5" />
+                    Статистика
+                  </Button>
+                  <Button variant="outline" onClick={() => { setDetails(null); setDetailsStatsOpen(false); }}>
+                    Закрыть
+                  </Button>
+                </div>
               </div>
+
+              {detailsStatsOpen && detailsStats.length > 0 ? (
+                <div className="mt-4 space-y-2">
+                  {detailsStats.map((row) => (
+                    <div
+                      key={row.id}
+                      className="flex items-center justify-between rounded-md border border-border/60 bg-secondary/40 px-3 py-2"
+                    >
+                      <div className="text-sm font-medium">{row.name}</div>
+                      <div className="text-sm font-semibold">{row.points}</div>
+                    </div>
+                  ))}
+                </div>
+              ) : null}
+
               <div className="mt-4 overflow-x-auto">
                 <table className="w-full">
                   <thead>

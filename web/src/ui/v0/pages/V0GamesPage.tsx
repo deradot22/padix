@@ -56,6 +56,7 @@ export function V0GamesPage(props: { me: any }) {
   const [dayOpen, setDayOpen] = useState(false);
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
   const [selectedEvents, setSelectedEvents] = useState<Event[]>([]);
+  const [registeredIds, setRegisteredIds] = useState<Record<string, boolean>>({});
 
   useEffect(() => {
     if (props.me && !props.me.surveyCompleted) return;
@@ -66,10 +67,35 @@ export function V0GamesPage(props: { me: any }) {
     const to = formatDate(new Date(now.getFullYear(), now.getMonth(), now.getDate() + 14));
     api
       .getUpcomingEvents(from, to)
-      .then((d) => setEvents(d ?? []))
+      .then((d) => setEvents((d ?? []).filter((e) => e.status !== "FINISHED")))
       .catch((e: unknown) => setError(e instanceof Error ? e.message : "Ошибка"))
       .finally(() => setLoading(false));
   }, [props.me]);
+
+  useEffect(() => {
+    const mainIds = (events ?? []).map((e) => e.id);
+    const selectedIds = selectedEvents.map((e) => e.id);
+    const allIds = [...new Set([...mainIds, ...selectedIds])];
+    if (allIds.length === 0 || !props.me?.playerId) {
+      setRegisteredIds({});
+      return;
+    }
+    let cancelled = false;
+    Promise.all(allIds.map((id) => api.getEventDetails(id)))
+      .then((details) => {
+        if (cancelled) return;
+        const map: Record<string, boolean> = {};
+        details.forEach((d) => {
+          const meId = props.me?.playerId;
+          map[d.event.id] = !!meId && (d.registeredPlayers ?? []).some((p) => p.id === meId);
+        });
+        setRegisteredIds(map);
+      })
+      .catch(() => {
+        if (!cancelled) setRegisteredIds({});
+      });
+    return () => { cancelled = true; };
+  }, [events, selectedEvents, props.me?.playerId]);
 
   const loadCalendarEvents = async (date: Date) => {
     const from = formatDate(new Date(date.getFullYear(), date.getMonth(), 1));
@@ -101,60 +127,109 @@ export function V0GamesPage(props: { me: any }) {
       );
     }
 
+    const shortMonths = ["янв", "фев", "мар", "апр", "май", "июн", "июл", "авг", "сен", "окт", "ноя", "дек"];
+    const shortDate = (dateStr: string) => {
+      const [y, m, d] = dateStr.split("-").map((v) => Number(v));
+      if (!y || !m || !d) return dateStr;
+      return `${d} ${shortMonths[m - 1] ?? ""}`;
+    };
+
     return (
-      <div className="overflow-visible">
-        <table className="w-full table-fixed">
-          <thead>
-            <tr className="border-b border-border text-center text-sm uppercase tracking-wider text-muted-foreground">
-              <th className="pb-4 pl-6 pr-4 font-medium">Дата</th>
-              <th className="pb-4 px-4 font-medium">Время</th>
-              <th className="pb-4 px-4 font-medium">Формат</th>
-              <th className="pb-4 px-4 font-medium">Игроки</th>
-              <th className="pb-4 px-4 font-medium w-32">Статус</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-border">
-            {events.map((e) => (
-              <tr
-                key={e.id}
-                className="group cursor-pointer transition-colors hover:bg-secondary/50"
-                onClick={() => nav(`/events/${e.id}`)}
-              >
-                <td className="py-5 pl-6 pr-4">
-                  <div className="flex items-center justify-center gap-3">
-                    <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-secondary">
-                      <Calendar className="h-5 w-5 text-muted-foreground" />
-                    </div>
-                    <span className="font-medium">{formatEventDate(e.date)}</span>
-                  </div>
-                </td>
-                <td className="py-5 px-4">
-                  <div className="flex items-center justify-center gap-2">
-                    <Clock className="h-4 w-4 text-muted-foreground" />
-                    <span className="tabular-nums">{timeRange(e.startTime, e.endTime)}</span>
-                  </div>
-                </td>
-                <td className="py-5 px-4 text-center">
-                  <span className="text-foreground">Американка</span>
-                </td>
-                <td className="py-5 px-4">
-                  <div className="flex items-center justify-center gap-2">
-                    <Users className="h-4 w-4 text-muted-foreground" />
-                    <span className="tabular-nums">{e.registeredCount}</span>
-                  </div>
-                </td>
-                <td className="py-5 px-4 max-w-[140px]">
-                  <div className="flex items-center justify-center">
-                    {getStatusBadge(e.status, "max-w-full whitespace-normal break-words")}
-                  </div>
-                </td>
+      <>
+        {/* Мобильная версия — карточки */}
+        <div className="space-y-2 md:hidden">
+          {events.map((e) => (
+            <button
+              key={e.id}
+              type="button"
+              className="w-full text-left rounded-lg border border-border bg-card p-3 hover:bg-secondary/50 transition-colors flex gap-3"
+              onClick={() => nav(`/events/${e.id}`)}
+            >
+              <div className="flex flex-col gap-2 min-w-0 flex-1">
+                <div className="flex items-center gap-2">
+                  <Calendar className="h-4 w-4 text-muted-foreground shrink-0" />
+                  <span className="font-medium text-sm whitespace-nowrap">{shortDate(e.date)}</span>
+                  <span className="text-muted-foreground text-sm tabular-nums">{timeRange(e.startTime, e.endTime)}</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="text-sm text-muted-foreground">{e.pairingMode === "BALANCED" ? "Баланс" : "Американка"}</span>
+                  <span className="text-muted-foreground">·</span>
+                  <Users className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                  <span className="text-sm text-muted-foreground tabular-nums">{e.registeredCount}/{e.courtsCount * 4}</span>
+                </div>
+              </div>
+              <div className="flex flex-col items-end justify-center gap-1.5 shrink-0">
+                {registeredIds[e.id] && (
+                  <Badge variant="secondary" className="text-xs bg-primary/15 text-primary border-primary/30">
+                    Вы записаны
+                  </Badge>
+                )}
+                {getStatusBadge(e.status, "text-xs")}
+              </div>
+            </button>
+          ))}
+        </div>
+
+        {/* Десктоп — таблица */}
+        <div className="hidden md:block overflow-x-auto">
+          <table className="w-full min-w-[600px]">
+            <thead>
+              <tr className="border-b border-border text-left text-xs uppercase tracking-wider text-muted-foreground">
+                <th className="pb-4 pl-4 pr-6 font-medium">Дата</th>
+                <th className="pb-4 px-4 font-medium">Время</th>
+                <th className="pb-4 px-4 font-medium">Формат</th>
+                <th className="pb-4 px-4 font-medium">Игроки</th>
+                <th className="pb-4 pr-4 pl-4 font-medium">Статус</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+            </thead>
+            <tbody className="divide-y divide-border">
+              {events.map((e) => (
+                <tr
+                  key={e.id}
+                  className="group cursor-pointer transition-colors hover:bg-secondary/50"
+                  onClick={() => nav(`/events/${e.id}`)}
+                >
+                  <td className="py-5 pl-4 pr-6 align-middle">
+                    <div className="flex items-center gap-3">
+                      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-secondary">
+                        <Calendar className="h-5 w-5 text-muted-foreground" />
+                      </div>
+                      <span className="font-medium whitespace-nowrap">{formatEventDate(e.date)}</span>
+                    </div>
+                  </td>
+                  <td className="py-5 px-4 align-middle">
+                    <div className="flex items-center gap-2">
+                      <Clock className="h-4 w-4 shrink-0 text-muted-foreground" />
+                      <span className="tabular-nums">{timeRange(e.startTime, e.endTime)}</span>
+                    </div>
+                  </td>
+                  <td className="py-5 px-4 align-middle">
+                    <span className="whitespace-nowrap">{e.pairingMode === "BALANCED" ? "Баланс" : "Американка"}</span>
+                  </td>
+                  <td className="py-5 px-4 align-middle">
+                    <div className="flex items-center gap-2">
+                      <Users className="h-4 w-4 shrink-0 text-muted-foreground" />
+                      <span className="tabular-nums">{e.registeredCount}/{e.courtsCount * 4}</span>
+                    </div>
+                  </td>
+                  <td className="py-5 px-4 align-middle">
+                    <div className="flex items-center gap-2">
+                      {registeredIds[e.id] && (
+                        <Badge variant="secondary" className="text-xs bg-primary/15 text-primary border-primary/30 shrink-0">
+                          Вы записаны
+                        </Badge>
+                      )}
+                      {getStatusBadge(e.status, "text-xs shrink-0")}
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </>
     );
-  }, [error, events, loading, nav]);
+  }, [error, events, loading, nav, registeredIds]);
 
   return (
     <div className="space-y-8">
@@ -249,8 +324,13 @@ export function V0GamesPage(props: { me: any }) {
                       </div>
                     </div>
                     <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                      {registeredIds[e.id] && (
+                        <Badge variant="secondary" className="text-xs bg-primary/15 text-primary border-primary/30">
+                          Вы записаны
+                        </Badge>
+                      )}
                       <Users className="h-4 w-4" />
-                      <span>{e.registeredCount}</span>
+                      <span className="tabular-nums">{e.registeredCount}/{e.courtsCount * 4}</span>
                     </div>
                   </div>
                 </button>

@@ -128,15 +128,33 @@ export function ProfilePage(props: { me: any; meLoaded?: boolean }) {
                     try {
                       const res = await api.myHistoryEvent(it.eventId);
                       setDetails(res);
-                      setDetailsTitle(it.eventTitle);
+                      const timeStr = it.eventStartTime
+                        ? ` ${it.eventStartTime.slice(0, 5)}${it.eventEndTime ? "–" + it.eventEndTime.slice(0, 5) : ""}`
+                        : "";
+                      setDetailsTitle(it.eventTitle + timeStr);
                     } catch (err: any) {
                       setHistoryError(err?.message ?? "Ошибка");
                     }
                   }}
                   style={{ cursor: "pointer" }}
                 >
-                  <td className="muted">{it.eventDate}</td>
-                  <td>{it.eventTitle}</td>
+                  <td className="muted">
+                    {it.eventDate}
+                    {it.eventStartTime ? (
+                      <div style={{ fontSize: "0.75em" }}>
+                        {it.eventStartTime.slice(0, 5)}
+                        {it.eventEndTime ? `–${it.eventEndTime.slice(0, 5)}` : ""}
+                      </div>
+                    ) : null}
+                  </td>
+                  <td>
+                    <div>{it.eventTitle}</div>
+                    {it.participants?.length ? (
+                      <div className="muted" style={{ fontSize: "0.75em", maxWidth: 220, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                        {it.participants.join(", ")}
+                      </div>
+                    ) : null}
+                  </td>
                   <td>{it.matchesCount}</td>
                   <td>{it.totalPoints ?? "—"}</td>
                   <td>

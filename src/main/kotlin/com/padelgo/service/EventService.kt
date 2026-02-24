@@ -22,6 +22,7 @@ import com.padelgo.repo.RatingChangeRepository
 import com.padelgo.repo.RegistrationRepository
 import com.padelgo.repo.RoundRepository
 import jakarta.transaction.Transactional
+import org.slf4j.LoggerFactory
 import org.springframework.http.HttpStatus
 import org.springframework.stereotype.Service
 import java.time.LocalDate
@@ -44,6 +45,8 @@ class EventService(
     private val courtRepo: EventCourtRepository,
     private val ratingNotificationRepo: com.padelgo.repo.UserRatingNotificationRepository
 ) {
+    private val log = LoggerFactory.getLogger(EventService::class.java)
+
     fun getToday(date: LocalDate = LocalDate.now()): List<Event> =
         eventRepo.findAllByDateOrderByStartTimeAsc(date)
 
@@ -167,6 +170,7 @@ class EventService(
 
     @Transactional
     fun addRound(eventId: UUID, userId: UUID) {
+        log.info("[ACTION] addRound called | eventId={} userId={}", eventId, userId)
         val event = getEvent(eventId)
         requireAuthor(event, userId)
         if (event.status != EventStatus.IN_PROGRESS) throw ApiException(HttpStatus.CONFLICT, "Event is not in progress")
@@ -210,6 +214,7 @@ class EventService(
 
     @Transactional
     fun addFinalRound(eventId: UUID, userId: UUID) {
+        log.info("[ACTION] addFinalRound called | eventId={} userId={}", eventId, userId)
         val event = getEvent(eventId)
         requireAuthor(event, userId)
         if (event.status != EventStatus.IN_PROGRESS) throw ApiException(HttpStatus.CONFLICT, "Event is not in progress")
@@ -221,27 +226,8 @@ class EventService(
             throw ApiException(HttpStatus.CONFLICT, "Нужно минимум $capacity игроков, сейчас ${playerIds.size}")
         }
 
-        val matches = matchRepo.findAllByEventId(eventId)
-        val scoresByMatch = matches.associate { m -> m.id!! to scoreRepo.findAllByMatchIdOrderBySetNumberAsc(m.id!!) }
-        val pointsByPlayer = mutableMapOf<UUID, Int>()
-        playerIds.forEach { pointsByPlayer[it] = 0 }
-
-        matches.forEach { m ->
-            val scores = scoresByMatch[m.id!!].orEmpty()
-            if (scores.isEmpty()) return@forEach
-            val (teamAPoints, teamBPoints) = if (event.scoringMode == ScoringMode.POINTS) {
-                val s1 = scores.first()
-                s1.teamAGames to s1.teamBGames
-            } else {
-                scores.sumOf { it.teamAGames } to scores.sumOf { it.teamBGames }
-            }
-            listOf(m.teamAPlayer1Id, m.teamAPlayer2Id).forEach { pid ->
-                if (pid != null) pointsByPlayer[pid] = (pointsByPlayer[pid] ?: 0) + teamAPoints
-            }
-            listOf(m.teamBPlayer1Id, m.teamBPlayer2Id).forEach { pid ->
-                if (pid != null) pointsByPlayer[pid] = (pointsByPlayer[pid] ?: 0) + teamBPoints
-            }
-        }
+        val lastRound = roundRepo.findAllByEventIdOrderByRoundNumberAsc(eventId).maxByOrNull { it.roundNumber }
+        val pointsByPlayer = computeTournamentStandings(eventId, playerIds, event.scoringMode, maxRoundNumber = lastRound?.roundNumber)
 
         val players = playerRepo.findAllById(playerIds).associateBy { it.id!! }
         val leaderboard = playerIds.sortedWith(
@@ -252,13 +238,19 @@ class EventService(
 
         val selected = leaderboard.take(capacity)
         val groups = selected.chunked(4).filter { it.size == 4 }
-        val lastRound = roundRepo.findAllByEventIdOrderByRoundNumberAsc(eventId).maxByOrNull { it.roundNumber }
+        log.info("[addFinalRound] points={}", selected.map { players[it]?.name to (pointsByPlayer[it] ?: 0) })
+        log.info("[addFinalRound] leaderboard={}", selected.map { players[it]?.name ?: it.toString() })
+        log.info("[addFinalRound] groups={}", groups.map { g -> g.map { players[it]?.name ?: it.toString() } })
         val round = roundRepo.save(Round(eventId = eventId, roundNumber = (lastRound?.roundNumber ?: 0) + 1))
         groups.forEachIndexed { idx, quad ->
             val a = quad[0]
             val b = quad[1]
             val c = quad[2]
             val d = quad[3]
+            // Snake: 1+4 vs 2+3, 5+8 vs 6+7
+            val teamANames = listOf(players[a]?.name, players[d]?.name).joinToString(" + ")
+            val teamBNames = listOf(players[b]?.name, players[c]?.name).joinToString(" + ")
+            log.info("[addFinalRound] Court {}: {} vs {}", idx + 1, teamANames, teamBNames)
             matchRepo.save(
                 Match(
                     roundId = round.id!!,
@@ -271,6 +263,41 @@ class EventService(
                 )
             )
         }
+    }
+
+    private fun computeTournamentStandings(eventId: UUID, playerIds: List<UUID>, scoringMode: ScoringMode, maxRoundNumber: Int? = null): Map<UUID, Int> {
+        val matches = matchRepo.findAllByEventId(eventId)
+        val rounds = if (maxRoundNumber != null) {
+            roundRepo.findAllByEventIdOrderByRoundNumberAsc(eventId).filter { it.roundNumber <= maxRoundNumber }.map { it.id!! }.toSet()
+        } else null
+        val matchesToUse = if (rounds != null) matches.filter { it.roundId in rounds } else matches
+        val scoresByMatch = matchesToUse.associate { m -> m.id!! to scoreRepo.findAllByMatchIdOrderBySetNumberAsc(m.id!!) }
+        val pointsByPlayer = mutableMapOf<UUID, Int>()
+        playerIds.forEach { pointsByPlayer[it] = 0 }
+
+        matchesToUse.forEach { m ->
+            val scores = scoresByMatch[m.id!!].orEmpty()
+            val (teamAPoints, teamBPoints) = if (scoringMode == ScoringMode.POINTS) {
+                if (scores.isNotEmpty()) {
+                    val s1 = scores.first()
+                    s1.teamAGames to s1.teamBGames
+                } else {
+                    val draft = draftScoreRepo.findByMatchId(m.id!!)
+                    if (draft != null) draft.teamAPoints to draft.teamBPoints else return@forEach
+                }
+            } else {
+                if (scores.isEmpty()) return@forEach
+                scores.sumOf { it.teamAGames } to scores.sumOf { it.teamBGames }
+            }
+            listOf(m.teamAPlayer1Id, m.teamAPlayer2Id).forEach { pid ->
+                if (pid != null) pointsByPlayer[pid] = (pointsByPlayer[pid] ?: 0) + teamAPoints
+            }
+            listOf(m.teamBPlayer1Id, m.teamBPlayer2Id).forEach { pid ->
+                if (pid != null) pointsByPlayer[pid] = (pointsByPlayer[pid] ?: 0) + teamBPoints
+            }
+        }
+
+        return pointsByPlayer
     }
 
     private fun clearSchedule(eventId: UUID) {
@@ -651,6 +678,7 @@ class EventService(
 
     @Transactional
     fun finishEvent(eventId: UUID, userId: UUID) {
+        log.info("[ACTION] finishEvent called | eventId={} userId={}", eventId, userId)
         val event = getEvent(eventId)
         requireAuthor(event, userId)
         if (event.status == EventStatus.FINISHED) return
@@ -876,6 +904,8 @@ class EventService(
                 eventId = e.id!!,
                 eventTitle = e.title,
                 eventDate = e.date,
+                eventStartTime = e.startTime,
+                eventEndTime = e.endTime,
                 roundNumber = r.roundNumber,
                 matchId = m.id!!,
                 courtNumber = m.courtNumber,
@@ -900,12 +930,19 @@ class EventService(
 
         val eventIds = matches.map { it.eventId }.toSet()
         val events = eventRepo.findAllById(eventIds).associateBy { it.id!! }
-        val ratingDeltas = ratingChangeRepo.findAllByPlayerId(playerId)
-            .groupBy { it.eventId }
-            .mapValues { (_, v) -> v.sumOf { it.delta } }
+        val ratingChanges = ratingChangeRepo.findAllByPlayerId(playerId)
+        val ratingDeltas = ratingChanges.groupBy { it.eventId }.mapValues { (_, v) -> v.sumOf { it.delta } }
+        val finishedAtByEvent = ratingChanges.groupBy { it.eventId }.mapValues { (_, v) -> v.maxOfOrNull { it.createdAt!! } }
 
         val scoresByMatch = matches.associate { m ->
             m.matchId to scoreRepo.findAllByMatchIdOrderBySetNumberAsc(m.matchId)
+        }
+
+        val participantsByEvent = eventIds.associateWith { eid ->
+            val regs = regRepo.findAllByEventIdAndStatus(eid)
+            val pids = regs.mapNotNull { it.playerId }
+            val players = playerRepo.findAllById(pids)
+            players.map { it.name }.sorted()
         }
 
         return matches
@@ -927,12 +964,20 @@ class EventService(
                     eventId = eventId,
                     eventTitle = e.title,
                     eventDate = e.date,
+                    eventStartTime = e.startTime,
+                    eventEndTime = e.endTime,
+                    participants = participantsByEvent[eventId] ?: emptyList(),
+                    finishedAt = finishedAtByEvent[eventId],
                     matchesCount = items.size,
                     totalPoints = totalPoints,
                     ratingDelta = ratingDeltas[eventId] ?: 0
                 )
             }
-            .sortedWith(compareByDescending<PlayerEventHistoryItem> { it.eventDate })
+            .sortedWith(
+                compareByDescending<PlayerEventHistoryItem> { it.finishedAt != null }
+                    .thenByDescending { it.finishedAt ?: java.time.Instant.EPOCH }
+                    .thenByDescending { it.eventDate }
+            )
     }
 
     fun getRatingHistoryForPlayer(playerId: UUID): List<RatingHistoryPoint> {
@@ -989,6 +1034,8 @@ data class PlayerMatchHistoryItem(
     val eventId: UUID,
     val eventTitle: String,
     val eventDate: java.time.LocalDate,
+    val eventStartTime: java.time.LocalTime? = null,
+    val eventEndTime: java.time.LocalTime? = null,
     val roundNumber: Int,
     val matchId: UUID,
     val courtNumber: Int,
@@ -1012,6 +1059,10 @@ data class PlayerEventHistoryItem(
     val eventId: UUID,
     val eventTitle: String,
     val eventDate: java.time.LocalDate,
+    val eventStartTime: java.time.LocalTime? = null,
+    val eventEndTime: java.time.LocalTime? = null,
+    val participants: List<String> = emptyList(),
+    val finishedAt: java.time.Instant? = null,
     val matchesCount: Int,
     val totalPoints: Int?,
     val ratingDelta: Int

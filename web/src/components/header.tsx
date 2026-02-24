@@ -350,24 +350,24 @@ export function Header(props: {
               </div>
           </div>
 
-          <div className="flex items-center rounded-full border border-border bg-secondary p-1">
-            <button
-              onClick={() => toggleTheme(false)}
-              className={cn("rounded-full p-1.5 transition-colors", !isDark ? "bg-background text-foreground shadow-sm" : "text-muted-foreground")}
-              aria-label="Светлая тема"
-              title="Светлая тема"
+          <button
+            type="button"
+            onClick={() => toggleTheme(!isDark)}
+            className="flex items-center rounded-full border border-border bg-secondary p-1 cursor-pointer hover:bg-secondary/80 transition-colors"
+            aria-label={isDark ? "Переключить на светлую тему" : "Переключить на тёмную тему"}
+            title={isDark ? "Светлая тема" : "Тёмная тема"}
+          >
+            <span
+              className={cn("rounded-full p-1.5 transition-colors flex items-center justify-center", !isDark ? "bg-background text-foreground shadow-sm" : "text-muted-foreground")}
             >
               <Sun className="h-4 w-4" />
-            </button>
-            <button
-              onClick={() => toggleTheme(true)}
-              className={cn("rounded-full p-1.5 transition-colors", isDark ? "bg-background text-foreground shadow-sm" : "text-muted-foreground")}
-              aria-label="Тёмная тема"
-              title="Тёмная тема"
+            </span>
+            <span
+              className={cn("rounded-full p-1.5 transition-colors flex items-center justify-center", isDark ? "bg-background text-foreground shadow-sm" : "text-muted-foreground")}
             >
               <Moon className="h-4 w-4" />
-            </button>
-          </div>
+            </span>
+          </button>
 
           <Button
             variant="ghost"

@@ -60,7 +60,11 @@ export function V0EventPage(props: { me: any; meLoaded?: boolean }) {
   const [scoreSavingId, setScoreSavingId] = useState<string | null>(null);
   const [scoreError, setScoreError] = useState<string | null>(null);
   const [scorePadOpen, setScorePadOpen] = useState(false);
+  const [scorePadClosing, setScorePadClosing] = useState(false);
   const [myAvatar, setMyAvatar] = useState<string | null>(null);
+  const activeMatchRef = useRef<HTMLDivElement | null>(null);
+
+  const ANIM_DURATION_MS = 300;
 
   /** After saving score for activeMatchId, navigate to the next unscored match in the same round,
    *  or to the first match of the next round if all matches in the current round are done. */
@@ -119,6 +123,13 @@ export function V0EventPage(props: { me: any; meLoaded?: boolean }) {
     prevActiveMatchIdRef.current = activeMatchId;
   }, [activeMatchId]);
 
+  /** Scroll to active court when entering score or when navigating via "Следующий матч/раунд" */
+  useEffect(() => {
+    if (activeMatchId && activeMatchRef.current) {
+      activeMatchRef.current.scrollIntoView({ behavior: "smooth", block: "start", inline: "nearest" });
+    }
+  }, [activeMatchId]);
+
   useEffect(() => {
     const e = data?.event;
     if (
@@ -146,7 +157,7 @@ export function V0EventPage(props: { me: any; meLoaded?: boolean }) {
     const otherUnscored = currentRound.matches.some(
       (m) => m.id !== activeMatchId && m.status !== "FINISHED" && !m.score?.points,
     );
-    if (otherUnscored) return "Следующий корт";
+    if (otherUnscored) return "Следующий матч";
     const isLastRound = currentRoundIdx === data.rounds.length - 1;
     return isLastRound ? null : "Следующий раунд";
   }, [data, activeMatchId]);
@@ -568,20 +579,29 @@ export function V0EventPage(props: { me: any; meLoaded?: boolean }) {
                   </>
                 ) : e.status === "IN_PROGRESS" ? (
                   <>
-                    {isAuthor ? (
+                    <div className="flex flex-wrap items-center gap-2">
+                      {isAuthor ? (
+                        <button
+                          type="button"
+                          className="h-12 px-6 rounded-md bg-primary text-primary-foreground text-base font-medium hover:bg-primary/90 transition-colors"
+                          onClick={() => {
+                            setActionError(null);
+                            setRoundsOpen(true);
+                          }}
+                        >
+                          Ввести счёт
+                        </button>
+                      ) : (
+                        <div className="text-sm text-muted-foreground">Игра идёт</div>
+                      )}
                       <button
                         type="button"
-                        className="h-12 px-6 rounded-md bg-primary text-primary-foreground text-base font-medium hover:bg-primary/90 transition-colors"
-                        onClick={() => {
-                          setActionError(null);
-                          setRoundsOpen(true);
-                        }}
+                        className="h-10 px-4 rounded-md border border-border bg-secondary text-sm font-medium hover:bg-secondary/80 transition-colors"
+                        onClick={() => setStatsOpen(true)}
                       >
-                        Ввести счёт
+                        Таблица лидеров
                       </button>
-                    ) : (
-                      <div className="text-sm text-muted-foreground">Игра идёт</div>
-                    )}
+                    </div>
 
                     {info ? <div className="text-sm text-muted-foreground">{info}</div> : null}
                     {actionError ? (
@@ -598,7 +618,7 @@ export function V0EventPage(props: { me: any; meLoaded?: boolean }) {
                       className="h-10 px-4 rounded-md border border-border bg-secondary text-sm font-medium hover:bg-secondary/80 transition-colors"
                       onClick={() => setStatsOpen(true)}
                     >
-                      Статистика игры
+                      Таблица лидеров
                     </button>
                   </div>
                 ) : (
@@ -998,6 +1018,7 @@ export function V0EventPage(props: { me: any; meLoaded?: boolean }) {
                             return (
                               <div
                                 key={m.id}
+                                ref={m.id === activeMatchId ? activeMatchRef : undefined}
                                 className={cn(
                                   "rounded-lg border border-border/50 p-3 transition-colors",
                                   active ? "bg-secondary/30" : "bg-secondary/10",
@@ -1040,7 +1061,12 @@ export function V0EventPage(props: { me: any; meLoaded?: boolean }) {
                         </div>
 
                         {activeMatchId && scorePadOpen ? (
-                          <div className="mt-4">
+                          <div
+                            className={cn(
+                              "mt-4 overflow-hidden transition-all duration-300 ease-out",
+                              scorePadClosing ? "max-h-0 opacity-0" : "max-h-[280px] opacity-100",
+                            )}
+                          >
                             <div className="grid grid-cols-6 gap-2">
                               {[0, ...Array.from({ length: (e.pointsPerPlayerPerMatch ?? 6) * 4 }, (_, i) => i + 1)].map((n) => (
                                 <button
@@ -1086,25 +1112,32 @@ export function V0EventPage(props: { me: any; meLoaded?: boolean }) {
                               {nextButtonLabel && (
                               <Button
                                 size="sm"
-                                disabled={scoreSavingId === activeMatchId}
+                                disabled={scoreSavingId === activeMatchId || scorePadClosing}
                                 onClick={async () => {
                                   const current = scoreByMatch[activeMatchId];
                                   if (!current) return;
                                   if (!eventId) return;
+                                  setScorePadClosing(true);
                                   const totalPoints = (e.pointsPerPlayerPerMatch ?? 6) * 4;
+                                  let refreshed: EventDetails | null = null;
                                   if (current.a + current.b !== totalPoints) {
                                     setScoreSavingId(activeMatchId);
                                     try {
                                       await api.saveDraftScore(activeMatchId, { teamAPoints: current.a, teamBPoints: current.b });
-                                      const refreshed = await api.getEventDetails(eventId);
+                                      refreshed = await api.getEventDetails(eventId);
                                       setData(refreshed);
                                       setInfo("Черновик счёта сохранён");
-                                      navigateAfterScore(refreshed.rounds ?? [], activeMatchId);
-                                    } catch (e: any) {
-                                      const msg = e?.message ?? "Не удалось сохранить черновик";
+                                    } catch (err: any) {
+                                      const msg = err?.message ?? "Не удалось сохранить черновик";
                                       setScoreError(msg);
+                                      setScorePadClosing(false);
                                     } finally {
                                       setScoreSavingId(null);
+                                    }
+                                    if (refreshed) {
+                                      await new Promise((r) => setTimeout(r, ANIM_DURATION_MS));
+                                      navigateAfterScore(refreshed.rounds ?? [], activeMatchId);
+                                      setScorePadClosing(false);
                                     }
                                     return;
                                   }
@@ -1112,12 +1145,11 @@ export function V0EventPage(props: { me: any; meLoaded?: boolean }) {
                                   setScoreError(null);
                                   try {
                                     await api.submitScore(activeMatchId, { teamAPoints: current.a, teamBPoints: current.b });
-                                    const refreshed = await api.getEventDetails(eventId);
+                                    refreshed = await api.getEventDetails(eventId);
                                     setData(refreshed);
                                     setInfo("Счёт сохранён");
-                                    navigateAfterScore(refreshed.rounds ?? [], activeMatchId);
-                                  } catch (e: any) {
-                                    const msg = e?.message ?? "Не удалось сохранить счёт";
+                                  } catch (err: any) {
+                                    const msg = err?.message ?? "Не удалось сохранить счёт";
                                     if (msg.includes("Survey is required")) {
                                       setScoreError("Нужно пройти опрос, чтобы сохранять счёт.");
                                     } else if (msg.includes("Only participants")) {
@@ -1131,8 +1163,14 @@ export function V0EventPage(props: { me: any; meLoaded?: boolean }) {
                                     } else {
                                       setScoreError(msg);
                                     }
+                                    setScorePadClosing(false);
                                   } finally {
                                     setScoreSavingId(null);
+                                  }
+                                  if (refreshed) {
+                                    await new Promise((r) => setTimeout(r, ANIM_DURATION_MS));
+                                    navigateAfterScore(refreshed.rounds ?? [], activeMatchId);
+                                    setScorePadClosing(false);
                                   }
                                 }}
                               >
@@ -1225,6 +1263,7 @@ export function V0EventPage(props: { me: any; meLoaded?: boolean }) {
                     setInfo(null);
                     setActionError(null);
                     try {
+                      console.log("[EVENT] Нажата кнопка: + Раунд (addRound)", eventId);
                       await api.addRound(eventId);
                       const refreshed = await api.getEventDetails(eventId);
                       setData(refreshed);
@@ -1241,9 +1280,11 @@ export function V0EventPage(props: { me: any; meLoaded?: boolean }) {
                   disabled={finalRoundLocked}
                   onClick={async () => {
                     if (!eventId) return;
+                    if (!window.confirm("Добавить финальный раунд? Пары будут расставлены по турнирной таблице.")) return;
                     setInfo(null);
                     setActionError(null);
                     try {
+                      console.log("[EVENT] Нажата кнопка: ФИНАЛЬНЫЙ РАУНД (addFinalRound)", eventId);
                       await api.addFinalRound(eventId);
                       const refreshed = await api.getEventDetails(eventId);
                       setData(refreshed);
@@ -1263,6 +1304,7 @@ export function V0EventPage(props: { me: any; meLoaded?: boolean }) {
                 disabled={finishing}
                 onClick={async () => {
                   if (!eventId) return;
+                  if (!window.confirm("Вы уверены, что хотите завершить игру? Рейтинг будет пересчитан.")) return;
                   setFinishing(true);
                   setActionError(null);
                   setInfo(null);
@@ -1288,7 +1330,7 @@ export function V0EventPage(props: { me: any; meLoaded?: boolean }) {
         <Dialog open={statsOpen} onOpenChange={setStatsOpen}>
           <DialogContent className="sm:max-w-lg">
             <DialogHeader>
-              <DialogTitle>Статистика игры</DialogTitle>
+              <DialogTitle>Таблица лидеров</DialogTitle>
             </DialogHeader>
             {statsRows.length === 0 ? (
               <div className="text-sm text-muted-foreground">Нет данных по очкам.</div>

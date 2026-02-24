@@ -20,8 +20,6 @@ export function V0RatingPage(props: { authed: boolean; me?: { playerId?: string 
   const [calibrationFilter, setCalibrationFilter] = useState<"all" | "calibrated" | "in_calibration">("calibrated");
   const [ntrpMin, setNtrpMin] = useState<string>("");
   const [ntrpMax, setNtrpMax] = useState<string>("");
-  const [ratingHistory, setRatingHistory] = useState<{ date: string; rating: number; delta: number | null }[]>([]);
-  const [graphOpen, setGraphOpen] = useState(false);
   const myRowRef = useRef<HTMLTableRowElement | null>(null);
   const meId = props.me?.playerId;
 
@@ -64,16 +62,6 @@ export function V0RatingPage(props: { authed: boolean; me?: { playerId?: string 
       .catch(() => { if (!cancelled) setFriends(null); });
     return () => { cancelled = true; };
   }, [props.authed]);
-
-  useEffect(() => {
-    if (!props.authed || !meId || !hasToken()) return;
-    let cancelled = false;
-    api
-      .getRatingHistory()
-      .then((h) => { if (!cancelled) setRatingHistory(h); })
-      .catch(() => { if (!cancelled) setRatingHistory([]); });
-    return () => { cancelled = true; };
-  }, [props.authed, meId]);
 
   // Базовый список (только калибровочный фильтр, без поиска/NTRP), для вычисления глобального ранга
   const basePlayers = useMemo(() => {
@@ -136,14 +124,14 @@ export function V0RatingPage(props: { authed: boolean; me?: { playerId?: string 
   const getRankIcon = (rank: number) => {
     if (rank <= 3) {
       return (
-        <div className={`flex h-8 w-8 items-center justify-center rounded-full ${getRankStyle(rank)} border`}>
+        <div className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full ${getRankStyle(rank)} border`}>
           {rank === 1 && <Trophy className="h-4 w-4" />}
           {rank === 2 && <span className="text-sm font-bold">2</span>}
           {rank === 3 && <span className="text-sm font-bold">3</span>}
         </div>
       );
     }
-    return <span className="w-8 text-center text-muted-foreground">{rank}</span>;
+    return <span className="inline-flex h-8 w-8 shrink-0 items-center justify-center text-muted-foreground tabular-nums">{rank}</span>;
   };
 
   const friendPublicIds = new Set((friends?.friends ?? []).map((f) => f.publicId));
@@ -161,10 +149,12 @@ export function V0RatingPage(props: { authed: boolean; me?: { playerId?: string 
     <tr
       key={player.id}
       ref={isMe ? myRowRef : undefined}
-      className={`group transition-colors hover:bg-secondary/50 ${isMe ? "bg-primary/10 border-l-4 border-l-primary" : ""}`}
+      className={`group transition-colors hover:bg-secondary/50 ${isMe ? "bg-primary/10 shadow-[inset_4px_0_0_0_var(--primary)]" : ""}`}
     >
-      <td className={`py-4 pr-3 align-middle ${isMe ? "pl-4" : ""}`}>{getRankIcon(rank)}</td>
-      <td className="py-4 pr-3 align-middle">
+      <td className="py-4 pl-3 pr-3 align-middle">
+        <div className="flex justify-center">{getRankIcon(rank)}</div>
+      </td>
+      <td className="py-4 pr-3 align-middle min-w-0 overflow-hidden">
         <PlayerTooltip
           player={{
             id: player.id,
@@ -204,22 +194,21 @@ export function V0RatingPage(props: { authed: boolean; me?: { playerId?: string 
             return "Заявка отправлена";
           }}
         >
-          <div className="flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-full bg-secondary/60 text-sm font-semibold border border-border overflow-hidden">
+          <div className="flex items-center gap-3 min-w-0">
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-secondary/60 text-sm font-semibold border border-border overflow-hidden">
               {player.avatarUrl ? (
                 <img src={player.avatarUrl} alt="" className="h-full w-full object-cover" />
               ) : (
                 initials(player.name) || "?"
               )}
             </div>
-            <Badge variant="secondary" className="font-medium max-w-full truncate cursor-pointer">
+            <Badge variant="secondary" className="font-medium min-w-0 max-w-full truncate cursor-pointer">
               {player.name}
-              {isMe ? " (вы)" : ""}
             </Badge>
           </div>
         </PlayerTooltip>
       </td>
-      <td className="py-4 pr-3 align-middle">
+      <td className="py-4 pl-4 pr-3 align-middle whitespace-nowrap">
         <span className="font-semibold tabular-nums">
           {(player.calibrationEventsRemaining ?? 0) > 0 && isMe ? "—" : player.rating}
         </span>
@@ -345,9 +334,9 @@ export function V0RatingPage(props: { authed: boolean; me?: { playerId?: string 
               <table className="w-full table-fixed text-sm sm:text-base">
                 <thead>
                   <tr className="border-b border-border text-left text-sm text-muted-foreground">
-                    <th className="pb-3 pr-3 font-medium w-10">#</th>
-                    <th className="pb-3 pr-3 font-medium">Игрок</th>
-                    <th className="pb-3 pr-3 font-medium w-20">Рейтинг</th>
+                    <th className="pb-3 pl-3 pr-3 font-medium w-14 text-center">#</th>
+                    <th className="pb-3 pr-3 font-medium text-center">Игрок</th>
+                    <th className="pb-3 pl-4 pr-3 font-medium w-20">Рейтинг</th>
                     <th className="pb-3 pr-3 font-medium w-16 hidden sm:table-cell">NTRP</th>
                     <th className="pb-3 font-medium w-16 hidden sm:table-cell">Матчей</th>
                   </tr>
@@ -382,25 +371,6 @@ export function V0RatingPage(props: { authed: boolean; me?: { playerId?: string 
             </div>
           </CardContent>
         </Card>
-
-        {props.authed && ratingHistory.length > 1 && (
-          <Card className="mt-6 w-full">
-            <CardHeader className="pb-3">
-              <Button variant="ghost" className="w-full justify-between" onClick={() => setGraphOpen((o) => !o)}>
-                <CardTitle className="flex items-center gap-2 text-lg">
-                  <TrendingUp className="h-5 w-5 text-primary" />
-                  График рейтинга
-                </CardTitle>
-                <span className="text-muted-foreground">{graphOpen ? "−" : "+"}</span>
-              </Button>
-            </CardHeader>
-            {graphOpen && (
-              <CardContent>
-                <RatingGraph points={ratingHistory} />
-              </CardContent>
-            )}
-          </Card>
-        )}
       </>
     );
   }, [
@@ -415,9 +385,7 @@ export function V0RatingPage(props: { authed: boolean; me?: { playerId?: string 
     playersBelowMe,
     meId,
     friends,
-    ratingHistory,
     props.authed,
-    graphOpen,
     globalRankMap,
   ]);
 
@@ -495,49 +463,6 @@ export function V0RatingPage(props: { authed: boolean; me?: { playerId?: string 
       </div>
 
       {content}
-    </div>
-  );
-}
-
-function RatingGraph(props: { points: { date: string; rating: number }[] }) {
-  const pts = props.points;
-  if (pts.length < 2) return null;
-  const ratings = pts.map((p) => p.rating);
-  const minR = Math.min(...ratings);
-  const maxR = Math.max(...ratings);
-  const range = maxR - minR || 1;
-  const pad = range * 0.1;
-  const lo = minR - pad;
-  const hi = maxR + pad;
-  const h = 200;
-  const w = 400;
-  const toY = (r: number) => h - ((r - lo) / (hi - lo)) * h;
-  const path = pts.map((p, i) => `${i === 0 ? "M" : "L"} ${(i / (pts.length - 1)) * w} ${toY(p.rating)}`).join(" ");
-  return (
-    <div className="overflow-x-auto">
-      <svg viewBox={`0 0 ${w} ${h}`} className="w-full min-h-[200px]" preserveAspectRatio="none">
-        <polyline
-          fill="none"
-          stroke="hsl(var(--primary))"
-          strokeWidth="2"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-          points={pts.map((p, i) => `${(i / (pts.length - 1)) * w},${toY(p.rating)}`).join(" ")}
-        />
-        {pts.map((p, i) => (
-          <circle
-            key={i}
-            cx={(i / (pts.length - 1)) * w}
-            cy={toY(p.rating)}
-            r="4"
-            fill="hsl(var(--primary))"
-          />
-        ))}
-      </svg>
-      <div className="mt-2 flex justify-between text-xs text-muted-foreground">
-        <span>{pts[0]?.date?.slice(0, 10)}</span>
-        <span>{pts[pts.length - 1]?.date?.slice(0, 10)}</span>
-      </div>
     </div>
   );
 }
