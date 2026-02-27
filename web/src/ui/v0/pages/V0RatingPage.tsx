@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Search, Trophy, TrendingUp, Users } from "lucide-react";
+import { ChevronDown, Filter, Search, Trophy, TrendingUp, Users } from "lucide-react";
 import { api, hasToken, Player } from "../../../lib/api";
 import { ntrpLevel } from "../../../lib/rating";
 import { Badge } from "@/components/ui/badge";
@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { cn } from "@/lib/utils";
 import { PlayerTooltip } from "@/components/player-tooltip";
 
 const NTRP_LEVELS = ["1.0", "1.5", "2.0", "2.5", "3.0", "3.5", "4.0", "4.5", "5.0+"];
@@ -20,6 +21,7 @@ export function V0RatingPage(props: { authed: boolean; me?: { playerId?: string 
   const [calibrationFilter, setCalibrationFilter] = useState<"all" | "calibrated" | "in_calibration">("calibrated");
   const [ntrpMin, setNtrpMin] = useState<string>("");
   const [ntrpMax, setNtrpMax] = useState<string>("");
+  const [filterOpen, setFilterOpen] = useState(false);
   const myRowRef = useRef<HTMLTableRowElement | null>(null);
   const meId = props.me?.playerId;
 
@@ -121,18 +123,11 @@ export function V0RatingPage(props: { authed: boolean; me?: { playerId?: string 
     return "bg-secondary text-muted-foreground border-border";
   };
 
-  const getRankIcon = (rank: number) => {
-    if (rank <= 3) {
-      return (
-        <div className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full ${getRankStyle(rank)} border`}>
-          {rank === 1 && <Trophy className="h-4 w-4" />}
-          {rank === 2 && <span className="text-sm font-bold">2</span>}
-          {rank === 3 && <span className="text-sm font-bold">3</span>}
-        </div>
-      );
-    }
-    return <span className="inline-flex h-8 w-8 shrink-0 items-center justify-center text-muted-foreground tabular-nums">{rank}</span>;
-  };
+  const getRankIcon = (rank: number) => (
+    <div className={`flex h-7 w-7 min-w-7 shrink-0 items-center justify-center rounded-full border tabular-nums text-xs ${getRankStyle(rank)}`}>
+      {rank === 1 ? <Trophy className="h-3.5 w-3.5 shrink-0" /> : <span className="font-bold">{rank}</span>}
+    </div>
+  );
 
   const friendPublicIds = new Set((friends?.friends ?? []).map((f) => f.publicId));
   const outgoingPublicIds = new Set((friends?.outgoing ?? []).map((f) => f.publicId));
@@ -151,10 +146,10 @@ export function V0RatingPage(props: { authed: boolean; me?: { playerId?: string 
       ref={isMe ? myRowRef : undefined}
       className={`group transition-colors hover:bg-secondary/50 ${isMe ? "bg-primary/10 shadow-[inset_4px_0_0_0_var(--primary)]" : ""}`}
     >
-      <td className="py-4 pl-3 pr-3 align-middle">
+      <td className="py-2 pl-2 pr-1 align-middle w-9">
         <div className="flex justify-center">{getRankIcon(rank)}</div>
       </td>
-      <td className="py-4 pr-3 align-middle min-w-0 overflow-hidden">
+      <td className="py-2 pr-2 align-middle min-w-0 max-w-[180px] overflow-hidden">
         <PlayerTooltip
           player={{
             id: player.id,
@@ -194,8 +189,8 @@ export function V0RatingPage(props: { authed: boolean; me?: { playerId?: string 
             return "Заявка отправлена";
           }}
         >
-          <div className="flex items-center gap-3 min-w-0">
-            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-secondary/60 text-sm font-semibold border border-border overflow-hidden">
+          <div className="flex items-center gap-2 min-w-0">
+            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-secondary/60 text-xs font-semibold border border-border overflow-hidden">
               {player.avatarUrl ? (
                 <img src={player.avatarUrl} alt="" className="h-full w-full object-cover" />
               ) : (
@@ -208,7 +203,7 @@ export function V0RatingPage(props: { authed: boolean; me?: { playerId?: string 
           </div>
         </PlayerTooltip>
       </td>
-      <td className="py-4 pl-4 pr-3 align-middle whitespace-nowrap">
+      <td className="py-2 pl-2 pr-2 align-middle whitespace-nowrap text-right w-14">
         <span className="font-semibold tabular-nums">
           {(player.calibrationEventsRemaining ?? 0) > 0 && isMe ? "—" : player.rating}
         </span>
@@ -216,27 +211,20 @@ export function V0RatingPage(props: { authed: boolean; me?: { playerId?: string 
           <span className="text-amber-500/80 ml-1" title="В калибровке">?</span>
         ) : null}
       </td>
-      <td className="py-4 pr-3 text-muted-foreground align-middle hidden sm:table-cell">
+      <td className="py-2 pl-1 pr-2 text-muted-foreground align-middle text-right w-12 hidden sm:table-cell">
         {(player.calibrationEventsRemaining ?? 0) > 0 && isMe ? "—" : ntrpLevel(player.rating)}
       </td>
-      <td className="py-4 text-muted-foreground align-middle hidden sm:table-cell">{player.gamesPlayed}</td>
+      <td className="py-2 pl-1 pr-2 text-muted-foreground align-middle text-right w-10 hidden sm:table-cell tabular-nums">{player.gamesPlayed}</td>
     </tr>
   );
 
-  const content = useMemo(() => {
-    if (loading) return <div className="text-sm text-muted-foreground">Загрузка…</div>;
-    if (error)
-      return (
-        <div className="rounded-lg border border-destructive/30 bg-destructive/10 p-4 text-sm">
-          Не удалось загрузить: {error}
-        </div>
-      );
-    const topPlayersLocal = filteredPlayers.slice(0, 3);
-    if (!topPlayersLocal.length) return <div className="text-sm text-muted-foreground">Пока нет участников.</div>;
+  const hasData = !loading && !error && (filteredPlayers?.length ?? 0) > 0;
+  const topPlayersLocal = hasData ? filteredPlayers.slice(0, 3) : [];
 
+  const topCards = useMemo(() => {
+    if (!hasData || !topPlayersLocal.length) return null;
     return (
-      <>
-        <div className="grid gap-4 md:grid-cols-3">
+      <div className="grid gap-4 md:grid-cols-3">
           {topPlayersLocal.map((player, index) => {
             const rank = globalRankMap.get(player.id) ?? (index + 1);
             return (
@@ -320,25 +308,38 @@ export function V0RatingPage(props: { authed: boolean; me?: { playerId?: string 
               </Card>
             );
           })}
-        </div>
+      </div>
+    );
+  }, [hasData, topPlayersLocal, globalRankMap, meId, friends, props.authed]);
 
-        <Card className="mt-6 w-full">
+  const fullRatingCard = useMemo(() => {
+    if (loading) return <div className="text-sm text-muted-foreground py-8">Загрузка…</div>;
+    if (error)
+      return (
+        <div className="rounded-lg border border-destructive/30 bg-destructive/10 p-4 text-sm">
+          Не удалось загрузить: {error}
+        </div>
+      );
+    if (!hasData) return <div className="text-sm text-muted-foreground py-8">Пока нет участников.</div>;
+
+    return (
+        <Card className="w-full">
           <CardHeader className="pb-3">
             <CardTitle className="flex items-center gap-2 text-lg">
               <TrendingUp className="h-5 w-5 text-primary" />
               Полный рейтинг
             </CardTitle>
           </CardHeader>
-          <CardContent>
-            <div className="w-full overflow-x-auto">
-              <table className="w-full table-fixed text-sm sm:text-base">
+          <CardContent className="px-3 sm:px-6">
+            <div className="overflow-x-auto -mx-1">
+              <table className="text-sm table-auto w-fit max-w-full">
                 <thead>
-                  <tr className="border-b border-border text-left text-sm text-muted-foreground">
-                    <th className="pb-3 pl-3 pr-3 font-medium w-14 text-center">#</th>
-                    <th className="pb-3 pr-3 font-medium text-center">Игрок</th>
-                    <th className="pb-3 pl-4 pr-3 font-medium w-20">Рейтинг</th>
-                    <th className="pb-3 pr-3 font-medium w-16 hidden sm:table-cell">NTRP</th>
-                    <th className="pb-3 font-medium w-16 hidden sm:table-cell">Матчей</th>
+                  <tr className="border-b border-border text-muted-foreground">
+                    <th className="py-2 pl-2 pr-1 font-medium text-center w-9">#</th>
+                    <th className="py-2 pr-2 font-medium text-left">Игрок</th>
+                    <th className="py-2 pl-2 pr-2 font-medium text-right whitespace-nowrap w-14">Рейтинг</th>
+                    <th className="py-2 pl-1 pr-2 font-medium text-right whitespace-nowrap w-12 hidden sm:table-cell">NTRP</th>
+                    <th className="py-2 pl-1 pr-2 font-medium text-right whitespace-nowrap w-10 hidden sm:table-cell">Матчей</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-border">
@@ -371,12 +372,11 @@ export function V0RatingPage(props: { authed: boolean; me?: { playerId?: string 
             </div>
           </CardContent>
         </Card>
-      </>
     );
   }, [
     loading,
     error,
-    filteredPlayers,
+    hasData,
     topPlayers,
     showMyRowSeparately,
     myPlayer,
@@ -389,8 +389,10 @@ export function V0RatingPage(props: { authed: boolean; me?: { playerId?: string 
     globalRankMap,
   ]);
 
+  const activeFiltersCount = [calibrationFilter !== "calibrated", ntrpMin, ntrpMax].filter(Boolean).length;
+
   return (
-    <div className="space-y-8">
+    <div className="space-y-6">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="text-3xl font-bold tracking-tight">Рейтинг</h1>
@@ -409,60 +411,93 @@ export function V0RatingPage(props: { authed: boolean; me?: { playerId?: string 
         </div>
       </div>
 
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-        <div className="relative flex-1">
-          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-          <Input
-            placeholder="Поиск по имени..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="pl-9"
-          />
-        </div>
-        <Select value={calibrationFilter} onValueChange={(v: any) => setCalibrationFilter(v)}>
-          <SelectTrigger className="w-full sm:w-[180px]">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="calibrated">Только откалиброванные</SelectItem>
-            <SelectItem value="in_calibration">В калибровке</SelectItem>
-            <SelectItem value="all">Все</SelectItem>
-          </SelectContent>
-        </Select>
-        <Select value={ntrpMin || "min"} onValueChange={(v) => setNtrpMin(v === "min" ? "" : v)}>
-          <SelectTrigger className="w-full sm:w-[100px]">
-            <SelectValue placeholder="NTRP от" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="min">—</SelectItem>
-            {NTRP_LEVELS.map((n) => (
-              <SelectItem key={n} value={n}>
-                {n}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-        <Select value={ntrpMax || "max"} onValueChange={(v) => setNtrpMax(v === "max" ? "" : v)}>
-          <SelectTrigger className="w-full sm:w-[100px]">
-            <SelectValue placeholder="NTRP до" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="max">—</SelectItem>
-            {NTRP_LEVELS.map((n) => (
-              <SelectItem key={n} value={n}>
-                {n}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-        {meId && myRank !== null && myRank > topCount && (
-          <Button variant="outline" size="sm" onClick={scrollToMe}>
-            К моему рейтингу (#{myRank})
-          </Button>
-        )}
-      </div>
+      {topCards}
 
-      {content}
+      {hasData && (
+        <div className="flex flex-col gap-3">
+          <div className="flex flex-col sm:flex-row sm:flex-wrap gap-2">
+            <div className="relative flex-1 min-w-0">
+              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                placeholder="Поиск по имени..."
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                className="pl-9 h-9"
+              />
+            </div>
+            <div className="flex flex-col gap-2">
+              <div className="flex flex-wrap gap-2 items-center">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-9 gap-1.5 shrink-0"
+                  onClick={() => setFilterOpen((o) => !o)}
+                >
+                  <Filter className="h-4 w-4" />
+                  Фильтр
+                  {activeFiltersCount > 0 && (
+                    <span className="rounded-full bg-primary/20 px-1.5 py-0.5 text-xs font-medium text-primary">
+                      {activeFiltersCount}
+                    </span>
+                  )}
+                  <ChevronDown className={cn("h-4 w-4 transition-transform", filterOpen && "rotate-180")} />
+                </Button>
+                {meId && myRank !== null && myRank > topCount && (
+                  <Button variant="outline" size="sm" className="h-9 shrink-0" onClick={scrollToMe}>
+                    К моему рейтингу (#{myRank})
+                  </Button>
+                )}
+              </div>
+              {filterOpen && (
+                <div className="flex flex-col sm:flex-row sm:flex-wrap gap-2 rounded-lg border border-border bg-secondary/30 p-2.5 sm:p-3 w-fit max-w-full">
+                  <Select value={calibrationFilter} onValueChange={(v: any) => setCalibrationFilter(v)}>
+                    <SelectTrigger className="h-9 w-[200px]">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="calibrated">Только откалиброванные</SelectItem>
+                      <SelectItem value="in_calibration">В калибровке</SelectItem>
+                      <SelectItem value="all">Все</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-muted-foreground text-xs shrink-0">NTRP</span>
+                    <Select value={ntrpMin || "min"} onValueChange={(v) => setNtrpMin(v === "min" ? "" : v)}>
+                      <SelectTrigger className="h-9 w-[88px] sm:w-[100px]">
+                        <SelectValue placeholder="от" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="min">—</SelectItem>
+                        {NTRP_LEVELS.map((n) => (
+                          <SelectItem key={n} value={n}>
+                            {n}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <span className="text-muted-foreground text-xs shrink-0">–</span>
+                    <Select value={ntrpMax || "max"} onValueChange={(v) => setNtrpMax(v === "max" ? "" : v)}>
+                      <SelectTrigger className="h-9 w-[88px] sm:w-[100px]">
+                        <SelectValue placeholder="до" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="max">—</SelectItem>
+                        {NTRP_LEVELS.map((n) => (
+                          <SelectItem key={n} value={n}>
+                            {n}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {fullRatingCard}
     </div>
   );
 }
