@@ -316,7 +316,7 @@ class EventService(
             val ratings = players.values.map { it.rating }
             val capacity = event.courtsCount * 4
             event.roundsPlanned = if (event.pairingMode == com.padelgo.domain.PairingMode.ROUND_ROBIN) {
-                computeRoundRobinRounds(capacity)
+                computeRoundRobinRounds(playerIds.size, event.courtsCount)
             } else {
                 computeAutoRounds(ratings)
             }
@@ -584,8 +584,11 @@ class EventService(
         return base.coerceIn(4, 12)
     }
 
-    private fun computeRoundRobinRounds(playersInRound: Int): Int =
-        maxOf(1, playersInRound - 1)
+    private fun computeRoundRobinRounds(totalPlayers: Int, courtsCount: Int): Int {
+        val uniquePairs = totalPlayers * (totalPlayers - 1) / 2
+        val pairsPerRound = courtsCount * 2
+        return maxOf(1, (uniquePairs + pairsPerRound - 1) / pairsPerRound)
+    }
 
     @Transactional
     fun submitScore(matchId: UUID, userId: UUID, req: com.padelgo.api.SubmitScoreRequest) {
