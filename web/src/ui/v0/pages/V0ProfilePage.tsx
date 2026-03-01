@@ -1006,28 +1006,28 @@ export function V0ProfilePage(props: { me: any; meLoaded?: boolean; onMeUpdate?:
                 </div>
               ) : null}
 
-              <div className="mt-4 overflow-x-auto">
+              <div className="mt-4 hidden sm:block overflow-x-auto">
                 <table className="w-full">
                   <thead>
                     <tr className="border-b border-border text-left text-sm uppercase tracking-wider text-muted-foreground">
-                      <th className="pb-3 pr-6 font-medium">Раунд</th>
-                      <th className="pb-3 pr-6 font-medium">Корт</th>
-                      <th className="pb-3 pr-6 font-medium">Пара</th>
-                      <th className="pb-3 pr-6 font-medium">Соперники</th>
-                      <th className="pb-3 pr-6 font-medium">Счёт</th>
-                      <th className="pb-3 pr-6 font-medium">Исход</th>
+                      <th className="pb-3 pr-4 font-medium">Раунд</th>
+                      <th className="pb-3 pr-4 font-medium">Корт</th>
+                      <th className="pb-3 pr-4 font-medium">Пара</th>
+                      <th className="pb-3 pr-4 font-medium">Соперники</th>
+                      <th className="pb-3 pr-4 font-medium">Счёт</th>
+                      <th className="pb-3 pr-4 font-medium">Исход</th>
                       <th className="pb-3 font-medium">Рейтинг</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-border">
                     {details.map((it) => (
                       <tr key={it.matchId} className="hover:bg-secondary/30 transition-colors">
-                        <td className="py-3 pr-6">{it.roundNumber}</td>
-                        <td className="py-3 pr-6">{it.courtNumber}</td>
-                        <td className="py-3 pr-6">{it.teamText}</td>
-                        <td className="py-3 pr-6">{it.opponentText}</td>
-                        <td className="py-3 pr-6">{it.score ?? "—"}</td>
-                        <td className="py-3 pr-6">
+                        <td className="py-3 pr-4">{it.roundNumber}</td>
+                        <td className="py-3 pr-4">{it.courtNumber}</td>
+                        <td className="py-3 pr-4">{it.teamText}</td>
+                        <td className="py-3 pr-4">{it.opponentText}</td>
+                        <td className="py-3 pr-4">{it.score ?? "—"}</td>
+                        <td className="py-3 pr-4">
                           <span className="text-muted-foreground">{it.result}</span>
                         </td>
                         <td className="py-3">
@@ -1049,6 +1049,49 @@ export function V0ProfilePage(props: { me: any; meLoaded?: boolean; onMeUpdate?:
                     ))}
                   </tbody>
                 </table>
+              </div>
+
+              <div className="mt-4 sm:hidden space-y-3">
+                {details.map((it) => (
+                  <div key={it.matchId} className="rounded-lg border border-border/60 bg-secondary/20 p-3 space-y-2">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                        <span>Раунд {it.roundNumber}</span>
+                        <span className="text-border">·</span>
+                        <span>Корт {it.courtNumber}</span>
+                      </div>
+                      <div>
+                        {it.ratingDelta == null ? (
+                          <span className="text-muted-foreground text-xs">—</span>
+                        ) : it.ratingDelta >= 0 ? (
+                          <Badge className="gap-1 bg-primary/20 text-primary border-primary/30 border text-xs py-0.5">
+                            <TrendingUp className="h-3 w-3" />
+                            +{it.ratingDelta}
+                          </Badge>
+                        ) : (
+                          <Badge className="gap-1 bg-destructive/20 text-destructive border-destructive/30 border text-xs py-0.5">
+                            <TrendingDown className="h-3 w-3" />
+                            {it.ratingDelta}
+                          </Badge>
+                        )}
+                      </div>
+                    </div>
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0 flex-1">
+                        <div className="text-[11px] text-muted-foreground mb-0.5">Пара</div>
+                        <div className="text-sm leading-tight">{it.teamText}</div>
+                      </div>
+                      <div className="text-center shrink-0 px-1">
+                        <div className="text-[11px] text-muted-foreground mb-0.5">Счёт</div>
+                        <div className="text-sm font-semibold">{it.score ?? "—"}</div>
+                      </div>
+                      <div className="min-w-0 flex-1 text-right">
+                        <div className="text-[11px] text-muted-foreground mb-0.5">Соперники</div>
+                        <div className="text-sm leading-tight">{it.opponentText}</div>
+                      </div>
+                    </div>
+                  </div>
+                ))}
               </div>
             </div>
           </div>
