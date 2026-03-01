@@ -263,15 +263,18 @@ export function V0ProfilePage(props: { me: any; meLoaded?: boolean; onMeUpdate?:
 
     const items = history.slice(0, 5);
     return (
-      <div className="overflow-x-auto">
-        <table className="w-full">
+      <div className="min-w-0 overflow-hidden">
+        <table className="w-full table-fixed">
+          <colgroup>
+            <col style={{ width: "90px" }} />
+            <col style={{ width: "70%" }} />
+            <col style={{ width: "110px" }} />
+          </colgroup>
           <thead>
-            <tr className="border-b border-border text-left text-xs uppercase tracking-wider text-muted-foreground">
-              <th className="pb-3 pr-6 font-semibold">Дата</th>
-              <th className="pb-3 pr-6 font-semibold">Событие</th>
-              <th className="pb-3 pr-6 font-semibold">Матчей</th>
-              <th className="pb-3 pr-6 font-semibold">Очки</th>
-              <th className="pb-3 font-semibold">Рейтинг</th>
+            <tr className="border-b border-border text-xs uppercase tracking-wider text-muted-foreground">
+              <th className="pb-3 pr-2 text-left font-semibold">Дата</th>
+              <th className="pb-3 px-2 text-left font-semibold">Событие</th>
+              <th className="pb-3 pl-2 text-center font-semibold">Рейтинг</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-border">
@@ -295,7 +298,7 @@ export function V0ProfilePage(props: { me: any; meLoaded?: boolean; onMeUpdate?:
                   }
                 }}
               >
-                <td className="py-4 pr-6 text-sm text-muted-foreground font-medium">
+                <td className="py-4 pr-2 text-sm text-muted-foreground font-medium overflow-hidden align-middle">
                   <div>{it.eventDate}</div>
                   {it.eventStartTime ? (
                     <div className="text-xs">
@@ -304,31 +307,31 @@ export function V0ProfilePage(props: { me: any; meLoaded?: boolean; onMeUpdate?:
                     </div>
                   ) : null}
                 </td>
-                <td className="py-4 pr-6">
-                  <div className="font-semibold">{it.eventTitle}</div>
+                <td className="py-4 px-2 overflow-hidden align-middle">
+                  <div className="font-semibold truncate" title={it.eventTitle}>{it.eventTitle}</div>
                   {it.participants?.length ? (
-                    <div className="text-xs text-muted-foreground mt-0.5 max-w-[260px] truncate">
+                    <div className="text-xs text-muted-foreground mt-0.5 truncate" title={it.participants.join(", ")}>
                       {it.participants.join(", ")}
                     </div>
                   ) : null}
                 </td>
-                <td className="py-4 pr-6 text-sm tabular-nums font-medium">{it.matchesCount}</td>
-                <td className="py-4 pr-6 text-sm tabular-nums font-semibold">
-                  {it.totalPoints ?? "—"}
-                  {it.totalPoints == null ? "" : " pts"}
-                </td>
-                <td className="py-4">
-                  {it.ratingDelta >= 0 ? (
-                    <Badge className="gap-1.5 bg-primary/20 text-primary border-primary/30 border">
-                      <TrendingUp className="h-3.5 w-3.5" />
-                      +{it.ratingDelta}
-                    </Badge>
-                  ) : (
-                    <Badge className="gap-1.5 bg-destructive/20 text-destructive border-destructive/30 border">
-                      <TrendingDown className="h-3.5 w-3.5" />
-                      {it.ratingDelta}
-                    </Badge>
-                  )}
+                <td className="py-4 pl-2 align-middle">
+                  <div className="flex flex-col items-center justify-center gap-1">
+                    {it.ratingDelta >= 0 ? (
+                      <Badge className="gap-1.5 w-fit bg-primary/20 text-primary border-primary/30 border">
+                        <TrendingUp className="h-3.5 w-3.5" />
+                        +{it.ratingDelta}
+                      </Badge>
+                    ) : (
+                      <Badge className="gap-1.5 w-fit bg-destructive/20 text-destructive border-destructive/30 border">
+                        <TrendingDown className="h-3.5 w-3.5" />
+                        {it.ratingDelta}
+                      </Badge>
+                    )}
+                    <span className="text-sm tabular-nums font-semibold">
+                      {it.totalPoints ?? "—"}
+                    </span>
+                  </div>
                 </td>
               </tr>
             ))}

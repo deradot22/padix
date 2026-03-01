@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useParams } from "react-router-dom";
-import { ArrowLeft, Check, ChevronDown, Clock, MapPin, Share2, Target, UserPlus, Users, Zap, X } from "lucide-react";
+import { ArrowLeft, Check, ChevronDown, Clock, MapPin, Share2, Target, Trophy, UserPlus, Users, Zap, X } from "lucide-react";
 import { api, EventDetails, FriendItem, FriendsSnapshot, Match } from "../../../lib/api";
 import { PlayerTooltip } from "@/components/player-tooltip";
 import { Button } from "@/components/ui/button";
@@ -60,11 +60,12 @@ export function V0EventPage(props: { me: any; meLoaded?: boolean }) {
   const [scoreSavingId, setScoreSavingId] = useState<string | null>(null);
   const [scoreError, setScoreError] = useState<string | null>(null);
   const [scorePadOpen, setScorePadOpen] = useState(false);
-  const [scorePadClosing, setScorePadClosing] = useState(false);
   const [myAvatar, setMyAvatar] = useState<string | null>(null);
   const activeMatchRef = useRef<HTMLDivElement | null>(null);
-
-  const ANIM_DURATION_MS = 300;
+  const activeRoundRef = useRef<HTMLDivElement | null>(null);
+  const roundsScrollRef = useRef<HTMLDivElement | null>(null);
+  const userCollapsedRef = useRef(false);
+  const [finishedMatchIds, setFinishedMatchIds] = useState<Set<string>>(new Set());
 
   /** After saving score for activeMatchId, navigate to the next unscored match in the same round,
    *  or to the first match of the next round if all matches in the current round are done. */
@@ -82,6 +83,8 @@ export function V0EventPage(props: { me: any; meLoaded?: boolean }) {
       setActiveMatchId(nextUnscored.id);
       setScorePadOpen(false);
     } else {
+      // Переход на следующий раунд — сразу помечаем сохранённый матч, чтобы «Сыгран» отобразился до следующего рендера
+      setFinishedMatchIds((prev) => new Set([...prev, savedMatchId]));
       const nextRound = rounds[currentIdx + 1];
       if (nextRound) {
         setExpandedRoundId(nextRound.id);
@@ -123,12 +126,54 @@ export function V0EventPage(props: { me: any; meLoaded?: boolean }) {
     prevActiveMatchIdRef.current = activeMatchId;
   }, [activeMatchId]);
 
-  /** Scroll to active court when entering score or when navigating via "Следующий матч/раунд" */
+  const scrollTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const scrollCancelledRef = useRef(false);
+  const scrollToBottomRef = useRef(false);
+  /** Scroll: при открытии — к раунду ("Раунд N"), при клике на счёт — к названию корта, или вниз если все сыграны */
   useEffect(() => {
-    if (activeMatchId && activeMatchRef.current) {
-      activeMatchRef.current.scrollIntoView({ behavior: "smooth", block: "start", inline: "nearest" });
-    }
-  }, [activeMatchId]);
+    if (!roundsOpen) return;
+    scrollCancelledRef.current = false;
+    const scrollToBottom = scrollToBottomRef.current;
+    const scrollToRound = !scorePadOpen && !scrollToBottom;
+    const delay = scrollToRound || scrollToBottom ? 300 : 80;
+    const maxRetries = 20;
+    let retries = 0;
+    const attemptScroll = () => {
+      if (scrollCancelledRef.current) return;
+      const scrollEl = roundsScrollRef.current;
+      if (!scrollEl) {
+        if (retries < maxRetries) {
+          retries++;
+          scrollTimeoutRef.current = setTimeout(attemptScroll, 80);
+        }
+        return;
+      }
+      if (scrollToBottom) {
+        scrollToBottomRef.current = false;
+        scrollEl.scrollTo({ top: scrollEl.scrollHeight, behavior: "smooth" });
+        return;
+      }
+      const el = scrollToRound ? activeRoundRef.current : activeMatchRef.current;
+      if (!el) {
+        if (retries < maxRetries) {
+          retries++;
+          scrollTimeoutRef.current = setTimeout(attemptScroll, 80);
+        }
+        return;
+      }
+      const targetRect = el.getBoundingClientRect();
+      const containerRect = scrollEl.getBoundingClientRect();
+      const targetOffset = scrollEl.scrollTop + (targetRect.top - containerRect.top);
+      const topPadding = scrollToRound ? 25 : 8;
+      const newScrollTop = Math.max(0, targetOffset - topPadding);
+      scrollEl.scrollTo({ top: newScrollTop, behavior: "smooth" });
+    };
+    scrollTimeoutRef.current = setTimeout(attemptScroll, delay);
+    return () => {
+      scrollCancelledRef.current = true;
+      if (scrollTimeoutRef.current) clearTimeout(scrollTimeoutRef.current);
+    };
+  }, [activeMatchId, scorePadOpen, roundsOpen, expandedRoundId]);
 
   useEffect(() => {
     const e = data?.event;
@@ -147,6 +192,24 @@ export function V0EventPage(props: { me: any; meLoaded?: boolean }) {
     const timer = setTimeout(() => saveDraftIfNeeded(activeMatchId, current.a, current.b), 700);
     return () => clearTimeout(timer);
   }, [eventId, activeMatchId, scoreByMatch, data?.event, data?.isAuthor]);
+
+  /** Проверка, сыгран ли матч (для allPlayed и поиска первого несыгранного) */
+  const isMatchFinished = (m: Match) => {
+    if (m.status === "FINISHED") return true;
+    if (finishedMatchIds.has(m.id)) return true;
+    if (data?.event?.scoringMode === "POINTS") {
+      const totalPoints = (data.event.pointsPerPlayerPerMatch ?? 6) * 4;
+      const local = scoreByMatch[m.id];
+      if (local && local.a + local.b === totalPoints) return true;
+      const pts = m.score?.points;
+      if (pts) {
+        const a = pts.teamAPoints ?? 0;
+        const b = pts.teamBPoints ?? 0;
+        if (a + b === totalPoints) return true;
+      }
+    }
+    return false;
+  };
 
   /** Label for the "save score" button; null = hide the button entirely */
   const nextButtonLabel = useMemo<string | null>(() => {
@@ -282,8 +345,14 @@ export function V0EventPage(props: { me: any; meLoaded?: boolean }) {
     };
   }, [eventId, props.me]);
 
+  const prevEventIdRef = useRef<string | null>(null);
   useEffect(() => {
     if (!data) return;
+    if (prevEventIdRef.current !== eventId) {
+      prevEventIdRef.current = eventId ?? null;
+      userCollapsedRef.current = false;
+      setFinishedMatchIds(new Set());
+    }
     if (data.event?.status === "FINISHED") setActionError(null);
     if (eventId) {
       const stored = localStorage.getItem(`padelgo_final_round_${eventId}`);
@@ -292,7 +361,9 @@ export function V0EventPage(props: { me: any; meLoaded?: boolean }) {
     const rounds = data.rounds ?? [];
     if (rounds.length > 0) {
       const fallbackRoundId = rounds[0].id;
-      const nextExpandedId = expandedRoundId && rounds.some((r) => r.id === expandedRoundId) ? expandedRoundId : fallbackRoundId;
+      const currentValid = expandedRoundId && rounds.some((r) => r.id === expandedRoundId);
+      const keepCollapsed = expandedRoundId === null && userCollapsedRef.current;
+      const nextExpandedId = currentValid ? expandedRoundId : keepCollapsed ? null : fallbackRoundId;
       if (nextExpandedId !== expandedRoundId) {
         setExpandedRoundId(nextExpandedId);
       }
@@ -300,7 +371,20 @@ export function V0EventPage(props: { me: any; meLoaded?: boolean }) {
       if (activeRound?.matches?.length) {
         const stillInRound = activeMatchId && activeRound.matches.some((m) => m.id === activeMatchId);
         if (!stillInRound) {
-          setActiveMatchId(activeRound.matches[0].id);
+          const totalPoints = (data.event?.pointsPerPlayerPerMatch ?? 6) * 4;
+          const matchFinished = (m: Match) => {
+            if (m.status === "FINISHED") return true;
+            if (finishedMatchIds.has(m.id)) return true;
+            if (data?.event?.scoringMode === "POINTS") {
+              const local = scoreByMatch[m.id];
+              if (local && local.a + local.b === totalPoints) return true;
+              const pts = m.score?.points;
+              if (pts && (pts.teamAPoints ?? 0) + (pts.teamBPoints ?? 0) === totalPoints) return true;
+            }
+            return false;
+          };
+          const firstUnscored = activeRound.matches.find((m) => !matchFinished(m));
+          setActiveMatchId(firstUnscored?.id ?? activeRound.matches[0].id);
         }
       }
     }
@@ -321,6 +405,20 @@ export function V0EventPage(props: { me: any; meLoaded?: boolean }) {
       return next;
     });
   }, [data, expandedRoundId, activeMatchId]);
+
+  /** Синхронизируем finishedMatchIds с данными API — чтобы «Сыгран» отображался сразу после сохранения */
+  useEffect(() => {
+    if (!data?.rounds) return;
+    const fromApi = new Set(
+      data.rounds.flatMap((r) => r.matches).filter((m) => m.status === "FINISHED").map((m) => m.id),
+    );
+    if (fromApi.size === 0) return;
+    setFinishedMatchIds((prev) => {
+      const merged = new Set([...prev, ...fromApi]);
+      if (merged.size === prev.size && [...merged].every((id) => prev.has(id))) return prev;
+      return merged;
+    });
+  }, [data]);
 
   const statsRows = useMemo(() => {
     if (!data?.rounds?.length) return [];
@@ -586,6 +684,22 @@ export function V0EventPage(props: { me: any; meLoaded?: boolean }) {
                           className="h-12 px-6 rounded-md bg-primary text-primary-foreground text-base font-medium hover:bg-primary/90 transition-colors"
                           onClick={() => {
                             setActionError(null);
+                            const rounds = data?.rounds ?? [];
+                            const firstUnscored = rounds.flatMap((r) => r.matches).find((m) => !isMatchFinished(m));
+                            if (firstUnscored) {
+                              userCollapsedRef.current = false;
+                              const round = rounds.find((r) => r.matches.some((m) => m.id === firstUnscored.id));
+                              if (round) {
+                                setExpandedRoundId(round.id);
+                                setActiveMatchId(firstUnscored.id);
+                              }
+                            } else {
+                              userCollapsedRef.current = true;
+                              setExpandedRoundId(null);
+                              setActiveMatchId(null);
+                              scrollToBottomRef.current = true;
+                            }
+                            setScorePadOpen(false);
                             setRoundsOpen(true);
                           }}
                         >
@@ -989,27 +1103,62 @@ export function V0EventPage(props: { me: any; meLoaded?: boolean }) {
               <DialogTitle>Раунды</DialogTitle>
             </DialogHeader>
 
-            <div className="space-y-3 max-h-[70vh] overflow-y-auto pr-1">
-              {(data.rounds ?? []).map((r) => {
+            <div ref={roundsScrollRef} className="space-y-3 max-h-[70vh] overflow-y-auto pr-1">
+              {(data.rounds ?? []).map((r, idx) => {
                 const expanded = r.id === expandedRoundId;
+                const isFinalRound = finalRoundLocked && idx === (data.rounds?.length ?? 0) - 1;
+                const allPlayed = r.matches.every(isMatchFinished);
                 return (
-                  <div key={r.id} className="rounded-xl border border-border bg-card">
+                  <div
+                    key={r.id}
+                    ref={r.id === expandedRoundId ? activeRoundRef : undefined}
+                    className={cn(
+                      "rounded-xl border bg-card transition-colors scroll-mt-4",
+                      allPlayed && !expanded ? "border-primary/40 bg-primary/5" : "border-border",
+                    )}
+                  >
                     <button
                       type="button"
                       className="w-full flex items-center justify-between gap-3 p-4 text-left"
                       onClick={() => {
-                        setExpandedRoundId(r.id);
+                        setExpandedRoundId((prev) => {
+                          if (prev === r.id) {
+                            userCollapsedRef.current = true;
+                            return null;
+                          }
+                          userCollapsedRef.current = false;
+                          return r.id;
+                        });
                         setScorePadOpen(false);
                       }}
                     >
-                      <div>
-                        <div className="text-lg font-semibold">Раунд {r.roundNumber}</div>
-                        <div className="text-sm text-muted-foreground">Матчей: {r.matches.length}</div>
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <div>
+                          <div className="text-lg font-semibold flex items-center gap-2">
+                            Раунд {r.roundNumber}
+                            {isFinalRound && (
+                              <span className="inline-flex items-center gap-1 rounded-full bg-amber-500/20 px-2 py-0.5 text-xs font-medium text-amber-600 dark:text-amber-400">
+                                <Trophy className="h-3.5 w-3.5" />
+                                Финальный
+                              </span>
+                            )}
+                          </div>
+                          <div className="text-sm text-muted-foreground">
+                            Матчей: {r.matches.length}
+                            {allPlayed && " • Сыгран"}
+                          </div>
+                        </div>
                       </div>
                       <ChevronDown className={cn("h-5 w-5 transition-transform", expanded ? "rotate-180" : "")} />
                     </button>
 
-                    {expanded ? (
+                    <div
+                      className={cn(
+                        "grid transition-[grid-template-rows] duration-400 ease-in-out overflow-hidden",
+                        expanded ? "grid-rows-[1fr]" : "grid-rows-[0fr]",
+                      )}
+                    >
+                      <div className="min-h-0 overflow-hidden">
                       <div className="px-4 pb-4">
                         <div className="space-y-3">
                           {r.matches.map((m) => {
@@ -1018,9 +1167,13 @@ export function V0EventPage(props: { me: any; meLoaded?: boolean }) {
                             return (
                               <div
                                 key={m.id}
-                                ref={m.id === activeMatchId ? activeMatchRef : undefined}
+                                ref={(el) => {
+                                  if (m.id === activeMatchId) {
+                                    (activeMatchRef as { current: HTMLDivElement | null }).current = el;
+                                  }
+                                }}
                                 className={cn(
-                                  "rounded-lg border border-border/50 p-3 transition-colors",
+                                  "rounded-lg border border-border/50 p-3 transition-colors scroll-mt-4",
                                   active ? "bg-secondary/30" : "bg-secondary/10",
                                 )}
                               >
@@ -1060,13 +1213,14 @@ export function V0EventPage(props: { me: any; meLoaded?: boolean }) {
                           })}
                         </div>
 
+                        <div
+                          className={cn(
+                            "mt-4 overflow-hidden transition-[max-height] duration-400 ease-in-out",
+                            activeMatchId && scorePadOpen ? "max-h-[320px]" : "max-h-[80px]",
+                          )}
+                        >
                         {activeMatchId && scorePadOpen ? (
-                          <div
-                            className={cn(
-                              "mt-4 overflow-hidden transition-all duration-300 ease-out",
-                              scorePadClosing ? "max-h-0 opacity-0" : "max-h-[280px] opacity-100",
-                            )}
-                          >
+                          <div>
                             <div className="grid grid-cols-6 gap-2">
                               {[0, ...Array.from({ length: (e.pointsPerPlayerPerMatch ?? 6) * 4 }, (_, i) => i + 1)].map((n) => (
                                 <button
@@ -1112,12 +1266,11 @@ export function V0EventPage(props: { me: any; meLoaded?: boolean }) {
                               {nextButtonLabel && (
                               <Button
                                 size="sm"
-                                disabled={scoreSavingId === activeMatchId || scorePadClosing}
+                                disabled={scoreSavingId === activeMatchId}
                                 onClick={async () => {
                                   const current = scoreByMatch[activeMatchId];
                                   if (!current) return;
                                   if (!eventId) return;
-                                  setScorePadClosing(true);
                                   const totalPoints = (e.pointsPerPlayerPerMatch ?? 6) * 4;
                                   let refreshed: EventDetails | null = null;
                                   if (current.a + current.b !== totalPoints) {
@@ -1130,14 +1283,11 @@ export function V0EventPage(props: { me: any; meLoaded?: boolean }) {
                                     } catch (err: any) {
                                       const msg = err?.message ?? "Не удалось сохранить черновик";
                                       setScoreError(msg);
-                                      setScorePadClosing(false);
                                     } finally {
                                       setScoreSavingId(null);
                                     }
                                     if (refreshed) {
-                                      await new Promise((r) => setTimeout(r, ANIM_DURATION_MS));
                                       navigateAfterScore(refreshed.rounds ?? [], activeMatchId);
-                                      setScorePadClosing(false);
                                     }
                                     return;
                                   }
@@ -1145,6 +1295,7 @@ export function V0EventPage(props: { me: any; meLoaded?: boolean }) {
                                   setScoreError(null);
                                   try {
                                     await api.submitScore(activeMatchId, { teamAPoints: current.a, teamBPoints: current.b });
+                                    setFinishedMatchIds((prev) => new Set([...prev, activeMatchId]));
                                     refreshed = await api.getEventDetails(eventId);
                                     setData(refreshed);
                                     setInfo("Счёт сохранён");
@@ -1163,14 +1314,11 @@ export function V0EventPage(props: { me: any; meLoaded?: boolean }) {
                                     } else {
                                       setScoreError(msg);
                                     }
-                                    setScorePadClosing(false);
                                   } finally {
                                     setScoreSavingId(null);
                                   }
                                   if (refreshed) {
-                                    await new Promise((r) => setTimeout(r, ANIM_DURATION_MS));
                                     navigateAfterScore(refreshed.rounds ?? [], activeMatchId);
-                                    setScorePadClosing(false);
                                   }
                                 }}
                               >
@@ -1180,7 +1328,7 @@ export function V0EventPage(props: { me: any; meLoaded?: boolean }) {
                             </div>
                           </div>
                         ) : (
-                          <div className="mt-4 flex items-center justify-between gap-3">
+                          <div className="flex items-center justify-between gap-3">
                             <div className="text-xs text-muted-foreground">Нажмите на счёт команды, чтобы выбрать очки.</div>
                             {nextButtonLabel && (
                             <Button
@@ -1217,6 +1365,7 @@ export function V0EventPage(props: { me: any; meLoaded?: boolean }) {
                                 setScoreError(null);
                                 try {
                                   await api.submitScore(activeMatchId, { teamAPoints: current.a, teamBPoints: current.b });
+                                  setFinishedMatchIds((prev) => new Set([...prev, activeMatchId]));
                                   const refreshed = await api.getEventDetails(eventId);
                                   setData(refreshed);
                                   setInfo("Счёт сохранён");
@@ -1246,8 +1395,10 @@ export function V0EventPage(props: { me: any; meLoaded?: boolean }) {
                             )}
                           </div>
                         )}
+                        </div>
                       </div>
-                    ) : null}
+                      </div>
+                    </div>
                   </div>
                 );
               })}
@@ -1278,6 +1429,7 @@ export function V0EventPage(props: { me: any; meLoaded?: boolean }) {
                 <Button
                   variant="secondary"
                   disabled={finalRoundLocked}
+                  className={cn(finalRoundLocked && "border-amber-500/50 bg-amber-500/10 text-amber-700 dark:text-amber-400")}
                   onClick={async () => {
                     if (!eventId) return;
                     if (!window.confirm("Добавить финальный раунд? Пары будут расставлены по турнирной таблице.")) return;
@@ -1296,7 +1448,14 @@ export function V0EventPage(props: { me: any; meLoaded?: boolean }) {
                     }
                   }}
                 >
-                  Финальный раунд
+                  {finalRoundLocked ? (
+                    <>
+                      <Trophy className="h-4 w-4 mr-1.5" />
+                      Финальный раунд добавлен
+                    </>
+                  ) : (
+                    "Финальный раунд"
+                  )}
                 </Button>
               </div>
               <Button
@@ -1331,6 +1490,12 @@ export function V0EventPage(props: { me: any; meLoaded?: boolean }) {
           <DialogContent className="sm:max-w-lg">
             <DialogHeader>
               <DialogTitle>Таблица лидеров</DialogTitle>
+              {finalRoundLocked && (data.rounds?.length ?? 0) > 0 && (
+                <p className="text-sm text-muted-foreground flex items-center gap-1.5 mt-1">
+                  <Trophy className="h-4 w-4 text-amber-500" />
+                  Включает финальный раунд
+                </p>
+              )}
             </DialogHeader>
             {statsRows.length === 0 ? (
               <div className="text-sm text-muted-foreground">Нет данных по очкам.</div>
@@ -1358,6 +1523,8 @@ export function V0EventPage(props: { me: any; meLoaded?: boolean }) {
     canceling,
     closing,
     data,
+    finishedMatchIds,
+    finalRoundLocked,
     roundsOpen,
     statsOpen,
     statsRows,
