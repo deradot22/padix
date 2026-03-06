@@ -719,7 +719,8 @@ class EventService(
         val players = playerRepo.findAllById(playerIds).associateBy { it.id!! }.toMutableMap()
         val accounts = userRepo.findAllByPlayerIdIn(playerIds.toList())
 
-        val calibrationByPlayer = accounts.associate { it.playerId!! to it.calibrationEventsRemaining }
+        val calibrationByPlayer = accounts.associate { it.playerId!! to it.calibrationMatchesRemaining }
+        val accountByPlayerId = accounts.associateBy { it.playerId!! }
 
         try {
             finishedMatches.forEach { m ->
@@ -753,7 +754,14 @@ class EventService(
                 applyDelta(eventId, m.id!!, a1, a2, deltaTeamA, calibrationByPlayer)
                 applyDelta(eventId, m.id!!, b1, b2, -deltaTeamA, calibrationByPlayer)
 
-                listOf(a1, a2, b1, b2).forEach { it.gamesPlayed += 1 }
+                listOf(a1, a2, b1, b2).forEach { p ->
+                    p.gamesPlayed += 1
+                    accountByPlayerId[p.id]?.let { acc ->
+                        if (acc.calibrationMatchesRemaining > 0) {
+                            acc.calibrationMatchesRemaining -= 1
+                        }
+                    }
+                }
             }
 
             playerRepo.saveAll(players.values)
@@ -829,10 +837,10 @@ class EventService(
         val d1 = deltaTeam / 2 + if (deltaTeam % 2 != 0 && firstGetsMore) deltaTeam.sign() else 0
         val d2 = deltaTeam - d1
 
-        val m1 = if ((calibrationByPlayer[p1.id] ?: 0) > 0) 2 else 1
-        val m2 = if ((calibrationByPlayer[p2.id] ?: 0) > 0) 2 else 1
-        applyDeltaSingle(eventId, matchId, p1, d1 * m1)
-        applyDeltaSingle(eventId, matchId, p2, d2 * m2)
+        val m1 = if ((calibrationByPlayer[p1.id] ?: 0) > 0) 1.5 else 1.0
+        val m2 = if ((calibrationByPlayer[p2.id] ?: 0) > 0) 1.5 else 1.0
+        applyDeltaSingle(eventId, matchId, p1, (d1 * m1).roundToInt())
+        applyDeltaSingle(eventId, matchId, p2, (d2 * m2).roundToInt())
     }
 
     private fun Int.sign(): Int = when {
@@ -886,11 +894,17 @@ class EventService(
             val r = rounds[m.roundId] ?: return@mapNotNull null
             val e = events[r.eventId] ?: return@mapNotNull null
             val s = scores[m.id!!].orEmpty()
-            val teamA = listOf(m.teamAPlayer1Id!!, m.teamAPlayer2Id!!).mapNotNull { playersById[it]?.name }
-            val teamB = listOf(m.teamBPlayer1Id!!, m.teamBPlayer2Id!!).mapNotNull { playersById[it]?.name }
+            val teamAIds = listOf(m.teamAPlayer1Id!!, m.teamAPlayer2Id!!)
+            val teamBIds = listOf(m.teamBPlayer1Id!!, m.teamBPlayer2Id!!)
+            val teamA = teamAIds.mapNotNull { playersById[it]?.name }
+            val teamB = teamBIds.mapNotNull { playersById[it]?.name }
             val isTeamA = m.teamAPlayer1Id == playerId || m.teamAPlayer2Id == playerId
             val teamText = if (isTeamA) teamA.joinToString(" + ") else teamB.joinToString(" + ")
             val opponentText = if (isTeamA) teamB.joinToString(" + ") else teamA.joinToString(" + ")
+            val myIds = if (isTeamA) teamAIds else teamBIds
+            val oppIds = if (isTeamA) teamBIds else teamAIds
+            val teamPlayerInfos = myIds.mapNotNull { id -> playersById[id]?.let { MatchPlayerInfo(it.name, it.avatarUrl) } }
+            val opponentPlayerInfos = oppIds.mapNotNull { id -> playersById[id]?.let { MatchPlayerInfo(it.name, it.avatarUrl) } }
             val result = if (s.isEmpty()) {
                 "—"
             } else {
@@ -918,7 +932,10 @@ class EventService(
                 ratingDelta = ratingByMatch[m.id!!],
                 teamText = teamText,
                 opponentText = opponentText,
-                result = result
+                result = result,
+                isTeamA = isTeamA,
+                teamPlayers = teamPlayerInfos,
+                opponentPlayers = opponentPlayerInfos
             )
         }.sortedWith(compareByDescending<PlayerMatchHistoryItem> { it.eventDate }.thenByDescending { it.roundNumber })
     }
@@ -1033,6 +1050,11 @@ class EventService(
         }
 }
 
+data class MatchPlayerInfo(
+    val name: String,
+    val avatarUrl: String? = null
+)
+
 data class PlayerMatchHistoryItem(
     val eventId: UUID,
     val eventTitle: String,
@@ -1048,7 +1070,10 @@ data class PlayerMatchHistoryItem(
     val ratingDelta: Int?,
     val teamText: String,
     val opponentText: String,
-    val result: String
+    val result: String,
+    val isTeamA: Boolean = true,
+    val teamPlayers: List<MatchPlayerInfo> = emptyList(),
+    val opponentPlayers: List<MatchPlayerInfo> = emptyList()
 )
 
 data class RatingHistoryPoint(

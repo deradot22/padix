@@ -1,6 +1,7 @@
 "use client";
 
-import { ReactNode, useEffect, useId, useRef, useState } from "react";
+import { ReactNode, useCallback, useEffect, useId, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { Check, Gamepad2, Trophy, UserPlus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ntrpLevel } from "@/lib/rating";
@@ -72,6 +73,38 @@ export function PlayerTooltip({
     return () => window.removeEventListener("player-tooltip-open", onAnyOpen as EventListener);
   }, [tooltipId]);
 
+  const [pos, setPos] = useState<{ top: number; left: number } | null>(null);
+  const tooltipRef = useRef<HTMLDivElement | null>(null);
+  const TOOLTIP_WIDTH = 220;
+  const PADDING = 8;
+
+  const updatePos = useCallback(() => {
+    if (!containerRef.current) return;
+    const rect = containerRef.current.getBoundingClientRect();
+    const vw = window.innerWidth;
+
+    let left = rect.left + rect.width / 2;
+    const halfW = TOOLTIP_WIDTH / 2;
+    if (left - halfW < PADDING) left = halfW + PADDING;
+    if (left + halfW > vw - PADDING) left = vw - halfW - PADDING;
+
+    setPos({
+      top: rect.top,
+      left,
+    });
+  }, []);
+
+  useEffect(() => {
+    if (!open) return;
+    updatePos();
+    window.addEventListener("scroll", updatePos, true);
+    window.addEventListener("resize", updatePos);
+    return () => {
+      window.removeEventListener("scroll", updatePos, true);
+      window.removeEventListener("resize", updatePos);
+    };
+  }, [open, updatePos]);
+
   return (
     <div ref={containerRef} className="relative block w-full" data-player-tooltip>
       <span
@@ -106,9 +139,14 @@ export function PlayerTooltip({
         {children}
       </span>
 
-      {open ? (
-        <div className="absolute left-1/2 -translate-x-1/2 bottom-full mb-2 z-50">
-          <div className="p-3 min-w-[180px] rounded-lg bg-card border border-border shadow-xl">
+      {open && pos ? createPortal(
+        <div
+          ref={tooltipRef}
+          className="fixed z-[9999]"
+          style={{ top: pos.top, left: pos.left, transform: "translate(-50%, -100%)" }}
+          data-player-tooltip
+        >
+          <div className="mb-2 p-3 min-w-[180px] max-w-[220px] rounded-lg bg-card border border-border shadow-xl">
             <div className="mb-3 flex items-center gap-3">
               {player.avatarUrl ? (
                 <div className="h-10 w-10 shrink-0 overflow-hidden rounded-full border border-border">
@@ -189,7 +227,8 @@ export function PlayerTooltip({
               </div>
             ) : null}
           </div>
-        </div>
+        </div>,
+        document.body,
       ) : null}
     </div>
   );

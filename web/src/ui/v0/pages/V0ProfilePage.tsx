@@ -61,7 +61,7 @@ export function V0ProfilePage(props: { me: any; meLoaded?: boolean; onMeUpdate?:
   const [detailsTitle, setDetailsTitle] = useState<string | null>(null);
   const [detailsEventId, setDetailsEventId] = useState<string | null>(null);
   const [detailsStatsOpen, setDetailsStatsOpen] = useState(false);
-  const [detailsStats, setDetailsStats] = useState<{ id: string; name: string; points: number }[]>([]);
+  const [detailsStats, setDetailsStats] = useState<{ id: string; name: string; points: number; avatarUrl?: string | null }[]>([]);
   const [historyError, setHistoryError] = useState<string | null>(null);
   const [historyLoading, setHistoryLoading] = useState(true);
   const [acceptedInvites, setAcceptedInvites] = useState<Record<string, boolean>>({});
@@ -289,10 +289,7 @@ export function V0ProfilePage(props: { me: any; meLoaded?: boolean; onMeUpdate?:
                     setDetailsEventId(it.eventId);
                     setDetailsStatsOpen(false);
                     setDetailsStats([]);
-                    const timeStr = it.eventStartTime
-                      ? ` ${it.eventStartTime.slice(0, 5)}${it.eventEndTime ? "–" + it.eventEndTime.slice(0, 5) : ""}`
-                      : "";
-                    setDetailsTitle(it.eventTitle + timeStr);
+                    setDetailsTitle(it.eventTitle);
                   } catch (err: any) {
                     setHistoryError(err?.message ?? "Ошибка");
                   }
@@ -364,7 +361,9 @@ export function V0ProfilePage(props: { me: any; meLoaded?: boolean; onMeUpdate?:
     );
   }
   const viewMe = meLive ?? props.me;
-  const calibration = (viewMe.calibrationEventsRemaining ?? 0) > 0;
+  const calibrationMatchesLeft = viewMe.calibrationMatchesRemaining ?? 0;
+  const calibration = calibrationMatchesLeft > 0;
+  const calibrationPlayed = Math.max(30 - calibrationMatchesLeft, 0);
 
   return (
     <TooltipProvider>
@@ -474,12 +473,19 @@ export function V0ProfilePage(props: { me: any; meLoaded?: boolean; onMeUpdate?:
             </div>
 
             {calibration ? (
-              <div className="mt-6 flex items-center gap-3 rounded-lg border border-amber-500/30 bg-amber-500/10 px-4 py-3">
-                <Clock className="h-5 w-5 text-amber-500 shrink-0" />
-                <p className="text-sm text-amber-200">
-                  Рейтинг в <strong>калибровке</strong> — осталось <strong>{viewMe.calibrationEventsRemaining}</strong>{" "}
-                  игра(ы) до финализации
-                </p>
+              <div className="mt-6 rounded-lg border border-amber-500/30 bg-amber-500/10 px-4 py-3 space-y-2">
+                <div className="flex items-center gap-3">
+                  <Clock className="h-5 w-5 text-amber-500 shrink-0" />
+                  <p className="text-sm text-amber-200">
+                    Калибровка: <strong>{calibrationPlayed}/30</strong> матчей сыграно
+                  </p>
+                </div>
+                <div className="h-2 rounded-full bg-amber-900/40 overflow-hidden">
+                  <div
+                    className="h-full rounded-full bg-amber-500 transition-all duration-300"
+                    style={{ width: `${(calibrationPlayed / 30) * 100}%` }}
+                  />
+                </div>
               </div>
             ) : null}
 
@@ -929,68 +935,66 @@ export function V0ProfilePage(props: { me: any; meLoaded?: boolean; onMeUpdate?:
         {details ? (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-6" onClick={() => { setDetails(null); setDetailsStatsOpen(false); }}>
             <div className="w-full max-w-5xl max-h-[90vh] overflow-y-auto rounded-xl border border-border bg-card p-6" onClick={(e) => e.stopPropagation()}>
-              <div className="flex items-center justify-between gap-3">
-                <div className="text-lg font-semibold">
-                  {detailsTitle}{" "}
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <div className="text-lg font-semibold">{detailsTitle}</div>
                   {details?.[0]?.eventStartTime ? (
-                    <span className="text-sm text-muted-foreground">
+                    <div className="text-sm text-muted-foreground">
                       {details[0].eventStartTime.slice(0, 5)}
                       {details[0].eventEndTime ? `–${details[0].eventEndTime.slice(0, 5)}` : ""}
-                      {" "}{details[0].eventDate}
-                    </span>
-                  ) : details?.[0]?.eventDate ? (
-                    <span className="text-sm text-muted-foreground">{details[0].eventDate}</span>
+                    </div>
+                  ) : null}
+                  {details?.[0]?.eventDate ? (
+                    <div className="text-sm text-muted-foreground">{details[0].eventDate}</div>
                   ) : null}
                 </div>
-                <div className="flex items-center gap-2">
-                  <Button
-                    variant="secondary"
-                    size="sm"
-                    onClick={async () => {
-                      if (detailsStatsOpen) {
-                        setDetailsStatsOpen(false);
-                        return;
-                      }
-                      if (detailsStats.length > 0) {
-                        setDetailsStatsOpen(true);
-                        return;
-                      }
-                      if (!detailsEventId) return;
-                      try {
-                        const d = await api.getEventDetails(detailsEventId);
-                        const totals = new Map<string, { id: string; name: string; points: number }>();
-                        d.rounds.flatMap((r: any) => r.matches).forEach((m: any) => {
-                          const score = m.score;
-                          if (!score || score.mode !== "POINTS") return;
-                          const ptsA = score.points?.teamAPoints ?? 0;
-                          const ptsB = score.points?.teamBPoints ?? 0;
-                          m.teamA.forEach((p: any) => {
-                            if (!p?.id) return;
-                            const row = totals.get(p.id) ?? { id: p.id, name: p.name, points: 0 };
-                            row.points += ptsA;
-                            totals.set(p.id, row);
-                          });
-                          m.teamB.forEach((p: any) => {
-                            if (!p?.id) return;
-                            const row = totals.get(p.id) ?? { id: p.id, name: p.name, points: 0 };
-                            row.points += ptsB;
-                            totals.set(p.id, row);
-                          });
-                        });
-                        const rows = Array.from(totals.values()).sort((a, b) => b.points - a.points || a.name.localeCompare(b.name));
-                        setDetailsStats(rows);
-                        setDetailsStatsOpen(true);
-                      } catch {}
-                    }}
-                  >
-                    <Trophy className="h-4 w-4 mr-1.5" />
-                    Статистика
-                  </Button>
-                  <Button variant="outline" onClick={() => { setDetails(null); setDetailsStatsOpen(false); }}>
-                    Закрыть
-                  </Button>
-                </div>
+                <Button variant="outline" size="sm" className="shrink-0" onClick={() => { setDetails(null); setDetailsStatsOpen(false); }}>
+                  Закрыть
+                </Button>
               </div>
+              <Button
+                variant="secondary"
+                className="w-full mt-3"
+                onClick={async () => {
+                  if (detailsStatsOpen) {
+                    setDetailsStatsOpen(false);
+                    return;
+                  }
+                  if (detailsStats.length > 0) {
+                    setDetailsStatsOpen(true);
+                    return;
+                  }
+                  if (!detailsEventId) return;
+                  try {
+                    const d = await api.getEventDetails(detailsEventId);
+                    const totals = new Map<string, { id: string; name: string; points: number; avatarUrl?: string | null }>();
+                    d.rounds.flatMap((r: any) => r.matches).forEach((m: any) => {
+                      const score = m.score;
+                      if (!score || score.mode !== "POINTS") return;
+                      const ptsA = score.points?.teamAPoints ?? 0;
+                      const ptsB = score.points?.teamBPoints ?? 0;
+                      m.teamA.forEach((p: any) => {
+                        if (!p?.id) return;
+                        const row = totals.get(p.id) ?? { id: p.id, name: p.name, points: 0, avatarUrl: p.avatarUrl };
+                        row.points += ptsA;
+                        totals.set(p.id, row);
+                      });
+                      m.teamB.forEach((p: any) => {
+                        if (!p?.id) return;
+                        const row = totals.get(p.id) ?? { id: p.id, name: p.name, points: 0, avatarUrl: p.avatarUrl };
+                        row.points += ptsB;
+                        totals.set(p.id, row);
+                      });
+                    });
+                    const rows = Array.from(totals.values()).sort((a, b) => b.points - a.points || a.name.localeCompare(b.name));
+                    setDetailsStats(rows);
+                    setDetailsStatsOpen(true);
+                  } catch {}
+                }}
+              >
+                <Trophy className="h-4 w-4 mr-1.5" />
+                Статистика
+              </Button>
 
               {detailsStatsOpen && detailsStats.length > 0 ? (
                 <div className="mt-4 space-y-2">
@@ -999,8 +1003,17 @@ export function V0ProfilePage(props: { me: any; meLoaded?: boolean; onMeUpdate?:
                       key={row.id}
                       className="flex items-center justify-between rounded-md border border-border/60 bg-secondary/40 px-3 py-2"
                     >
-                      <div className="text-sm font-medium">{row.name}</div>
-                      <div className="text-sm font-semibold">{row.points}</div>
+                      <div className="flex items-center gap-2 min-w-0">
+                        <div className="h-6 w-6 shrink-0 rounded-full bg-secondary/60 border border-border overflow-hidden flex items-center justify-center text-[10px] font-semibold">
+                          {row.avatarUrl ? (
+                            <img src={row.avatarUrl} alt="" className="h-full w-full object-cover" />
+                          ) : (
+                            row.name?.[0]?.toUpperCase() ?? "?"
+                          )}
+                        </div>
+                        <span className="text-sm font-medium truncate">{row.name}</span>
+                      </div>
+                      <div className="text-sm font-semibold shrink-0 ml-2">{row.points}</div>
                     </div>
                   ))}
                 </div>
@@ -1021,7 +1034,14 @@ export function V0ProfilePage(props: { me: any; meLoaded?: boolean; onMeUpdate?:
                   </thead>
                   <tbody className="divide-y divide-border">
                     {details.map((it) => (
-                      <tr key={it.matchId} className="hover:bg-secondary/30 transition-colors">
+                      <tr key={it.matchId} className={cn(
+                        "transition-colors",
+                        it.ratingDelta == null
+                          ? "hover:bg-secondary/30"
+                          : it.ratingDelta >= 0
+                            ? "bg-emerald-500/5 hover:bg-emerald-500/10"
+                            : "bg-red-400/5 hover:bg-red-400/10",
+                      )}>
                         <td className="py-3 pr-4">{it.roundNumber}</td>
                         <td className="py-3 pr-4">{it.courtNumber}</td>
                         <td className="py-3 pr-4">{it.teamText}</td>
@@ -1051,47 +1071,74 @@ export function V0ProfilePage(props: { me: any; meLoaded?: boolean; onMeUpdate?:
                 </table>
               </div>
 
-              <div className="mt-4 sm:hidden space-y-3">
-                {details.map((it) => (
-                  <div key={it.matchId} className="rounded-lg border border-border/60 bg-secondary/20 p-3 space-y-2">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                        <span>Раунд {it.roundNumber}</span>
-                        <span className="text-border">·</span>
-                        <span>Корт {it.courtNumber}</span>
-                      </div>
-                      <div>
-                        {it.ratingDelta == null ? (
-                          <span className="text-muted-foreground text-xs">—</span>
-                        ) : it.ratingDelta >= 0 ? (
-                          <Badge className="gap-1 bg-primary/20 text-primary border-primary/30 border text-xs py-0.5">
-                            <TrendingUp className="h-3 w-3" />
+              <div className="mt-4 sm:hidden space-y-2.5">
+                {details.map((it) => {
+                  const scoreParts = it.score?.split(/\s+/) ?? [];
+                  const myScoreStr = scoreParts.map((s) => {
+                    const [a, b] = s.split(":");
+                    return it.isTeamA ? s : `${b}:${a}`;
+                  }).join(" ");
+                  return (
+                    <div key={it.matchId} className={cn(
+                      "rounded-lg border px-3 py-2.5 space-y-1.5",
+                      it.ratingDelta == null
+                        ? "border-border/60 bg-secondary/20"
+                        : it.ratingDelta >= 0
+                          ? "border-emerald-500/25 bg-emerald-500/10"
+                          : "border-red-400/25 bg-red-400/10",
+                    )}>
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
+                          <span>R{it.roundNumber}</span>
+                        </div>
+                        {it.ratingDelta == null ? null : it.ratingDelta >= 0 ? (
+                          <Badge className="gap-1 bg-primary/20 text-primary border-primary/30 border text-[11px] py-0 px-1.5">
+                            <TrendingUp className="h-2.5 w-2.5" />
                             +{it.ratingDelta}
                           </Badge>
                         ) : (
-                          <Badge className="gap-1 bg-destructive/20 text-destructive border-destructive/30 border text-xs py-0.5">
-                            <TrendingDown className="h-3 w-3" />
+                          <Badge className="gap-1 bg-destructive/20 text-destructive border-destructive/30 border text-[11px] py-0 px-1.5">
+                            <TrendingDown className="h-2.5 w-2.5" />
                             {it.ratingDelta}
                           </Badge>
                         )}
                       </div>
+                      <div className="flex items-center gap-2">
+                        <div className="min-w-0 flex-1 text-left space-y-1">
+                          {(it.teamPlayers ?? it.teamText.split(" + ").map((n) => ({ name: n, avatarUrl: null as string | null }))).map((p, i) => (
+                            <div key={i} className="flex items-center gap-1.5">
+                              <div className="h-5 w-5 shrink-0 rounded-full bg-secondary/60 border border-border overflow-hidden flex items-center justify-center text-[9px] font-semibold">
+                                {p.avatarUrl ? (
+                                  <img src={p.avatarUrl} alt="" className="h-full w-full object-cover" />
+                                ) : (
+                                  p.name?.[0]?.toUpperCase() ?? "?"
+                                )}
+                              </div>
+                              <span className="text-xs font-medium truncate">{p.name}</span>
+                            </div>
+                          ))}
+                        </div>
+                        <div className="shrink-0 text-center tabular-nums font-bold text-sm px-1">
+                          {it.score ? myScoreStr : "—"}
+                        </div>
+                        <div className="min-w-0 flex-1 text-right space-y-1">
+                          {(it.opponentPlayers ?? it.opponentText.split(" + ").map((n) => ({ name: n, avatarUrl: null as string | null }))).map((p, i) => (
+                            <div key={i} className="flex items-center gap-1.5 justify-end">
+                              <span className="text-xs text-muted-foreground truncate">{p.name}</span>
+                              <div className="h-5 w-5 shrink-0 rounded-full bg-secondary/60 border border-border overflow-hidden flex items-center justify-center text-[9px] font-semibold">
+                                {p.avatarUrl ? (
+                                  <img src={p.avatarUrl} alt="" className="h-full w-full object-cover" />
+                                ) : (
+                                  p.name?.[0]?.toUpperCase() ?? "?"
+                                )}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
                     </div>
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="min-w-0 flex-1">
-                        <div className="text-[11px] text-muted-foreground mb-0.5">Пара</div>
-                        <div className="text-sm leading-tight">{it.teamText}</div>
-                      </div>
-                      <div className="text-center shrink-0 px-1">
-                        <div className="text-[11px] text-muted-foreground mb-0.5">Счёт</div>
-                        <div className="text-sm font-semibold">{it.score ?? "—"}</div>
-                      </div>
-                      <div className="min-w-0 flex-1 text-right">
-                        <div className="text-[11px] text-muted-foreground mb-0.5">Соперники</div>
-                        <div className="text-sm leading-tight">{it.opponentText}</div>
-                      </div>
-                    </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             </div>
           </div>

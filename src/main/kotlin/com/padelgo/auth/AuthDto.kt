@@ -41,6 +41,7 @@ data class MeResponse(
     val surveyCompleted: Boolean,
     val surveyLevel: Double?,
     val calibrationEventsRemaining: Int,
+    val calibrationMatchesRemaining: Int,
     val avatarUrl: String? = null,
     val gender: String? = null
 )

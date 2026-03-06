@@ -68,6 +68,7 @@ class AuthService(
             surveyCompleted = user.surveyCompleted,
             surveyLevel = user.surveyLevel,
             calibrationEventsRemaining = user.calibrationEventsRemaining,
+            calibrationMatchesRemaining = user.calibrationMatchesRemaining,
             avatarUrl = player.avatarUrl,
             gender = user.gender
         )

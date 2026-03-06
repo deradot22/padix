@@ -31,7 +31,7 @@ class PlayerController(
         val usersByPlayerId = userRepo.findAllByPlayerIdIn(players.mapNotNull { it.id })
             .associateBy { it.playerId!! }
         return players.map { p ->
-            val calibration = usersByPlayerId[p.id]?.calibrationEventsRemaining
+            val calibration = usersByPlayerId[p.id]?.calibrationMatchesRemaining
             val publicId = formatPublicId(usersByPlayerId[p.id]?.publicId)
             PlayerResponse.from(p, calibration, publicId)
         }
@@ -181,7 +181,7 @@ class EventController(
         val players = playerRepo.findAllById(playerIds).associateBy { it.id!! }
         val usersByPlayerId = userRepo.findAllByPlayerIdIn(playerIds).associateBy { it.playerId!! }
         val playerResponses = players.mapValues { (id, p) ->
-            val calibration = usersByPlayerId[id]?.calibrationEventsRemaining
+            val calibration = usersByPlayerId[id]?.calibrationMatchesRemaining
             val publicId = formatPublicId(usersByPlayerId[id]?.publicId)
             PlayerResponse.from(p, calibration, publicId)
         }
@@ -236,12 +236,12 @@ class EventController(
             EventResponse.from(event, registeredCount),
             roundDtos,
             regs.map { p ->
-                val calibration = usersByPlayerId[p.id]?.calibrationEventsRemaining
+                val calibration = usersByPlayerId[p.id]?.calibrationMatchesRemaining
                 val publicId = formatPublicId(usersByPlayerId[p.id]?.publicId)
                 PlayerResponse.from(p, calibration, publicId)
             },
             pending.map { p ->
-                val calibration = usersByPlayerId[p.id]?.calibrationEventsRemaining
+                val calibration = usersByPlayerId[p.id]?.calibrationMatchesRemaining
                 val publicId = formatPublicId(usersByPlayerId[p.id]?.publicId)
                 PlayerResponse.from(p, calibration, publicId)
             },

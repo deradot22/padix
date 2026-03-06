@@ -69,6 +69,7 @@ class SurveyService(
         user.surveyVersion = req.version
         user.surveyPayload = objectMapper.writeValueAsString(req)
         user.calibrationEventsRemaining = 3
+        user.calibrationMatchesRemaining = 30
         player.rating = rating
         player.ntrp = Ntrp.fromRating(rating)
 

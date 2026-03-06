@@ -7,9 +7,9 @@ object Ntrp {
         rating < 1000 -> "2.0"
         rating < 1100 -> "2.5"
         rating < 1200 -> "3.0"
-        rating < 1300 -> "3.5"
-        rating < 1400 -> "4.0"
-        rating < 1500 -> "4.5"
+        rating < 1350 -> "3.5"
+        rating < 1500 -> "4.0"
+        rating < 1700 -> "4.5"
         else -> "5.0+"
     }
 }

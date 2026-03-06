@@ -75,7 +75,7 @@ export function V0SurveyPage(props: {
       props.onDone(fresh);
       props.onResult({
         rating: fresh.rating,
-        remaining: fresh.calibrationEventsRemaining ?? 0,
+        remaining: fresh.calibrationMatchesRemaining ?? 0,
       });
       nav("/profile");
     } catch (err: any) {

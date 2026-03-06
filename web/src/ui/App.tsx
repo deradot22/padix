@@ -27,6 +27,7 @@ export function App() {
     surveyCompleted: boolean;
     surveyLevel: number | null;
     calibrationEventsRemaining: number;
+    calibrationMatchesRemaining: number;
     avatarUrl?: string | null;
   }>(null);
   const [meLoaded, setMeLoaded] = useState(false);

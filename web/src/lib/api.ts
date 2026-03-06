@@ -78,6 +78,7 @@ export type MeResponse = {
   surveyCompleted: boolean;
   surveyLevel: number | null;
   calibrationEventsRemaining: number;
+  calibrationMatchesRemaining: number;
   avatarUrl?: string | null;
   gender?: string | null;
 };
@@ -101,6 +102,8 @@ export type EventHistoryItem = {
   ratingDelta: number;
 };
 
+export type MatchPlayerInfo = { name: string; avatarUrl?: string | null };
+
 export type EventHistoryMatch = {
   eventId: string;
   eventTitle: string;
@@ -117,6 +120,9 @@ export type EventHistoryMatch = {
   teamText: string;
   opponentText: string;
   result: string;
+  isTeamA: boolean;
+  teamPlayers?: MatchPlayerInfo[];
+  opponentPlayers?: MatchPlayerInfo[];
 };
 
 export type FriendItem = {
