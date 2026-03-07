@@ -1,11 +1,11 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { Calendar, CalendarDays, Clock, Info, Plus, Users } from "lucide-react";
+import { Calendar, CalendarDays, Clock, Info, List, Plus, Users } from "lucide-react";
 import { api, Event } from "../../../lib/api";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { GamesCalendar } from "@/components/games-calendar";
 import { cn } from "@/lib/utils";
 import { formatEventDate, timeRange } from "../utils";
@@ -51,7 +51,7 @@ export function V0GamesPage(props: { me: any }) {
   const [events, setEvents] = useState<Event[] | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [calendarOpen, setCalendarOpen] = useState(false);
+  const [view, setView] = useState<"list" | "calendar">("list");
   const [calendarEvents, setCalendarEvents] = useState<Event[]>([]);
   const [dayOpen, setDayOpen] = useState(false);
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
@@ -108,7 +108,20 @@ export function V0GamesPage(props: { me: any }) {
     }
   };
 
-  const content = useMemo(() => {
+  useEffect(() => {
+    if (view === "calendar") {
+      loadCalendarEvents(new Date());
+    }
+  }, [view]);
+
+  const shortMonths = ["янв", "фев", "мар", "апр", "май", "июн", "июл", "авг", "сен", "окт", "ноя", "дек"];
+  const shortDate = (dateStr: string) => {
+    const [, m, d] = dateStr.split("-").map((v) => Number(v));
+    if (!m || !d) return dateStr;
+    return `${d} ${shortMonths[m - 1] ?? ""}`;
+  };
+
+  const listContent = useMemo(() => {
     if (loading) {
       return <div className="text-sm text-muted-foreground">Загрузка…</div>;
     }
@@ -127,16 +140,9 @@ export function V0GamesPage(props: { me: any }) {
       );
     }
 
-    const shortMonths = ["янв", "фев", "мар", "апр", "май", "июн", "июл", "авг", "сен", "окт", "ноя", "дек"];
-    const shortDate = (dateStr: string) => {
-      const [y, m, d] = dateStr.split("-").map((v) => Number(v));
-      if (!y || !m || !d) return dateStr;
-      return `${d} ${shortMonths[m - 1] ?? ""}`;
-    };
-
     return (
       <>
-        {/* Мобильная версия — карточки */}
+        {/* Mobile cards */}
         <div className="space-y-2 md:hidden">
           {events.map((e) => (
             <button
@@ -170,7 +176,7 @@ export function V0GamesPage(props: { me: any }) {
           ))}
         </div>
 
-        {/* Десктоп — таблица */}
+        {/* Desktop table */}
         <div className="hidden md:block overflow-x-auto">
           <table className="w-full min-w-[600px]">
             <thead>
@@ -232,75 +238,166 @@ export function V0GamesPage(props: { me: any }) {
   }, [error, events, loading, nav, registeredIds]);
 
   return (
-    <div className="space-y-8">
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+    <div className="space-y-5">
+      {/* Header: title left, create button right */}
+      <div className="flex items-start justify-between">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight">Ближайшие игры</h1>
+          <h1 className="text-3xl font-bold tracking-tight">Игры</h1>
           <p className="mt-1 text-muted-foreground">Выберите игру для участия</p>
         </div>
-      </div>
-
-      <div className="flex items-center gap-3">
-        <div className="flex rounded-lg border border-border bg-secondary p-1">
-          <Link
-            to="/create"
-            className={cn(
-              "rounded-md px-4 py-2 text-sm font-medium transition-colors bg-primary text-primary-foreground",
-            )}
-          >
-            <Plus className="mr-2 inline h-4 w-4" />
+        <Link to="/create" className="shrink-0">
+          <Button>
+            <Plus className="mr-2 h-4 w-4" />
             Создать игру
-          </Link>
-          <button
-            onClick={() => setCalendarOpen(true)}
-            className="rounded-md px-4 py-2 text-sm font-medium transition-colors text-muted-foreground hover:text-foreground hover:bg-secondary/80"
-            type="button"
-          >
-            <CalendarDays className="mr-2 inline h-4 w-4" />
-            Календарь
-          </button>
-        </div>
+          </Button>
+        </Link>
       </div>
 
-      <Card>
-        <CardHeader className="flex flex-row items-center justify-between pb-3">
-          <CardTitle className="flex items-center gap-2 text-lg">
-            <Calendar className="h-5 w-5 text-primary" />
-            Ближайшие игры (2 недели)
-          </CardTitle>
-          <div className="flex items-center gap-2 text-sm text-muted-foreground">
-            <Info className="h-4 w-4" />
-            <span>Нажми на игру, чтобы открыть корты/раунды</span>
+      {/* Toggle: Игры / Календарь */}
+      <div className="relative flex rounded-xl border border-border bg-secondary/30 p-1 sm:w-fit sm:ml-auto">
+        <div
+          className="absolute top-1 bottom-1 rounded-lg bg-primary shadow-lg transition-all duration-300 ease-in-out"
+          style={{
+            width: "calc(50% - 4px)",
+            left: view === "list" ? "4px" : "calc(50%)",
+          }}
+        />
+        <button
+          type="button"
+          onClick={() => setView("list")}
+          className={cn(
+            "relative z-10 flex-1 sm:flex-none flex items-center justify-center gap-2 rounded-lg px-6 py-2.5 sm:py-2 text-sm font-semibold transition-colors duration-300 min-w-[120px]",
+            view === "list"
+              ? "text-primary-foreground"
+              : "text-muted-foreground hover:text-foreground",
+          )}
+        >
+          <List className="h-4 w-4" />
+          Игры
+        </button>
+        <button
+          type="button"
+          onClick={() => setView("calendar")}
+          className={cn(
+            "relative z-10 flex-1 sm:flex-none flex items-center justify-center gap-2 rounded-lg px-6 py-2.5 sm:py-2 text-sm font-semibold transition-colors duration-300 min-w-[120px]",
+            view === "calendar"
+              ? "text-primary-foreground"
+              : "text-muted-foreground hover:text-foreground",
+          )}
+        >
+          <CalendarDays className="h-4 w-4" />
+          Календарь
+        </button>
+      </div>
+
+      {/* Content */}
+      {view === "list" ? (
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between pb-3">
+            <CardTitle className="flex items-center gap-2 text-lg">
+              <Calendar className="h-5 w-5 text-primary" />
+              Ближайшие игры (2 недели)
+            </CardTitle>
+            <div className="hidden sm:flex items-center gap-2 text-sm text-muted-foreground">
+              <Info className="h-4 w-4" />
+              <span>Нажми на игру</span>
+            </div>
+          </CardHeader>
+          <CardContent>{listContent}</CardContent>
+        </Card>
+      ) : (
+        <>
+          {/* Mobile: calendar + dialog */}
+          <div className="sm:hidden">
+            <GamesCalendar
+              open={true}
+              onOpenChange={() => {}}
+              inline
+              events={calendarEvents}
+              onMonthChange={loadCalendarEvents}
+              onSelectDate={(date) => {
+                const dayKey = formatDate(date);
+                setSelectedDate(date);
+                setSelectedEvents((calendarEvents ?? []).filter((e) => e.date === dayKey));
+                setDayOpen(true);
+              }}
+            />
           </div>
-        </CardHeader>
-        <CardContent>{content}</CardContent>
-      </Card>
 
-      <GamesCalendar
-        open={calendarOpen}
-        onOpenChange={(open) => {
-          setCalendarOpen(open);
-          if (open) {
-            loadCalendarEvents(new Date());
-          }
-        }}
-        events={calendarEvents}
-        onMonthChange={loadCalendarEvents}
-        onSelectDate={(date) => {
-          const dayKey = formatDate(date);
-          setSelectedDate(date);
-          setSelectedEvents((calendarEvents ?? []).filter((e) => e.date === dayKey));
-          setCalendarOpen(false);
-          setDayOpen(true);
-        }}
-      />
+          {/* Desktop: calendar left + events right */}
+          <div className="hidden sm:grid sm:grid-cols-[1fr_1fr] sm:gap-6 lg:grid-cols-[minmax(0,400px)_1fr]">
+            <GamesCalendar
+              open={true}
+              onOpenChange={() => {}}
+              inline
+              events={calendarEvents}
+              onMonthChange={loadCalendarEvents}
+              onSelectDate={(date) => {
+                const dayKey = formatDate(date);
+                setSelectedDate(date);
+                setSelectedEvents((calendarEvents ?? []).filter((e) => e.date === dayKey));
+              }}
+            />
+            <div className="rounded-xl border border-border bg-card p-5 min-h-[300px]">
+              {selectedDate ? (
+                <>
+                  <h3 className="text-sm font-semibold mb-4">
+                    {formatEventDate(formatDate(selectedDate))}
+                  </h3>
+                  {selectedEvents.length === 0 ? (
+                    <div className="text-sm text-muted-foreground">В этот день игр нет.</div>
+                  ) : (
+                    <div className="space-y-2">
+                      {selectedEvents.map((e) => (
+                        <button
+                          key={e.id}
+                          type="button"
+                          className="w-full text-left rounded-lg border border-border bg-secondary/30 p-3 hover:bg-secondary/50 transition-colors"
+                          onClick={() => nav(`/events/${e.id}`)}
+                        >
+                          <div className="flex items-center justify-between gap-3">
+                            <div className="min-w-0">
+                              <div className="font-medium text-sm truncate">{e.title || "Игра"}</div>
+                              <div className="text-xs text-muted-foreground mt-0.5">
+                                {timeRange(e.startTime, e.endTime)}
+                              </div>
+                            </div>
+                            <div className="flex items-center gap-2 shrink-0">
+                              {registeredIds[e.id] && (
+                                <Badge variant="secondary" className="text-xs bg-primary/15 text-primary border-primary/30">
+                                  Записан
+                                </Badge>
+                              )}
+                              {getStatusBadge(e.status, "text-xs")}
+                              <span className="text-xs text-muted-foreground tabular-nums">
+                                <Users className="h-3 w-3 inline mr-0.5" />
+                                {e.registeredCount}/{e.courtsCount * 4}
+                              </span>
+                            </div>
+                          </div>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </>
+              ) : (
+                <div className="flex items-center justify-center h-full text-sm text-muted-foreground">
+                  Выберите день в календаре
+                </div>
+              )}
+            </div>
+          </div>
+        </>
+      )}
 
+      {/* Mobile day dialog */}
       <Dialog open={dayOpen} onOpenChange={setDayOpen}>
-        <DialogContent className="sm:max-w-[600px]">
+        <DialogContent className="sm:max-w-[600px] sm:hidden">
           <DialogHeader>
             <DialogTitle>
               {selectedDate ? `Игры за ${formatEventDate(formatDate(selectedDate))}` : "Игры за выбранный день"}
             </DialogTitle>
+            <DialogDescription className="sr-only">Список игр за выбранный день</DialogDescription>
           </DialogHeader>
           {selectedEvents.length === 0 ? (
             <div className="text-sm text-muted-foreground">В этот день игр нет.</div>
@@ -342,4 +439,3 @@ export function V0GamesPage(props: { me: any }) {
     </div>
   );
 }
-

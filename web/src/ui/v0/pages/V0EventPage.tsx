@@ -66,9 +66,8 @@ export function V0EventPage(props: { me: any; meLoaded?: boolean }) {
   const roundsScrollRef = useRef<HTMLDivElement | null>(null);
   const userCollapsedRef = useRef(false);
   const [finishedMatchIds, setFinishedMatchIds] = useState<Set<string>>(new Set());
+  const autoSavingRef = useRef<Set<string>>(new Set());
 
-  /** After saving score for activeMatchId, navigate to the next unscored match in the same round,
-   *  or to the first match of the next round if all matches in the current round are done. */
   const navigateAfterScore = (rounds: EventDetails["rounds"], savedMatchId: string) => {
     const currentIdx = rounds.findIndex((round) =>
       round.matches.some((m) => m.id === savedMatchId),
@@ -211,16 +210,10 @@ export function V0EventPage(props: { me: any; meLoaded?: boolean }) {
     return false;
   };
 
-  /** Label for the "save score" button; null = hide the button entirely */
   const nextButtonLabel = useMemo<string | null>(() => {
     if (!data?.rounds || !activeMatchId) return null;
     const currentRoundIdx = data.rounds.findIndex((r) => r.matches.some((m) => m.id === activeMatchId));
     if (currentRoundIdx < 0) return null;
-    const currentRound = data.rounds[currentRoundIdx];
-    const otherUnscored = currentRound.matches.some(
-      (m) => m.id !== activeMatchId && m.status !== "FINISHED" && !m.score?.points,
-    );
-    if (otherUnscored) return "Следующий матч";
     const isLastRound = currentRoundIdx === data.rounds.length - 1;
     return isLastRound ? null : "Следующий раунд";
   }, [data, activeMatchId]);
@@ -345,6 +338,21 @@ export function V0EventPage(props: { me: any; meLoaded?: boolean }) {
     };
   }, [eventId, props.me]);
 
+  useEffect(() => {
+    if (!eventId) return;
+    const status = data?.event?.status;
+    if (!status) return;
+    const active = ["OPEN_FOR_REGISTRATION", "REGISTRATION_CLOSED", "IN_PROGRESS"];
+    if (!active.includes(status)) return;
+
+    const poll = () => {
+      if (document.hidden) return;
+      api.getEventDetails(eventId).then(setData).catch(() => {});
+    };
+    const id = setInterval(poll, 5000);
+    return () => clearInterval(id);
+  }, [eventId, data?.event?.status]);
+
   const prevEventIdRef = useRef<string | null>(null);
   useEffect(() => {
     if (!data) return;
@@ -422,7 +430,7 @@ export function V0EventPage(props: { me: any; meLoaded?: boolean }) {
 
   const statsRows = useMemo(() => {
     if (!data?.rounds?.length) return [];
-    const totals = new Map<string, { id: string; name: string; points: number }>();
+    const totals = new Map<string, { id: string; name: string; points: number; avatarUrl?: string | null }>();
 
     data.rounds.flatMap((r) => r.matches).forEach((m) => {
       const score = m.score;
@@ -434,13 +442,13 @@ export function V0EventPage(props: { me: any; meLoaded?: boolean }) {
 
       m.teamA.forEach((p) => {
         if (!p?.id) return;
-        const row = totals.get(p.id) ?? { id: p.id, name: p.name, points: 0 };
+        const row = totals.get(p.id) ?? { id: p.id, name: p.name, points: 0, avatarUrl: p.avatarUrl };
         row.points += pointsA;
         totals.set(p.id, row);
       });
       m.teamB.forEach((p) => {
         if (!p?.id) return;
-        const row = totals.get(p.id) ?? { id: p.id, name: p.name, points: 0 };
+        const row = totals.get(p.id) ?? { id: p.id, name: p.name, points: 0, avatarUrl: p.avatarUrl };
         row.points += pointsB;
         totals.set(p.id, row);
       });
@@ -1229,28 +1237,46 @@ export function V0EventPage(props: { me: any; meLoaded?: boolean }) {
                                   className="rounded-lg border border-border bg-secondary/20 py-2 text-sm font-semibold hover:bg-secondary"
                                   onClick={() => {
                                     const totalPoints = (e.pointsPerPlayerPerMatch ?? 6) * 4;
-                                    setScoreByMatch((prev) => {
-                                      const current = prev[activeMatchId] ?? { a: 0, b: 0 };
-                                      let nextA = activeTeam === "A" ? n : current.a;
-                                      let nextB = activeTeam === "B" ? n : current.b;
-                                      const autoFilled = autoFilledByMatch[activeMatchId];
-                                      const canAutoFill =
-                                        !autoFilled &&
-                                        ((activeTeam === "A" && current.b === 0) ||
-                                          (activeTeam === "B" && current.a === 0));
-                                      if (canAutoFill) {
-                                        if (activeTeam === "A") {
-                                          nextB = Math.max(0, totalPoints - n);
-                                        } else {
-                                          nextA = Math.max(0, totalPoints - n);
-                                        }
-                                        setAutoFilledByMatch((m) => ({ ...m, [activeMatchId]: true }));
+                                    const current = scoreByMatch[activeMatchId] ?? { a: 0, b: 0 };
+                                    let nextA = activeTeam === "A" ? n : current.a;
+                                    let nextB = activeTeam === "B" ? n : current.b;
+                                    const autoFilled = autoFilledByMatch[activeMatchId];
+                                    const canAutoFill =
+                                      !autoFilled &&
+                                      ((activeTeam === "A" && current.b === 0) ||
+                                        (activeTeam === "B" && current.a === 0));
+                                    if (canAutoFill) {
+                                      if (activeTeam === "A") {
+                                        nextB = Math.max(0, totalPoints - n);
+                                      } else {
+                                        nextA = Math.max(0, totalPoints - n);
                                       }
-                                      return {
-                                        ...prev,
-                                        [activeMatchId]: { a: nextA, b: nextB },
-                                      };
-                                    });
+                                      setAutoFilledByMatch((m) => ({ ...m, [activeMatchId]: true }));
+                                    }
+                                    setScoreByMatch((prev) => ({
+                                      ...prev,
+                                      [activeMatchId]: { a: nextA, b: nextB },
+                                    }));
+                                    if (nextA + nextB === totalPoints && eventId && !autoSavingRef.current.has(activeMatchId)) {
+                                      autoSavingRef.current.add(activeMatchId);
+                                      setScoreSavingId(activeMatchId);
+                                      setScoreError(null);
+                                      api.submitScore(activeMatchId, { teamAPoints: nextA, teamBPoints: nextB })
+                                        .then(async () => {
+                                          setFinishedMatchIds((prev) => new Set([...prev, activeMatchId]));
+                                          setInfo("Счёт сохранён");
+                                          setScorePadOpen(false);
+                                          const refreshed = await api.getEventDetails(eventId);
+                                          setData(refreshed);
+                                        })
+                                        .catch((err: any) => {
+                                          setScoreError(err?.message ?? "Не удалось сохранить счёт");
+                                        })
+                                        .finally(() => {
+                                          autoSavingRef.current.delete(activeMatchId);
+                                          setScoreSavingId(null);
+                                        });
+                                    }
                                   }}
                                 >
                                   {n}
@@ -1260,6 +1286,8 @@ export function V0EventPage(props: { me: any; meLoaded?: boolean }) {
                             <div className="mt-3 flex items-center justify-between gap-3">
                               {scoreError ? (
                                 <div className="text-xs text-destructive">{scoreError}</div>
+                              ) : scoreSavingId === activeMatchId ? (
+                                <div className="text-xs text-muted-foreground">Сохраняем…</div>
                               ) : (
                                 <div className="text-xs text-muted-foreground">Выберите значение для активной команды</div>
                               )}
@@ -1268,61 +1296,19 @@ export function V0EventPage(props: { me: any; meLoaded?: boolean }) {
                                 size="sm"
                                 disabled={scoreSavingId === activeMatchId}
                                 onClick={async () => {
-                                  const current = scoreByMatch[activeMatchId];
-                                  if (!current) return;
                                   if (!eventId) return;
-                                  const totalPoints = (e.pointsPerPlayerPerMatch ?? 6) * 4;
-                                  let refreshed: EventDetails | null = null;
-                                  if (current.a + current.b !== totalPoints) {
-                                    setScoreSavingId(activeMatchId);
-                                    try {
-                                      await api.saveDraftScore(activeMatchId, { teamAPoints: current.a, teamBPoints: current.b });
-                                      refreshed = await api.getEventDetails(eventId);
-                                      setData(refreshed);
-                                      setInfo("Черновик счёта сохранён");
-                                    } catch (err: any) {
-                                      const msg = err?.message ?? "Не удалось сохранить черновик";
-                                      setScoreError(msg);
-                                    } finally {
-                                      setScoreSavingId(null);
-                                    }
-                                    if (refreshed) {
-                                      navigateAfterScore(refreshed.rounds ?? [], activeMatchId);
-                                    }
-                                    return;
-                                  }
-                                  setScoreSavingId(activeMatchId);
-                                  setScoreError(null);
-                                  try {
-                                    await api.submitScore(activeMatchId, { teamAPoints: current.a, teamBPoints: current.b });
-                                    setFinishedMatchIds((prev) => new Set([...prev, activeMatchId]));
-                                    refreshed = await api.getEventDetails(eventId);
-                                    setData(refreshed);
-                                    setInfo("Счёт сохранён");
-                                  } catch (err: any) {
-                                    const msg = err?.message ?? "Не удалось сохранить счёт";
-                                    if (msg.includes("Survey is required")) {
-                                      setScoreError("Нужно пройти опрос, чтобы сохранять счёт.");
-                                    } else if (msg.includes("Only participants")) {
-                                      setScoreError("Сохранять счёт могут только участники игры.");
-                                    } else if (msg.includes("Only author")) {
-                                      setScoreError("Сохранять счёт может только автор игры.");
-                                    } else if (msg.includes("HTTP 403")) {
-                                      setScoreError("Нет доступа для сохранения счёта.");
-                                    } else if (msg.includes("HTTP 401")) {
-                                      setScoreError("Нужна авторизация для сохранения счёта.");
-                                    } else {
-                                      setScoreError(msg);
-                                    }
-                                  } finally {
-                                    setScoreSavingId(null);
-                                  }
-                                  if (refreshed) {
-                                    navigateAfterScore(refreshed.rounds ?? [], activeMatchId);
+                                  const rounds = data?.rounds ?? [];
+                                  const curIdx = rounds.findIndex((r) => r.matches.some((m) => m.id === activeMatchId));
+                                  const nextRound = curIdx >= 0 ? rounds[curIdx + 1] : null;
+                                  if (nextRound) {
+                                    setExpandedRoundId(nextRound.id);
+                                    setActiveMatchId(nextRound.matches[0]?.id ?? null);
+                                    setScorePadOpen(false);
+                                    setScoreError(null);
                                   }
                                 }}
                               >
-                                {scoreSavingId === activeMatchId ? "Сохраняем…" : nextButtonLabel}
+                                {nextButtonLabel}
                               </Button>
                               )}
                             </div>
@@ -1334,63 +1320,21 @@ export function V0EventPage(props: { me: any; meLoaded?: boolean }) {
                             <Button
                               size="sm"
                               variant="default"
-                              disabled={
-                                !activeMatchId ||
-                                !scoreByMatch[activeMatchId] ||
-                                (scoreByMatch[activeMatchId].a === 0 && scoreByMatch[activeMatchId].b === 0)
-                              }
+                              disabled={scoreSavingId === activeMatchId}
                               onClick={async () => {
-                                if (!activeMatchId || !eventId) return;
-                                const current = scoreByMatch[activeMatchId];
-                                if (!current) return;
-                                if (current.a === 0 && current.b === 0) return;
-                                  const totalPoints = (e.pointsPerPlayerPerMatch ?? 6) * 4;
-                                  if (current.a + current.b !== totalPoints) {
-                                    setScoreSavingId(activeMatchId);
-                                    try {
-                                      await api.saveDraftScore(activeMatchId, { teamAPoints: current.a, teamBPoints: current.b });
-                                      const refreshed = await api.getEventDetails(eventId);
-                                      setData(refreshed);
-                                      setInfo("Черновик счёта сохранён");
-                                      navigateAfterScore(refreshed.rounds ?? [], activeMatchId);
-                                    } catch (e: any) {
-                                      const msg = e?.message ?? "Не удалось сохранить черновик";
-                                      setScoreError(msg);
-                                    } finally {
-                                      setScoreSavingId(null);
-                                    }
-                                    return;
-                                  }
-                                setScoreSavingId(activeMatchId);
-                                setScoreError(null);
-                                try {
-                                  await api.submitScore(activeMatchId, { teamAPoints: current.a, teamBPoints: current.b });
-                                  setFinishedMatchIds((prev) => new Set([...prev, activeMatchId]));
-                                  const refreshed = await api.getEventDetails(eventId);
-                                  setData(refreshed);
-                                  setInfo("Счёт сохранён");
-                                  navigateAfterScore(refreshed.rounds ?? [], activeMatchId);
-                                } catch (e: any) {
-                                  const msg = e?.message ?? "Не удалось сохранить счёт";
-                                  if (msg.includes("Survey is required")) {
-                                    setScoreError("Нужно пройти опрос, чтобы сохранять счёт.");
-                                  } else if (msg.includes("Only participants")) {
-                                    setScoreError("Сохранять счёт могут только участники игры.");
-                                  } else if (msg.includes("Only author")) {
-                                    setScoreError("Сохранять счёт может только автор игры.");
-                                  } else if (msg.includes("HTTP 403")) {
-                                    setScoreError("Нет доступа для сохранения счёта.");
-                                  } else if (msg.includes("HTTP 401")) {
-                                    setScoreError("Нужна авторизация для сохранения счёта.");
-                                  } else {
-                                    setScoreError(msg);
-                                  }
-                                } finally {
-                                  setScoreSavingId(null);
+                                if (!eventId) return;
+                                const rounds = data?.rounds ?? [];
+                                const curIdx = rounds.findIndex((r) => r.matches.some((m) => m.id === activeMatchId));
+                                const nextRound = curIdx >= 0 ? rounds[curIdx + 1] : null;
+                                if (nextRound) {
+                                  setExpandedRoundId(nextRound.id);
+                                  setActiveMatchId(nextRound.matches[0]?.id ?? null);
+                                  setScorePadOpen(false);
+                                  setScoreError(null);
                                 }
                               }}
                             >
-                              {scoreSavingId === activeMatchId ? "Сохраняем…" : nextButtonLabel}
+                              {nextButtonLabel}
                             </Button>
                             )}
                           </div>
@@ -1419,6 +1363,12 @@ export function V0EventPage(props: { me: any; meLoaded?: boolean }) {
                       const refreshed = await api.getEventDetails(eventId);
                       setData(refreshed);
                       setInfo("Раунд добавлен.");
+                      const rounds = refreshed.rounds ?? [];
+                      const newRound = rounds[rounds.length - 1];
+                      if (newRound?.id) {
+                        setExpandedRoundId(newRound.id);
+                        setTimeout(() => activeRoundRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" }), 150);
+                      }
                     } catch (err: any) {
                       setActionError(err?.message ?? "Ошибка добавления раунда");
                     }
@@ -1429,7 +1379,6 @@ export function V0EventPage(props: { me: any; meLoaded?: boolean }) {
                 <Button
                   variant="secondary"
                   disabled={finalRoundLocked}
-                  className={cn(finalRoundLocked && "border-amber-500/50 bg-amber-500/10 text-amber-700 dark:text-amber-400")}
                   onClick={async () => {
                     if (!eventId) return;
                     if (!window.confirm("Добавить финальный раунд? Пары будут расставлены по турнирной таблице.")) return;
@@ -1443,19 +1392,18 @@ export function V0EventPage(props: { me: any; meLoaded?: boolean }) {
                       setInfo("Финальный раунд добавлен.");
                       localStorage.setItem(`padelgo_final_round_${eventId}`, "1");
                       setFinalRoundLocked(true);
+                      const rounds = refreshed.rounds ?? [];
+                      const newRound = rounds[rounds.length - 1];
+                      if (newRound?.id) {
+                        setExpandedRoundId(newRound.id);
+                        setTimeout(() => activeRoundRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" }), 150);
+                      }
                     } catch (err: any) {
                       setActionError(err?.message ?? "Ошибка финального раунда");
                     }
                   }}
                 >
-                  {finalRoundLocked ? (
-                    <>
-                      <Trophy className="h-4 w-4 mr-1.5" />
-                      Финальный раунд добавлен
-                    </>
-                  ) : (
-                    "Финальный раунд"
-                  )}
+                  Финальный раунд
                 </Button>
               </div>
               <Button
@@ -1506,8 +1454,17 @@ export function V0EventPage(props: { me: any; meLoaded?: boolean }) {
                     key={row.id}
                     className="flex items-center justify-between rounded-md border border-border/60 bg-secondary/40 px-3 py-2"
                   >
-                    <div className="text-sm font-medium">{row.name}</div>
-                    <div className="text-sm font-semibold">{row.points}</div>
+                    <div className="flex items-center gap-2 min-w-0">
+                      <div className="h-6 w-6 shrink-0 rounded-full bg-secondary/60 border border-border overflow-hidden flex items-center justify-center text-[10px] font-semibold">
+                        {row.avatarUrl ? (
+                          <img src={row.avatarUrl} alt="" className="h-full w-full object-cover" />
+                        ) : (
+                          row.name?.[0]?.toUpperCase() ?? "?"
+                        )}
+                      </div>
+                      <span className="text-sm font-medium truncate">{row.name}</span>
+                    </div>
+                    <div className="text-sm font-semibold shrink-0 ml-2">{row.points}</div>
                   </div>
                 ))}
               </div>

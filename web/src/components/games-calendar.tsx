@@ -2,8 +2,6 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { ChevronLeft, ChevronRight } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
 import type { Event } from "@/lib/api";
 
@@ -13,6 +11,7 @@ export interface GamesCalendarProps {
   onSelectDate?: (date: Date) => void;
   events?: Event[];
   onMonthChange?: (date: Date) => void;
+  inline?: boolean;
 }
 
 const WEEKDAYS = ["ПН", "ВТ", "СР", "ЧТ", "ПТ", "СБ", "ВС"];
@@ -37,10 +36,10 @@ function getDaysInMonth(year: number, month: number) {
 
 function getFirstDayOfMonth(year: number, month: number) {
   const day = new Date(year, month, 1).getDay();
-  return day === 0 ? 6 : day - 1; // Monday-first
+  return day === 0 ? 6 : day - 1;
 }
 
-export function GamesCalendar({ open, onOpenChange, onSelectDate, events, onMonthChange }: GamesCalendarProps) {
+export function GamesCalendar({ open, onOpenChange, onSelectDate, events, onMonthChange, inline }: GamesCalendarProps) {
   const [currentDate, setCurrentDate] = useState(new Date());
   const wasOpenRef = useRef(false);
 
@@ -60,10 +59,8 @@ export function GamesCalendar({ open, onOpenChange, onSelectDate, events, onMont
   const month = currentDate.getMonth();
   const daysInMonth = getDaysInMonth(year, month);
   const firstDay = getFirstDayOfMonth(year, month);
-
   const prevMonthDays = getDaysInMonth(year, month - 1);
   const daysFromPrevMonth = firstDay;
-
   const totalCells = 42;
   const daysFromNextMonth = totalCells - daysInMonth - daysFromPrevMonth;
 
@@ -95,103 +92,120 @@ export function GamesCalendar({ open, onOpenChange, onSelectDate, events, onMont
     onSelectDate?.(new Date(year, month, day));
   };
 
-  return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[700px] p-0 bg-card border-border" showCloseButton={false}>
-        <DialogHeader className="p-6 pb-0 flex flex-row items-center justify-between">
-          <DialogTitle className="text-2xl font-bold">Календарь</DialogTitle>
-          <Button variant="outline" size="sm" onClick={() => onOpenChange(false)}>
-            Закрыть
-          </Button>
-        </DialogHeader>
+  if (!open) return null;
 
-        <div className="p-6">
-          <div className="flex items-center gap-2 mb-6">
-            <Button
-              variant="outline"
-              size="icon"
-              className="h-10 w-10 bg-transparent"
-              onClick={prevMonth}
-            >
-              <ChevronLeft className="h-4 w-4" />
-            </Button>
-            <span className="px-4 py-2 rounded-lg bg-secondary text-sm font-medium min-w-[140px] text-center">
-              {MONTHS[month]} {year} г.
-            </span>
-            <Button
-              variant="outline"
-              size="icon"
-              className="h-10 w-10 bg-transparent"
-              onClick={nextMonth}
-            >
-              <ChevronRight className="h-4 w-4" />
-            </Button>
+  const calendarContent = (
+    <div className={cn(inline ? "w-full" : "w-full max-w-md rounded-2xl border border-border bg-card p-5 shadow-2xl")}>
+      {/* Header */}
+      <div className="flex items-center justify-between mb-4 sm:mb-3">
+        <button
+          type="button"
+          onClick={prevMonth}
+          className="h-10 w-10 sm:h-8 sm:w-8 rounded-xl sm:rounded-lg border border-border bg-secondary/50 flex items-center justify-center hover:bg-secondary transition-colors"
+        >
+          <ChevronLeft className="h-5 w-5 sm:h-4 sm:w-4" />
+        </button>
+        <span className="px-5 py-2 sm:px-4 sm:py-1.5 rounded-full border border-border bg-secondary/50 text-sm font-medium">
+          {MONTHS[month]} {year}
+        </span>
+        <button
+          type="button"
+          onClick={nextMonth}
+          className="h-10 w-10 sm:h-8 sm:w-8 rounded-xl sm:rounded-lg border border-border bg-secondary/50 flex items-center justify-center hover:bg-secondary transition-colors"
+        >
+          <ChevronRight className="h-5 w-5 sm:h-4 sm:w-4" />
+        </button>
+      </div>
+
+      {/* Weekday headers */}
+      <div className="grid grid-cols-7 gap-1.5 sm:gap-1 mb-1.5 sm:mb-1">
+        {WEEKDAYS.map((day) => (
+          <div key={day} className="text-center text-xs font-medium text-muted-foreground py-1.5 sm:py-1">
+            {day}
           </div>
+        ))}
+      </div>
 
-          <div className="grid grid-cols-7 gap-2 mb-2">
-            {WEEKDAYS.map((day) => (
-              <div key={day} className="text-center text-sm font-medium text-muted-foreground py-2">
+      {/* Day cells */}
+      <div className="grid grid-cols-7 gap-1.5 sm:gap-1">
+        {Array.from({ length: daysFromPrevMonth }).map((_, i) => {
+          const day = prevMonthDays - daysFromPrevMonth + i + 1;
+          return (
+            <div
+              key={`prev-${day}`}
+              className="aspect-square sm:aspect-auto sm:py-2 rounded-xl sm:rounded-lg bg-secondary/20 flex flex-col items-center justify-center"
+            >
+              <span className="text-sm sm:text-xs text-muted-foreground/30">{day}</span>
+            </div>
+          );
+        })}
+
+        {Array.from({ length: daysInMonth }).map((_, i) => {
+          const day = i + 1;
+          const dateKey = formatDateKey(year, month, day);
+          const gamesCount = gamesData[dateKey];
+          const today = new Date();
+          const isToday =
+            day === today.getDate() && month === today.getMonth() && year === today.getFullYear();
+          const hasGames = !!gamesCount;
+
+          return (
+            <button
+              key={`current-${day}`}
+              onClick={() => handleDateClick(day, true)}
+              className={cn(
+                "aspect-square sm:aspect-auto sm:py-2 rounded-xl sm:rounded-lg flex flex-col items-center justify-center transition-all",
+                hasGames
+                  ? "bg-green-950/30 border border-green-800/15 hover:bg-green-950/40"
+                  : "bg-secondary/40 border border-transparent hover:bg-secondary/60",
+                isToday && "ring-2 ring-primary ring-offset-1 ring-offset-card",
+              )}
+            >
+              <span
+                className={cn(
+                  "text-sm sm:text-xs font-medium leading-none",
+                  hasGames ? "text-green-300/50" : "text-foreground",
+                  isToday && "text-primary",
+                )}
+              >
                 {day}
-              </div>
-            ))}
-          </div>
+              </span>
+              {hasGames && (
+                <span className="text-[10px] sm:text-[9px] font-medium text-green-400/35 leading-none mt-1 sm:mt-0.5">
+                  {gamesCount}
+                </span>
+              )}
+            </button>
+          );
+        })}
 
-          <div className="grid grid-cols-7 gap-2">
-            {Array.from({ length: daysFromPrevMonth }).map((_, i) => {
-              const day = prevMonthDays - daysFromPrevMonth + i + 1;
-              return (
-                <div
-                  key={`prev-${day}`}
-                  className="aspect-square rounded-xl bg-secondary/30 p-2 flex flex-col items-start justify-start"
-                >
-                  <span className="text-sm text-muted-foreground/50">{day}</span>
-                </div>
-              );
-            })}
+        {Array.from({ length: daysFromNextMonth }).map((_, i) => {
+          const day = i + 1;
+          return (
+            <div
+              key={`next-${day}`}
+              className="aspect-square sm:aspect-auto sm:py-2 rounded-xl sm:rounded-lg bg-secondary/20 flex flex-col items-center justify-center"
+            >
+              <span className="text-sm sm:text-xs text-muted-foreground/30">{day}</span>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
 
-            {Array.from({ length: daysInMonth }).map((_, i) => {
-              const day = i + 1;
-              const dateKey = formatDateKey(year, month, day);
-              const gamesCount = gamesData[dateKey];
-              const today = new Date();
-              const isToday =
-                day === today.getDate() && month === today.getMonth() && year === today.getFullYear();
+  if (inline) return calendarContent;
 
-              return (
-                <button
-                  key={`current-${day}`}
-                  onClick={() => handleDateClick(day, true)}
-                  className={cn(
-                    "aspect-square rounded-xl bg-secondary/50 p-2 flex flex-col items-start justify-between transition-all hover:bg-secondary hover:scale-[1.02]",
-                    isToday && "ring-2 ring-primary",
-                    gamesCount && "bg-secondary",
-                  )}
-                >
-                  <span className={cn("text-sm font-medium", isToday && "text-primary")}>{day}</span>
-                  {gamesCount ? (
-                    <span className="text-xs px-2 py-0.5 rounded-full bg-background/80 text-foreground">
-                      {gamesCount} игр
-                    </span>
-                  ) : null}
-                </button>
-              );
-            })}
-
-            {Array.from({ length: daysFromNextMonth }).map((_, i) => {
-              const day = i + 1;
-              return (
-                <div
-                  key={`next-${day}`}
-                  className="aspect-square rounded-xl bg-secondary/30 p-2 flex flex-col items-start justify-start"
-                >
-                  <span className="text-sm text-muted-foreground/50">{day}</span>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      </DialogContent>
-    </Dialog>
+  return (
+    <div className="fixed inset-0 z-50 flex items-start justify-center bg-background/80 backdrop-blur-sm pt-8 px-4">
+      {calendarContent}
+      <button
+        type="button"
+        onClick={() => onOpenChange(false)}
+        className="mt-4 w-full max-w-md py-2.5 rounded-xl border border-border bg-secondary/50 text-sm font-medium text-muted-foreground hover:bg-secondary transition-colors"
+      >
+        Закрыть
+      </button>
+    </div>
   );
 }
-
