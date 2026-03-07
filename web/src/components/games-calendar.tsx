@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { ChevronLeft, ChevronRight } from "lucide-react";
+import { ChevronLeft, ChevronRight, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { Event } from "@/lib/api";
 
@@ -12,6 +12,7 @@ export interface GamesCalendarProps {
   events?: Event[];
   onMonthChange?: (date: Date) => void;
   inline?: boolean;
+  loading?: boolean;
 }
 
 const WEEKDAYS = ["ПН", "ВТ", "СР", "ЧТ", "ПТ", "СБ", "ВС"];
@@ -39,7 +40,7 @@ function getFirstDayOfMonth(year: number, month: number) {
   return day === 0 ? 6 : day - 1;
 }
 
-export function GamesCalendar({ open, onOpenChange, onSelectDate, events, onMonthChange, inline }: GamesCalendarProps) {
+export function GamesCalendar({ open, onOpenChange, onSelectDate, events, onMonthChange, inline, loading }: GamesCalendarProps) {
   const [currentDate, setCurrentDate] = useState(new Date());
   const wasOpenRef = useRef(false);
 
@@ -101,17 +102,26 @@ export function GamesCalendar({ open, onOpenChange, onSelectDate, events, onMont
         <button
           type="button"
           onClick={prevMonth}
-          className="h-10 w-10 sm:h-8 sm:w-8 rounded-xl sm:rounded-lg border border-border bg-secondary/50 flex items-center justify-center hover:bg-secondary transition-colors"
+          disabled={loading}
+          className="h-10 w-10 sm:h-8 sm:w-8 rounded-xl sm:rounded-lg border border-border bg-secondary/50 flex items-center justify-center hover:bg-secondary transition-colors disabled:opacity-50"
         >
           <ChevronLeft className="h-5 w-5 sm:h-4 sm:w-4" />
         </button>
-        <span className="px-5 py-2 sm:px-4 sm:py-1.5 rounded-full border border-border bg-secondary/50 text-sm font-medium">
-          {MONTHS[month]} {year}
+        <span className="px-5 py-2 sm:px-4 sm:py-1.5 rounded-full border border-border bg-secondary/50 text-sm font-medium flex items-center justify-center gap-2 min-w-[140px]">
+          {loading ? (
+            <>
+              <Loader2 className="h-4 w-4 animate-spin shrink-0" />
+              <span>Загрузка…</span>
+            </>
+          ) : (
+            `${MONTHS[month]} ${year}`
+          )}
         </span>
         <button
           type="button"
           onClick={nextMonth}
-          className="h-10 w-10 sm:h-8 sm:w-8 rounded-xl sm:rounded-lg border border-border bg-secondary/50 flex items-center justify-center hover:bg-secondary transition-colors"
+          disabled={loading}
+          className="h-10 w-10 sm:h-8 sm:w-8 rounded-xl sm:rounded-lg border border-border bg-secondary/50 flex items-center justify-center hover:bg-secondary transition-colors disabled:opacity-50"
         >
           <ChevronRight className="h-5 w-5 sm:h-4 sm:w-4" />
         </button>

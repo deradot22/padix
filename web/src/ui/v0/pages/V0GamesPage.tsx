@@ -53,6 +53,7 @@ export function V0GamesPage(props: { me: any }) {
   const [error, setError] = useState<string | null>(null);
   const [view, setView] = useState<"list" | "calendar">("list");
   const [calendarEvents, setCalendarEvents] = useState<Event[]>([]);
+  const [calendarLoading, setCalendarLoading] = useState(false);
   const [dayOpen, setDayOpen] = useState(false);
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
   const [selectedEvents, setSelectedEvents] = useState<Event[]>([]);
@@ -100,16 +101,20 @@ export function V0GamesPage(props: { me: any }) {
   const loadCalendarEvents = async (date: Date) => {
     const from = formatDate(new Date(date.getFullYear(), date.getMonth(), 1));
     const to = formatDate(new Date(date.getFullYear(), date.getMonth() + 1, 0));
+    setCalendarLoading(true);
     try {
       const res = await api.getUpcomingEvents(from, to);
       setCalendarEvents(res ?? []);
     } catch {
       setCalendarEvents([]);
+    } finally {
+      setCalendarLoading(false);
     }
   };
 
   useEffect(() => {
     if (view === "calendar") {
+      setCalendarLoading(true);
       loadCalendarEvents(new Date());
     }
   }, [view]);
@@ -314,6 +319,7 @@ export function V0GamesPage(props: { me: any }) {
               onOpenChange={() => {}}
               inline
               events={calendarEvents}
+              loading={calendarLoading}
               onMonthChange={loadCalendarEvents}
               onSelectDate={(date) => {
                 const dayKey = formatDate(date);
@@ -331,6 +337,7 @@ export function V0GamesPage(props: { me: any }) {
               onOpenChange={() => {}}
               inline
               events={calendarEvents}
+              loading={calendarLoading}
               onMonthChange={loadCalendarEvents}
               onSelectDate={(date) => {
                 const dayKey = formatDate(date);
