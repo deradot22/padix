@@ -96,7 +96,7 @@ export function GamesCalendar({ open, onOpenChange, onSelectDate, events, onMont
   if (!open) return null;
 
   const calendarContent = (
-    <div className={cn(inline ? "w-full" : "w-full max-w-md rounded-2xl border border-border bg-card p-5 shadow-2xl")}>
+    <div className={cn("relative", inline ? "w-full" : "w-full max-w-md rounded-2xl border border-border bg-card p-5 shadow-2xl")}>
       {/* Header */}
       <div className="flex items-center justify-between mb-4 sm:mb-3">
         <button
@@ -108,14 +108,7 @@ export function GamesCalendar({ open, onOpenChange, onSelectDate, events, onMont
           <ChevronLeft className="h-5 w-5 sm:h-4 sm:w-4" />
         </button>
         <span className="px-5 py-2 sm:px-4 sm:py-1.5 rounded-full border border-border bg-secondary/50 text-sm font-medium flex items-center justify-center gap-2 min-w-[140px]">
-          {loading ? (
-            <>
-              <Loader2 className="h-4 w-4 animate-spin shrink-0" />
-              <span>Загрузка…</span>
-            </>
-          ) : (
-            `${MONTHS[month]} ${year}`
-          )}
+          {MONTHS[month]} {year}
         </span>
         <button
           type="button"
@@ -201,6 +194,15 @@ export function GamesCalendar({ open, onOpenChange, onSelectDate, events, onMont
           );
         })}
       </div>
+
+      {loading ? (
+        <div className="absolute inset-0 z-20 rounded-[inherit] bg-background/45 backdrop-blur-[2px] flex items-center justify-center">
+          <div className="flex items-center gap-2 rounded-lg border border-border bg-card/90 px-3 py-2 text-sm font-medium">
+            <Loader2 className="h-4 w-4 animate-spin" />
+            Загрузка…
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 

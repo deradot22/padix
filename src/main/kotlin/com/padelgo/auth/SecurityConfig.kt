@@ -1,8 +1,14 @@
 package com.padelgo.auth
 
+import io.jsonwebtoken.ExpiredJwtException
+import io.jsonwebtoken.JwtException
+import io.jsonwebtoken.MalformedJwtException
+import io.jsonwebtoken.UnsupportedJwtException
+import io.jsonwebtoken.security.SignatureException
 import jakarta.servlet.FilterChain
 import jakarta.servlet.http.HttpServletRequest
 import jakarta.servlet.http.HttpServletResponse
+import org.slf4j.LoggerFactory
 import org.springframework.context.annotation.Bean
 import org.springframework.context.annotation.Configuration
 import org.springframework.http.HttpHeaders
@@ -90,6 +96,8 @@ class SecurityConfig(
 class JwtAuthFilter(
     private val jwtService: JwtService
 ) : OncePerRequestFilter() {
+    private val log = LoggerFactory.getLogger(JwtAuthFilter::class.java)
+
     override fun doFilterInternal(
         request: HttpServletRequest,
         response: HttpServletResponse,
@@ -102,14 +110,39 @@ class JwtAuthFilter(
                 val principal = jwtService.parse(token)
                 val auth = UsernamePasswordAuthenticationToken(principal, null, emptyList())
                 SecurityContextHolder.getContext().authentication = auth
-            } catch (_: Exception) {
-                response.status = HttpStatus.UNAUTHORIZED.value()
-                response.contentType = "application/json"
-                response.writer.write("""{"status":401,"error":"Unauthorized","message":"Invalid token"}""")
+            } catch (e: ExpiredJwtException) {
+                log.info("JWT expired for path={} cause={}", request.requestURI, e.message)
+                unauthorized(response, "Session expired")
+                return
+            } catch (e: SignatureException) {
+                log.warn("JWT signature invalid for path={} cause={}", request.requestURI, e.message)
+                unauthorized(response, "Token signature invalid")
+                return
+            } catch (e: MalformedJwtException) {
+                log.warn("JWT malformed for path={} cause={}", request.requestURI, e.message)
+                unauthorized(response, "Token malformed")
+                return
+            } catch (e: UnsupportedJwtException) {
+                log.warn("JWT unsupported for path={} cause={}", request.requestURI, e.message)
+                unauthorized(response, "Token unsupported")
+                return
+            } catch (e: JwtException) {
+                log.warn("JWT rejected for path={} cause={}", request.requestURI, e.message)
+                unauthorized(response, "Invalid token")
+                return
+            } catch (e: Exception) {
+                log.error("JWT auth filter error path={}", request.requestURI, e)
+                unauthorized(response, "Invalid token")
                 return
             }
         }
         filterChain.doFilter(request, response)
+    }
+
+    private fun unauthorized(response: HttpServletResponse, message: String) {
+        response.status = HttpStatus.UNAUTHORIZED.value()
+        response.contentType = "application/json"
+        response.writer.write("""{"status":401,"error":"Unauthorized","message":"$message"}""")
     }
 }
 

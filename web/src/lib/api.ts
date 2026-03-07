@@ -230,6 +230,19 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     const msg =
       apiErr?.message ??
       (textBody && textBody.trim() ? textBody.trim() : `HTTP ${res.status} ${res.statusText} while calling ${path}`);
+    if (res.status === 401) {
+      // Session is no longer valid: clear stale token and force re-auth UX.
+      setToken(null);
+      if (
+        msg === "Session expired" ||
+        msg === "Token signature invalid" ||
+        msg === "Token malformed" ||
+        msg === "Token unsupported" ||
+        msg === "Invalid token"
+      ) {
+        throw new Error("Сессия недействительна или истекла. Войдите снова.");
+      }
+    }
     throw new Error(msg);
   }
 
