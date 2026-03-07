@@ -136,7 +136,7 @@ export function GamesCalendar({ open, onOpenChange, onSelectDate, events, onMont
           return (
             <div
               key={`prev-${day}`}
-              className="aspect-square sm:aspect-auto sm:py-2 rounded-xl sm:rounded-lg bg-secondary/20 flex flex-col items-center justify-center"
+              className="aspect-square sm:aspect-auto sm:min-h-12 sm:py-2 rounded-xl sm:rounded-lg bg-secondary/20 flex flex-col items-center justify-center"
             >
               <span className="text-sm sm:text-xs text-muted-foreground/30">{day}</span>
             </div>
@@ -157,24 +157,24 @@ export function GamesCalendar({ open, onOpenChange, onSelectDate, events, onMont
               key={`current-${day}`}
               onClick={() => handleDateClick(day, true)}
               className={cn(
-                "aspect-square sm:aspect-auto sm:py-2 rounded-xl sm:rounded-lg flex flex-col items-center justify-center transition-all",
-                hasGames
-                  ? "bg-green-950/30 border border-green-800/15 hover:bg-green-950/40"
+                "aspect-square sm:aspect-auto sm:min-h-12 sm:py-2 rounded-xl sm:rounded-lg flex flex-col items-center justify-center transition-all relative",
+                isToday
+                  ? "bg-primary/20 border-2 border-white/70 hover:bg-primary/25"
+                  : hasGames
+                  ? "bg-gradient-to-br from-primary/20 to-primary/10 border-2 border-primary/30 text-primary hover:bg-primary/30"
                   : "bg-secondary/40 border border-transparent hover:bg-secondary/60",
-                isToday && "ring-2 ring-primary ring-offset-1 ring-offset-card",
               )}
             >
               <span
                 className={cn(
                   "text-sm sm:text-xs font-medium leading-none",
-                  hasGames ? "text-green-300/50" : "text-foreground",
-                  isToday && "text-primary",
+                  (hasGames || isToday) ? "text-primary" : "text-foreground",
                 )}
               >
                 {day}
               </span>
               {hasGames && (
-                <span className="text-[10px] sm:text-[9px] font-medium text-green-400/35 leading-none mt-1 sm:mt-0.5">
+                <span className="mt-1 sm:mt-0.5 h-5 w-5 sm:h-4 sm:w-4 rounded-full bg-black/85 border border-primary/40 text-[10px] sm:text-[9px] font-semibold text-primary leading-none flex items-center justify-center">
                   {gamesCount}
                 </span>
               )}
@@ -187,7 +187,7 @@ export function GamesCalendar({ open, onOpenChange, onSelectDate, events, onMont
           return (
             <div
               key={`next-${day}`}
-              className="aspect-square sm:aspect-auto sm:py-2 rounded-xl sm:rounded-lg bg-secondary/20 flex flex-col items-center justify-center"
+              className="aspect-square sm:aspect-auto sm:min-h-12 sm:py-2 rounded-xl sm:rounded-lg bg-secondary/20 flex flex-col items-center justify-center"
             >
               <span className="text-sm sm:text-xs text-muted-foreground/30">{day}</span>
             </div>
