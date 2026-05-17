@@ -105,11 +105,18 @@ class SecurityConfig(
     @Bean
     fun corsConfigurationSource(): CorsConfigurationSource {
         val config = CorsConfiguration()
+        // Exact production origins
         config.allowedOrigins = listOf(
             "https://padix.club",
             "https://www.padix.club",
             "http://localhost:5173",
-            "http://localhost:8081"
+            "http://localhost:8081",
+            "http://localhost:8083"
+        )
+        // Patterns (allowedOriginPatterns supports wildcards, allowedOrigins does not).
+        // Covers Cloudflare Pages preview deployments (<hash>.padix.pages.dev).
+        config.allowedOriginPatterns = listOf(
+            "https://*.padix.pages.dev"
         )
         config.allowedMethods = listOf("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS")
         config.allowedHeaders = listOf("*")
