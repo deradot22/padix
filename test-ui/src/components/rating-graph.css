@@ -1,0 +1,110 @@
+/* Используется в test-ui для предпросмотра графика рейтинга.
+   Палитра — те же oklch значения, что и в основном padix (web/src/ui/v0/tailwind.css). */
+.rg-wrap {
+  --padix-background: oklch(0.12 0 0);
+  --padix-card: oklch(0.16 0 0);
+  --padix-foreground: oklch(0.98 0 0);
+  --padix-muted-fg: oklch(0.65 0 0);
+  --padix-border: oklch(0.28 0 0);
+  --padix-secondary: oklch(0.22 0 0);
+  --padix-primary: oklch(0.65 0.18 145);
+  --padix-primary-fg: oklch(0.12 0 0);
+
+  color: var(--padix-foreground);
+  font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+}
+
+.rg-controls {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+.rg-periods {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.rg-period {
+  padding: 4px 10px;
+  font-size: 12px;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--padix-muted-fg);
+  border: none;
+  cursor: pointer;
+  transition: background-color 0.15s, color 0.15s;
+  font-family: inherit;
+}
+.rg-period:hover {
+  color: var(--padix-foreground);
+  background: color-mix(in oklch, var(--padix-secondary) 50%, transparent);
+}
+.rg-period.active {
+  background: var(--padix-primary);
+  color: var(--padix-primary-fg);
+}
+.rg-period.active:hover {
+  background: var(--padix-primary);
+}
+.rg-mode {
+  padding: 6px 8px;
+  background: transparent;
+  color: var(--padix-muted-fg);
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 14px;
+  transition: background-color 0.15s, color 0.15s;
+  font-family: inherit;
+}
+.rg-mode:hover {
+  color: var(--padix-foreground);
+  background: color-mix(in oklch, var(--padix-secondary) 50%, transparent);
+}
+
+.rg-empty {
+  font-size: 13px;
+  color: var(--padix-muted-fg);
+  text-align: center;
+  padding: 32px 0;
+}
+
+/* Мобильный — без рамки, без padding */
+.rg-svg-box.mobile {
+  overflow-x: auto;
+}
+.rg-svg-box.mobile .rg-svg {
+  width: 100%;
+  min-height: 260px;
+}
+
+/* Десктоп — карточка с лёгкой обводкой и фоном */
+.rg-svg-box.desktop {
+  border: 1px solid color-mix(in oklch, var(--padix-border) 60%, transparent);
+  background: color-mix(in oklch, var(--padix-secondary) 12%, transparent);
+  border-radius: 12px;
+  padding: 16px;
+  overflow-x: auto;
+}
+.rg-svg-box.desktop .rg-svg {
+  width: 100%;
+  display: block;
+  aspect-ratio: 520 / 140;
+}
+
+.rg-dates {
+  display: flex;
+  justify-content: space-between;
+  color: var(--padix-muted-fg);
+}
+.rg-svg-box.mobile + .rg-dates,
+.rg-svg-box.mobile .rg-dates {
+  margin-top: 8px;
+  font-size: 12px;
+}
+.rg-svg-box.desktop .rg-dates {
+  margin-top: 6px;
+  font-size: 10px;
+}
