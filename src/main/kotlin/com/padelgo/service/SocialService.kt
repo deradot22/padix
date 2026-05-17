@@ -104,6 +104,25 @@ class SocialService(
         invites.save(EventInvite(eventId = eventId, fromUserId = userId, toUserId = target.id!!, status = InviteStatus.PENDING))
     }
 
+    /**
+     * Автор события добавляет друга СРАЗУ в игру (без подтверждения).
+     * Если был pending-инвайт — он автоматически становится ACCEPTED.
+     */
+    fun addFriendToEvent(userId: UUID, eventId: UUID, publicIdRaw: String) {
+        val event = events.findById(eventId).orElseThrow { ApiException(HttpStatus.NOT_FOUND, "Event not found") }
+        if (event.createdByUserId != userId) throw ApiException(HttpStatus.FORBIDDEN, "Only author can add players")
+        val target = userByPublicId(publicIdRaw)
+        if (!friends.existsByUserIdAndFriendUserId(userId, target.id!!)) {
+            throw ApiException(HttpStatus.FORBIDDEN, "You can add only friends")
+        }
+        val playerId = target.playerId ?: throw ApiException(HttpStatus.NOT_FOUND, "Player not found for user")
+        eventService.register(eventId, playerId)
+        invites.findByEventIdAndToUserIdAndStatus(eventId, target.id!!, InviteStatus.PENDING)?.let { inv ->
+            inv.status = InviteStatus.ACCEPTED
+            invites.save(inv)
+        }
+    }
+
     fun listInvites(userId: UUID): List<EventInviteItem> {
         val items = invites.findAllByToUserIdAndStatus(userId, InviteStatus.PENDING)
         if (items.isEmpty()) return emptyList()

@@ -7,7 +7,13 @@ import com.padelgo.repo.MatchSetScoreRepository
 import com.padelgo.repo.PlayerRepository
 import com.padelgo.repo.RoundRepository
 import com.padelgo.service.EventService
+import io.swagger.v3.oas.annotations.Operation
+import io.swagger.v3.oas.annotations.Parameter
+import io.swagger.v3.oas.annotations.security.SecurityRequirement
+import io.swagger.v3.oas.annotations.tags.Tag
 import jakarta.validation.Valid
+import org.slf4j.LoggerFactory
+import org.springframework.transaction.annotation.Transactional
 import org.springframework.web.bind.annotation.DeleteMapping
 import org.springframework.web.bind.annotation.GetMapping
 import org.springframework.web.bind.annotation.PatchMapping
@@ -19,12 +25,19 @@ import org.springframework.web.bind.annotation.RestController
 import java.time.LocalDate
 import java.util.UUID
 
+private val logger = LoggerFactory.getLogger("EventController")
+
+@Tag(name = "Players", description = "Список игроков платформы")
 @RestController
 @RequestMapping("/api/players")
 class PlayerController(
     private val service: EventService,
     private val userRepo: com.padelgo.auth.UserRepository
 ) {
+    @Operation(
+        summary = "Список игроков по рейтингу (убывание)",
+        description = "Публичный эндпоинт — токен не нужен. Используется для выбора игроков при регистрации на игру."
+    )
     @GetMapping("/rating")
     fun rating(): List<PlayerResponse> {
         val players = service.listPlayersByRating()
@@ -38,6 +51,8 @@ class PlayerController(
     }
 }
 
+@Tag(name = "Events", description = "Управление играми: создание, регистрация, старт, счёт, финиш")
+@SecurityRequirement(name = "BearerAuth")
 @RestController
 @RequestMapping("/api/events")
 class EventController(
@@ -50,6 +65,10 @@ class EventController(
     private val userRepo: com.padelgo.auth.UserRepository,
     private val courtRepo: com.padelgo.repo.EventCourtRepository
 ) {
+    @Operation(
+        summary = "Создать игру",
+        description = "Создаёт игру со статусом OPEN_FOR_REGISTRATION. Создатель становится организатором."
+    )
     @PostMapping
     fun create(@Valid @RequestBody req: CreateEventRequest): EventResponse =
         EventResponse.from(
@@ -75,15 +94,22 @@ class EventController(
             )
         )
 
+    @Operation(summary = "Игры на сегодня")
     @GetMapping("/today")
     fun today(): List<EventResponse> =
         service.getToday(LocalDate.now()).map { e ->
             EventResponse.from(e, service.getRegisteredCount(e.id!!))
         }
 
+    @Operation(
+        summary = "Предстоящие игры",
+        description = "По умолчанию: от сегодня до +14 дней. Параметры from/to задают диапазон дат (YYYY-MM-DD)."
+    )
     @GetMapping("/upcoming")
     fun upcoming(
+        @Parameter(description = "Начало диапазона (YYYY-MM-DD), по умолчанию сегодня")
         @org.springframework.web.bind.annotation.RequestParam(required = false) from: String?,
+        @Parameter(description = "Конец диапазона (YYYY-MM-DD), по умолчанию from + 14 дней")
         @org.springframework.web.bind.annotation.RequestParam(required = false) to: String?
     ): List<EventResponse> {
         val start = from?.let { LocalDate.parse(it) } ?: LocalDate.now()
@@ -93,54 +119,88 @@ class EventController(
         }
     }
 
+    @Operation(summary = "Обновить параметры игры (только организатор)")
     @PatchMapping("/{eventId}")
     fun update(@PathVariable eventId: UUID, @Valid @RequestBody req: UpdateEventRequest): EventResponse =
-        EventResponse.from(service.updateEvent(eventId, req))
+        EventResponse.from(service.updateEvent(eventId, principalUserId(), req))
 
+    @Operation(
+        summary = "Зарегистрировать игрока на игру",
+        description = "Организатор регистрирует любого игрока по его UUID. Игра должна быть в статусе OPEN_FOR_REGISTRATION."
+    )
     @PostMapping("/{eventId}/register")
     fun register(@PathVariable eventId: UUID, @Valid @RequestBody req: RegisterRequest) =
         service.register(eventId, req.playerId)
 
+    @Operation(
+        summary = "Закрыть регистрацию",
+        description = "Переводит игру в REGISTRATION_CLOSED. Только организатор."
+    )
     @PostMapping("/{eventId}/close-registration")
     fun closeRegistration(@PathVariable eventId: UUID) {
         service.closeRegistration(eventId, principalUserId())
     }
 
+    @Operation(
+        summary = "Отменить свою регистрацию",
+        description = "Если игра ещё не стартовала — отмена немедленная. Иначе создаётся запрос на отмену, который должен подтвердить организатор."
+    )
     @PostMapping("/{eventId}/cancel")
     fun cancelRegistration(@PathVariable eventId: UUID): CancelRegistrationResponse {
         return service.cancelRegistration(eventId, principalUserId())
     }
 
+    @Operation(summary = "Подтвердить запрос на отмену регистрации игрока (только организатор)")
     @PostMapping("/{eventId}/cancel/{playerId}/approve")
     fun approveCancel(@PathVariable eventId: UUID, @PathVariable playerId: UUID) {
         service.approveCancel(eventId, principalUserId(), playerId)
     }
 
+    @Operation(summary = "Удалить игрока из игры (только организатор)")
     @PostMapping("/{eventId}/remove/{playerId}")
     fun removePlayer(@PathVariable eventId: UUID, @PathVariable playerId: UUID) {
         service.removePlayer(eventId, principalUserId(), playerId)
     }
 
+    @Operation(summary = "Удалить игру (только организатор, до старта)")
     @DeleteMapping("/{eventId}")
     fun deleteEvent(@PathVariable eventId: UUID) {
         service.deleteEvent(eventId, principalUserId())
     }
 
+    @Operation(
+        summary = "Стартовать игру",
+        description = "Создаёт раунды и расстановку матчей. Переводит игру в IN_PROGRESS. Только организатор."
+    )
     @PostMapping("/{eventId}/start")
     fun start(@PathVariable eventId: UUID) {
         service.startEvent(eventId, principalUserId())
     }
 
+    @Operation(
+        summary = "Записать итоговый счёт матча",
+        description = "Доступно только пока игра в статусе IN_PROGRESS. " +
+            "При scoringMode=POINTS заполни поле points; при scoringMode=SETS — поле sets."
+    )
     @PostMapping("/matches/{matchId}/score")
     fun submitScore(@PathVariable matchId: UUID, @Valid @RequestBody req: SubmitScoreRequest) {
         service.submitScore(matchId, principalUserId(), req)
     }
 
+    @Operation(
+        summary = "Сохранить черновой счёт матча",
+        description = "Черновой счёт отображается в интерфейсе игры, но не влияет на рейтинг до финиша."
+    )
     @PostMapping("/matches/{matchId}/draft-score")
     fun saveDraftScore(@PathVariable matchId: UUID, @Valid @RequestBody req: DraftScoreRequest) {
         service.saveDraftScore(matchId, principalUserId(), req)
     }
 
+    @Operation(
+        summary = "Завершить игру",
+        description = "Переводит игру в FINISHED, пересчитывает рейтинги игроков. Только организатор. " +
+            "Если не все матчи завершены — автоматически вызывается force-finish."
+    )
     @PostMapping("/{eventId}/finish")
     fun finish(@PathVariable eventId: UUID) {
         val userId = principalUserId()
@@ -155,17 +215,31 @@ class EventController(
         }
     }
 
+    @Operation(summary = "Добавить раунд вручную (только организатор, autoRounds=false)")
     @PostMapping("/{eventId}/rounds/add")
     fun addRound(@PathVariable eventId: UUID) {
         service.addRound(eventId, principalUserId())
     }
 
+    @Operation(summary = "Добавить финальный раунд (только организатор)")
     @PostMapping("/{eventId}/rounds/final")
     fun addFinalRound(@PathVariable eventId: UUID) {
         service.addFinalRound(eventId, principalUserId())
     }
 
+    @Operation(summary = "Удалить последний пустой раунд (только организатор)")
+    @DeleteMapping("/{eventId}/rounds/{roundId}")
+    fun deleteRound(@PathVariable eventId: UUID, @PathVariable roundId: UUID) {
+        service.deleteRound(eventId, roundId, principalUserId())
+    }
+
+    @Operation(
+        summary = "Детали игры",
+        description = "Возвращает всю информацию: раунды, матчи, счёт, зарегистрированных игроков. " +
+            "Публичный эндпоинт (GET), токен нужен только для флага isAuthor."
+    )
     @GetMapping("/{eventId}")
+    @Transactional(readOnly = true)
     fun getDetails(@PathVariable eventId: UUID): EventDetailsResponse {
         val event = service.getEvent(eventId)
         val courts = courtRepo.findAllByEventIdOrderByCourtNumberAsc(eventId)

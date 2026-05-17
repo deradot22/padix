@@ -3,6 +3,7 @@ package com.padelgo.service
 import com.padelgo.domain.Match
 import java.util.UUID
 import kotlin.math.abs
+import kotlin.random.Random
 
 data class PlannedMatch(
     val courtNumber: Int,
@@ -17,18 +18,69 @@ private data class PairKey(val a: UUID, val b: UUID) {
 }
 
 /**
- * Простой планировщик для "Американки":
- * - минимизируем дисбаланс по сумме рейтингов команд
- * - штрафуем повторные партнёрства и частые встречи друг против друга
- * - слегка поощряем пары "сильный+слабый"
+ * Lexicographic round cost. Сравнивается ПО УРОВНЯМ — нижестоящие критерии
+ * учитываются только при равенстве вышестоящих. Так штрафы не «съедают» друг друга.
+ */
+private data class RoundCost(
+    val partnerRepeats: Int,     // ↓ суммарно повторов партнёрств в раунде
+    val opponentRepeats: Int,    // ↓ суммарно повторов соперничеств
+    val balanceViolations: Int,  // ↓ матчей с balance > cap (только BALANCED)
+    val totalBalance: Int,       // ↓ сумма |teamA−teamB| по всем матчам
+    val courtRepeats: Int,       // ↓ повторов игрока на одном корте
+    val withinPenalty: Int,      // ↓ −withinBonus (сильный+слабый: разница в команде → меньше)
+    val tieBreak: Int            // ↓ случайный шум, чтоб одинаковые планы перемешивались
+) {
+    operator fun plus(other: RoundCost): RoundCost = RoundCost(
+        partnerRepeats + other.partnerRepeats,
+        opponentRepeats + other.opponentRepeats,
+        balanceViolations + other.balanceViolations,
+        totalBalance + other.totalBalance,
+        courtRepeats + other.courtRepeats,
+        withinPenalty + other.withinPenalty,
+        tieBreak + other.tieBreak
+    )
+
+    companion object {
+        val ZERO = RoundCost(0, 0, 0, 0, 0, 0, 0)
+
+        /** ROUND_ROBIN: сначала ротация (партнёры → соперники), потом баланс. */
+        val ROTATION_FIRST: Comparator<RoundCost> = compareBy(
+            { it.partnerRepeats },
+            { it.opponentRepeats },
+            { it.balanceViolations },
+            { it.totalBalance },
+            { it.courtRepeats },
+            { it.withinPenalty },
+            { it.tieBreak }
+        )
+
+        /** BALANCED: сначала баланс (cap → totalBalance), потом ротация. Семантика «равного боя». */
+        val BALANCE_FIRST: Comparator<RoundCost> = compareBy(
+            { it.balanceViolations },
+            { it.totalBalance },
+            { it.partnerRepeats },
+            { it.opponentRepeats },
+            { it.courtRepeats },
+            { it.withinPenalty },
+            { it.tieBreak }
+        )
+    }
+}
+
+/**
+ * Планировщик для «Американки» с глобальной оптимизацией раунда:
+ * - перебирает все разбиения N игроков на N/4 четвёрок (с pruning по lexicographic cost),
+ * - для каждой четвёрки выбирает наилучший split на команды и корт,
+ * - lexicographic приоритеты: сначала ротация (партнёры → соперники), потом баланс.
  *
- * Это не идеальный round-robin, но даёт хорошие сбалансированные корты и ротацию.
+ * Для 2-3 кортов перебор быстрый (≪200K вариантов). На 4+ кортов добавлен жадный fallback.
  */
 class PairingPlanner(
     private val ratingByPlayer: Map<UUID, Int>,
     private val courtsCount: Int,
     private val pairingMode: com.padelgo.domain.PairingMode = com.padelgo.domain.PairingMode.ROUND_ROBIN,
-    private val maxTeamDiff: Int? = null
+    private val maxTeamDiff: Int? = null,
+    private val random: Random = Random.Default
 ) {
     private val partnerCounts = mutableMapOf<PairKey, Int>()
     private val opponentCounts = mutableMapOf<PairKey, Int>()
@@ -50,10 +102,6 @@ class PairingPlanner(
         return result
     }
 
-    /**
-     * Заполняет статистику уже сыгранных/запланированных матчей,
-     * чтобы при добавлении нового раунда не повторять пары.
-     */
     fun seedFromMatches(matches: List<Match>) {
         matches.forEach { m ->
             val a1 = m.teamAPlayer1Id
@@ -61,18 +109,21 @@ class PairingPlanner(
             val b1 = m.teamBPlayer1Id
             val b2 = m.teamBPlayer2Id
             if (a1 == null || a2 == null || b1 == null || b2 == null) return@forEach
-            val planned = PlannedMatch(
-                courtNumber = m.courtNumber,
-                teamA = a1 to a2,
-                teamB = b1 to b2
+            applyRoundStats(
+                listOf(
+                    PlannedMatch(
+                        courtNumber = m.courtNumber,
+                        teamA = a1 to a2,
+                        teamB = b1 to b2
+                    )
+                )
             )
-            applyRoundStats(listOf(planned))
         }
     }
 
     private fun selectPlayersForRound(allPlayers: List<UUID>, capacity: Int): List<UUID> {
         if (allPlayers.size == capacity) return allPlayers
-        // Если игроков больше вместимости, даём приоритет тем, кто играл меньше раундов (чтобы бай были честными)
+        // Если игроков больше вместимости — приоритет тем кто играл меньше раундов.
         return allPlayers
             .sortedWith(
                 compareBy<UUID> { playedRounds[it] ?: 0 }
@@ -81,116 +132,191 @@ class PairingPlanner(
             .take(capacity)
     }
 
+    private val costComparator: Comparator<RoundCost> = when (pairingMode) {
+        com.padelgo.domain.PairingMode.ROUND_ROBIN -> RoundCost.ROTATION_FIRST
+        com.padelgo.domain.PairingMode.BALANCED -> RoundCost.BALANCE_FIRST
+    }
+
     private fun planSingleRound(players: List<UUID>): List<PlannedMatch> {
         require(players.size % 4 == 0) { "Players for round must be multiple of 4" }
-        val remaining = players
-            .sortedByDescending { ratingByPlayer[it] ?: 1000 }
-            .toMutableList()
+        val expectedCourts = players.size / 4
 
-        val matches = mutableListOf<PlannedMatch>()
-        while (remaining.size >= 4 && matches.size < courtsCount) {
-            val anchor = remaining.first()
-            val others = remaining.drop(1)
+        // Сортируем по рейтингу убывающе — это влияет только на порядок перебора (для скорости и pruning).
+        val sorted = players.sortedByDescending { ratingByPlayer[it] ?: 1000 }
+        val n = sorted.size
 
-            var best: PlannedMatch? = null
-            var bestCost = Double.POSITIVE_INFINITY
+        // Жадный fallback используется как стартовый best_cost для агрессивного pruning,
+        // и единственный результат если courtsCount ≥ 4 (перебор слишком большой).
+        val greedyMatches = greedyRound(sorted)
+        val greedyCost = totalRoundCost(greedyMatches)
 
-            for (i in 0 until others.size - 2) {
-                for (j in i + 1 until others.size - 1) {
-                    for (k in j + 1 until others.size) {
-                        val quad = listOf(anchor, others[i], others[j], others[k])
-                        val (match, cost) = bestSplitForQuad(quad)
-                        if (cost < bestCost) {
-                            bestCost = cost
-                            best = match
+        if (expectedCourts >= 4) {
+            return greedyMatches
+        }
+
+        // Полный перебор разбиений на четвёрки. Фиксируем первого свободного игрока в текущей четвёрке,
+        // чтобы не считать дубликаты разбиений (одно и то же разбиение в другом порядке четвёрок).
+        var bestMatches: List<PlannedMatch> = greedyMatches
+        var bestCost: RoundCost = greedyCost
+
+        val taken = BooleanArray(n)
+        val acc = mutableListOf<PlannedMatch>()
+
+        fun search(running: RoundCost) {
+            if (acc.size == expectedCourts) {
+                // Назначаем корты для собранного разбиения и оцениваем целиком.
+                val withCourts = assignCourts(acc.toList())
+                val finalCost = totalRoundCost(withCourts)
+                if (costComparator.compare(finalCost, bestCost) < 0) {
+                    bestCost = finalCost
+                    bestMatches = withCourts
+                }
+                return
+            }
+            // Pruning по уже накопленной стоимости — если уже хуже best, не идём глубже.
+            if (costComparator.compare(running, bestCost) > 0) return
+
+            val firstFree = (0 until n).firstOrNull { !taken[it] } ?: return
+            for (i in (firstFree + 1) until n) {
+                if (taken[i]) continue
+                for (j in (i + 1) until n) {
+                    if (taken[j]) continue
+                    for (k in (j + 1) until n) {
+                        if (taken[k]) continue
+                        val quad = listOf(sorted[firstFree], sorted[i], sorted[j], sorted[k])
+                        // 3 варианта split команд для этой четвёрки. Корт временно = 1 — назначим позже.
+                        val splits = listOf(
+                            PlannedMatch(1, teamA = quad[0] to quad[1], teamB = quad[2] to quad[3]),
+                            PlannedMatch(1, teamA = quad[0] to quad[2], teamB = quad[1] to quad[3]),
+                            PlannedMatch(1, teamA = quad[0] to quad[3], teamB = quad[1] to quad[2])
+                        )
+                        for (split in splits) {
+                            val splitCost = matchCostBeforeCourt(split)
+                            val newRunning = running + splitCost
+                            if (costComparator.compare(newRunning, bestCost) > 0) continue
+
+                            taken[firstFree] = true; taken[i] = true; taken[j] = true; taken[k] = true
+                            acc.add(split)
+                            search(newRunning)
+                            acc.removeAt(acc.size - 1)
+                            taken[firstFree] = false; taken[i] = false; taken[j] = false; taken[k] = false
                         }
                     }
                 }
             }
+        }
 
+        search(RoundCost.ZERO)
+        return bestMatches
+    }
+
+    /** Жадный fallback: тот же anchor-first что и раньше, но через ту же lexicographic cost. */
+    private fun greedyRound(sortedPlayers: List<UUID>): List<PlannedMatch> {
+        val remaining = sortedPlayers.toMutableList()
+        val matches = mutableListOf<PlannedMatch>()
+        while (remaining.size >= 4 && matches.size < courtsCount) {
+            val anchor = remaining.first()
+            val others = remaining.drop(1)
+            var best: PlannedMatch? = null
+            var bestCost: RoundCost? = null
+            for (i in 0 until others.size - 2) {
+                for (j in i + 1 until others.size - 1) {
+                    for (k in j + 1 until others.size) {
+                        val quad = listOf(anchor, others[i], others[j], others[k])
+                        val splits = listOf(
+                            PlannedMatch(1, quad[0] to quad[1], quad[2] to quad[3]),
+                            PlannedMatch(1, quad[0] to quad[2], quad[1] to quad[3]),
+                            PlannedMatch(1, quad[0] to quad[3], quad[1] to quad[2])
+                        )
+                        for (split in splits) {
+                            val c = matchCostBeforeCourt(split)
+                            if (bestCost == null || costComparator.compare(c, bestCost!!) < 0) {
+                                bestCost = c
+                                best = split
+                            }
+                        }
+                    }
+                }
+            }
             val chosen = best ?: break
             matches.add(chosen)
-
-            // remove used players
             remaining.remove(chosen.teamA.first)
             remaining.remove(chosen.teamA.second)
             remaining.remove(chosen.teamB.first)
             remaining.remove(chosen.teamB.second)
         }
-
         return assignCourts(matches)
     }
 
-    private fun bestSplitForQuad(quad: List<UUID>): Pair<PlannedMatch, Double> {
-        val a = quad[0]
-        val b = quad[1]
-        val c = quad[2]
-        val d = quad[3]
-
-        val candidates = listOf(
-            PlannedMatch(1, teamA = a to b, teamB = c to d),
-            PlannedMatch(1, teamA = a to c, teamB = b to d),
-            PlannedMatch(1, teamA = a to d, teamB = b to c)
-        )
-        return candidates
-            .map { it to cost(it) }
-            .minBy { it.second }
-    }
-
-    private fun assignCourts(matches: List<PlannedMatch>): List<PlannedMatch> {
-        if (matches.isEmpty()) return matches
-        val available = (1..courtsCount).toMutableList()
-        val ordered = matches.sortedByDescending { courtBias(it) }
-        val result = mutableListOf<PlannedMatch>()
-        ordered.forEach { m ->
-            val bestCourt = available.minBy { courtCost(m, it) }
-            result.add(m.copy(courtNumber = bestCourt))
-            available.remove(bestCourt)
-        }
-        return result
-    }
-
-    private fun courtBias(m: PlannedMatch): Int {
-        val players = listOf(m.teamA.first, m.teamA.second, m.teamB.first, m.teamB.second)
-        return players.sumOf { p -> (courtCounts[p]?.values?.maxOrNull() ?: 0) }
-    }
-
-    private fun courtCost(m: PlannedMatch, court: Int): Int {
-        val players = listOf(m.teamA.first, m.teamA.second, m.teamB.first, m.teamB.second)
-        return players.sumOf { p -> courtCounts[p]?.get(court) ?: 0 }
-    }
-
-    private fun cost(m: PlannedMatch): Double {
+    /** Cost одного матча БЕЗ учёта корта — используется в перебор и greedy. */
+    private fun matchCostBeforeCourt(m: PlannedMatch): RoundCost {
         val ra1 = ratingByPlayer[m.teamA.first] ?: 1000
         val ra2 = ratingByPlayer[m.teamA.second] ?: 1000
         val rb1 = ratingByPlayer[m.teamB.first] ?: 1000
         val rb2 = ratingByPlayer[m.teamB.second] ?: 1000
 
-        val teamASum = ra1 + ra2
-        val teamBSum = rb1 + rb2
-        val balance = abs(teamASum - teamBSum).toDouble()
-        if (pairingMode == com.padelgo.domain.PairingMode.BALANCED && maxTeamDiff != null && balance > maxTeamDiff) {
-            return balance + 1_000_000.0
-        }
+        val balance = abs((ra1 + ra2) - (rb1 + rb2))
+        val balanceViolation =
+            if (pairingMode == com.padelgo.domain.PairingMode.BALANCED && maxTeamDiff != null && balance > maxTeamDiff) 1 else 0
 
-        val partnerPenalty = 5000.0 * (
+        val partnerRepeats =
             (partnerCounts[PairKey.of(m.teamA.first, m.teamA.second)] ?: 0) +
                 (partnerCounts[PairKey.of(m.teamB.first, m.teamB.second)] ?: 0)
-            )
 
-        val oppPairs = listOf(
+        val opponentRepeats = listOf(
             PairKey.of(m.teamA.first, m.teamB.first),
             PairKey.of(m.teamA.first, m.teamB.second),
             PairKey.of(m.teamA.second, m.teamB.first),
             PairKey.of(m.teamA.second, m.teamB.second)
+        ).sumOf { opponentCounts[it] ?: 0 }
+
+        // Слегка поощряем команды с сильным+слабым: больше внутрикомандная разница → меньше penalty.
+        val withinDiff = abs(ra1 - ra2) + abs(rb1 - rb2)
+        val withinPenalty = -withinDiff // больше разница (хорошо) → меньше penalty
+
+        return RoundCost(
+            partnerRepeats = partnerRepeats,
+            opponentRepeats = opponentRepeats,
+            balanceViolations = balanceViolation,
+            totalBalance = balance,
+            courtRepeats = 0,
+            withinPenalty = withinPenalty,
+            tieBreak = random.nextInt(0, 1000)
         )
-        val opponentPenalty = 1000.0 * oppPairs.sumOf { opponentCounts[it] ?: 0 }
+    }
 
-        // Поощряем "сильный + слабый" в команде (чем больше разница, тем меньше стоимость)
-        val withinTeamDiff = abs(ra1 - ra2) + abs(rb1 - rb2)
-        val withinBonus = -0.05 * withinTeamDiff
+    /** Полный cost раунда с учётом корта (вызывается на листе перебора). */
+    private fun totalRoundCost(matches: List<PlannedMatch>): RoundCost {
+        var sum = RoundCost.ZERO
+        for (m in matches) {
+            val c = matchCostBeforeCourt(m).copy(
+                courtRepeats = listOf(m.teamA.first, m.teamA.second, m.teamB.first, m.teamB.second)
+                    .sumOf { p -> courtCounts[p]?.get(m.courtNumber) ?: 0 }
+            )
+            sum = sum + c
+        }
+        return sum
+    }
 
-        return balance + partnerPenalty + opponentPenalty + withinBonus
+    /** Назначение корта: для каждого матча выбираем корт, на котором его игроки реже играли. */
+    private fun assignCourts(matches: List<PlannedMatch>): List<PlannedMatch> {
+        if (matches.isEmpty()) return matches
+        val available = (1..courtsCount).toMutableList()
+        // Сначала размещаем матчи где у игроков сильное «прилипание» к какому-то корту — у них меньше вариантов
+        val ordered = matches.sortedByDescending { m ->
+            val players = listOf(m.teamA.first, m.teamA.second, m.teamB.first, m.teamB.second)
+            players.sumOf { p -> courtCounts[p]?.values?.maxOrNull() ?: 0 }
+        }
+        val result = mutableListOf<PlannedMatch>()
+        ordered.forEach { m ->
+            val bestCourt = available.minBy { court ->
+                val players = listOf(m.teamA.first, m.teamA.second, m.teamB.first, m.teamB.second)
+                players.sumOf { p -> courtCounts[p]?.get(court) ?: 0 }
+            }
+            result.add(m.copy(courtNumber = bestCourt))
+            available.remove(bestCourt)
+        }
+        return result.sortedBy { it.courtNumber }
     }
 
     private fun applyRoundStats(matches: List<PlannedMatch>) {
@@ -220,4 +346,3 @@ class PairingPlanner(
         map[key] = (map[key] ?: 0) + 1
     }
 }
-

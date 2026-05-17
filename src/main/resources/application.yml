@@ -3,9 +3,9 @@ server:
 
 spring:
   datasource:
-    url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5432/padelgo}
-    username: ${SPRING_DATASOURCE_USERNAME:padelgo}
-    password: ${SPRING_DATASOURCE_PASSWORD:padelgo}
+    url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5432/padix}
+    username: ${SPRING_DATASOURCE_USERNAME:padix}
+    password: ${SPRING_DATASOURCE_PASSWORD:padix}
   jpa:
     hibernate:
       ddl-auto: validate
@@ -21,8 +21,10 @@ logging:
     org.hibernate.SQL: info
 
 springdoc:
+  api-docs:
+    enabled: false
   swagger-ui:
-    path: /swagger-ui.html
+    enabled: false
 
 app:
   jwt:
@@ -32,4 +34,7 @@ app:
   admin:
     username: ${APP_ADMIN_USERNAME:admin228}
     password: ${APP_ADMIN_PASSWORD:admin228}
+  swagger:
+    username: ${APP_SWAGGER_USERNAME:css101}
+    password: ${APP_SWAGGER_PASSWORD:101css101}
 
