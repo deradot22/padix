@@ -1,6 +1,7 @@
 package com.padelgo.service
 
 import com.padelgo.api.ApiException
+import io.swagger.v3.oas.annotations.media.Schema
 import com.padelgo.domain.Event
 import com.padelgo.domain.EventStatus
 import com.padelgo.domain.Match
@@ -213,6 +214,29 @@ class EventService(
     }
 
     @Transactional
+    fun deleteRound(eventId: UUID, roundId: UUID, userId: UUID) {
+        log.info("[ACTION] deleteRound called | eventId={} roundId={} userId={}", eventId, roundId, userId)
+        val event = getEvent(eventId)
+        requireAuthor(event, userId)
+        if (event.status != EventStatus.IN_PROGRESS) throw ApiException(HttpStatus.CONFLICT, "Event is not in progress")
+
+        val rounds = roundRepo.findAllByEventIdOrderByRoundNumberAsc(eventId)
+        val round = rounds.firstOrNull { it.id == roundId }
+            ?: throw ApiException(HttpStatus.NOT_FOUND, "Round not found")
+        val matches = matchRepo.findAllByRoundIdOrderByCourtNumberAsc(round.id!!)
+        if (matches.isNotEmpty() && matches.all { it.status == MatchStatus.FINISHED }) {
+            throw ApiException(HttpStatus.CONFLICT, "Нельзя удалить раунд, в котором все матчи сыграны")
+        }
+        for (m in matches) {
+            draftScoreRepo.deleteByMatchId(m.id!!)
+            scoreRepo.deleteAllByMatchId(m.id!!)
+            ratingChangeRepo.deleteAllByMatchId(m.id!!)
+            matchRepo.delete(m)
+        }
+        roundRepo.delete(round)
+    }
+
+    @Transactional
     fun addFinalRound(eventId: UUID, userId: UUID) {
         log.info("[ACTION] addFinalRound called | eventId={} userId={}", eventId, userId)
         val event = getEvent(eventId)
@@ -377,15 +401,47 @@ class EventService(
     }
 
     @Transactional
-    fun updateEvent(eventId: UUID, req: com.padelgo.api.UpdateEventRequest): Event {
+    fun updateEvent(eventId: UUID, userId: UUID, req: com.padelgo.api.UpdateEventRequest): Event {
         val event = getEvent(eventId)
-        if (event.status != EventStatus.OPEN_FOR_REGISTRATION) {
-            throw ApiException(HttpStatus.CONFLICT, "Event can be updated only before start (status=${event.status})")
+        if (event.createdByUserId != userId) {
+            throw ApiException(HttpStatus.FORBIDDEN, "Only author can update event")
+        }
+        if (event.status == EventStatus.FINISHED) {
+            throw ApiException(HttpStatus.CONFLICT, "Finished event cannot be edited")
         }
 
-        req.pointsPerPlayerPerMatch?.let { p ->
-            if (p <= 0) throw ApiException(HttpStatus.BAD_REQUEST, "pointsPerPlayerPerMatch must be > 0")
-            event.pointsPerPlayerPerMatch = p
+        val isBeforeStart = event.status == EventStatus.OPEN_FOR_REGISTRATION
+
+        // Поля доступные на любой стадии (кроме FINISHED): название, дата, время.
+        req.title?.let { t ->
+            val trimmed = t.trim()
+            if (trimmed.isBlank()) throw ApiException(HttpStatus.BAD_REQUEST, "Title can't be empty")
+            event.title = trimmed
+        }
+        req.date?.let { event.date = it }
+        req.startTime?.let { event.startTime = it }
+        req.endTime?.let { event.endTime = it }
+        if (event.endTime <= event.startTime) {
+            throw ApiException(HttpStatus.BAD_REQUEST, "endTime must be after startTime")
+        }
+
+        // Поля доступные только до старта.
+        if (req.pointsPerPlayerPerMatch != null || req.courtsCount != null || req.pairingMode != null) {
+            if (!isBeforeStart) {
+                throw ApiException(
+                    HttpStatus.CONFLICT,
+                    "pointsPerPlayerPerMatch / courtsCount / pairingMode can be changed only before start"
+                )
+            }
+            req.pointsPerPlayerPerMatch?.let { p ->
+                if (p <= 0) throw ApiException(HttpStatus.BAD_REQUEST, "pointsPerPlayerPerMatch must be > 0")
+                event.pointsPerPlayerPerMatch = p
+            }
+            req.courtsCount?.let { c ->
+                if (c <= 0) throw ApiException(HttpStatus.BAD_REQUEST, "courtsCount must be > 0")
+                event.courtsCount = c
+            }
+            req.pairingMode?.let { event.pairingMode = it }
         }
 
         return eventRepo.save(event)
@@ -597,8 +653,8 @@ class EventService(
         val round = roundRepo.findById(match.roundId!!).orElseThrow { ApiException(HttpStatus.NOT_FOUND, "Round not found") }
         val event = getEvent(round.eventId!!)
         requireAuthor(event, userId)
-        if (event.status != EventStatus.IN_PROGRESS) {
-            throw ApiException(HttpStatus.CONFLICT, "Event is not in progress (status=${event.status})")
+        if (event.status != EventStatus.IN_PROGRESS && event.status != EventStatus.FINISHED) {
+            throw ApiException(HttpStatus.CONFLICT, "Event is not in progress or finished (status=${event.status})")
         }
 
         val setEntities: List<MatchSetScore> = when (event.scoringMode) {
@@ -653,6 +709,10 @@ class EventService(
         draftScoreRepo.deleteByMatchId(matchId)
         match.status = MatchStatus.FINISHED
         matchRepo.save(match)
+
+        if (event.status == EventStatus.FINISHED) {
+            recalculateMatchRatings(event, match, setEntities)
+        }
     }
 
     @Transactional
@@ -661,8 +721,8 @@ class EventService(
         val round = roundRepo.findById(match.roundId!!).orElseThrow { ApiException(HttpStatus.NOT_FOUND, "Round not found") }
         val event = getEvent(round.eventId!!)
         requireAuthor(event, userId)
-        if (event.status != EventStatus.IN_PROGRESS) {
-            throw ApiException(HttpStatus.CONFLICT, "Event is not in progress (status=${event.status})")
+        if (event.status != EventStatus.IN_PROGRESS && event.status != EventStatus.FINISHED) {
+            throw ApiException(HttpStatus.CONFLICT, "Event is not in progress or finished (status=${event.status})")
         }
         if (event.scoringMode != ScoringMode.POINTS) {
             throw ApiException(HttpStatus.BAD_REQUEST, "Draft score is supported only for POINTS mode")
@@ -719,8 +779,23 @@ class EventService(
         val players = playerRepo.findAllById(playerIds).associateBy { it.id!! }.toMutableMap()
         val accounts = userRepo.findAllByPlayerIdIn(playerIds.toList())
 
+        // Сохраняем стартовые рейтинги ДО любых изменений — чтобы потом посчитать delta в уведомлении.
+        val ratingBefore: Map<UUID, Int> = players.mapValues { (_, p) -> p.rating }
+
         val calibrationByPlayer = accounts.associate { it.playerId!! to it.calibrationMatchesRemaining }
         val accountByPlayerId = accounts.associateBy { it.playerId!! }
+
+        // Нормализация по количеству сыгранных в эвенте матчей: если один сыграл 6 матчей,
+        // другой 4 — у первого каждая дельта × (avg/6), у второго × (avg/4). Так суммарное
+        // движение рейтинга пропорционально качеству игры, а не «времени за столом».
+        val matchCountByPlayer: Map<UUID, Int> = finishedMatches.flatMap {
+            listOf(it.teamAPlayer1Id!!, it.teamAPlayer2Id!!, it.teamBPlayer1Id!!, it.teamBPlayer2Id!!)
+        }.groupingBy { it }.eachCount()
+        val avgMatches: Double = if (matchCountByPlayer.isEmpty()) 1.0
+            else matchCountByPlayer.values.average()
+        val normByPlayer: Map<UUID, Double> = matchCountByPlayer.mapValues { (_, count) ->
+            if (count == 0) 1.0 else avgMatches / count.toDouble()
+        }
 
         try {
             finishedMatches.forEach { m ->
@@ -730,9 +805,15 @@ class EventService(
                 val b1 = players[m.teamBPlayer1Id!!] ?: return@forEach
                 val b2 = players[m.teamBPlayer2Id!!] ?: return@forEach
 
-                val teamARating = (a1.rating + a2.rating) / 2
-                val teamBRating = (b1.rating + b2.rating) / 2
-                val kTeam = ((EloRating.kFactor(a1.gamesPlayed) + EloRating.kFactor(a2.gamesPlayed)) / 2.0).toInt()
+                val teamARating = EloRating.teamRating(a1.rating, a2.rating)
+                val teamBRating = EloRating.teamRating(b1.rating, b2.rating)
+                // K-фактор — среднее по ВСЕМ 4 игрокам, не только команде A (раньше был баг).
+                val kTeam = ((
+                    EloRating.kFactor(a1.gamesPlayed) +
+                        EloRating.kFactor(a2.gamesPlayed) +
+                        EloRating.kFactor(b1.gamesPlayed) +
+                        EloRating.kFactor(b2.gamesPlayed)
+                    ) / 4.0).toInt()
 
                 val scoreA = scoreAFromSets(event.scoringMode, sets)
                 val (teamAPoints, teamBPoints, expectedTotal) = when (event.scoringMode) {
@@ -751,11 +832,13 @@ class EventService(
                 val baseDelta = EloRating.teamDelta(teamARating, teamBRating, kTeam, scoreA)
                 val deltaTeamA = (baseDelta * marginMult).roundToInt()
 
-                applyDelta(eventId, m.id!!, a1, a2, deltaTeamA, calibrationByPlayer)
-                applyDelta(eventId, m.id!!, b1, b2, -deltaTeamA, calibrationByPlayer)
+                applyDelta(eventId, m.id!!, a1, a2, deltaTeamA, calibrationByPlayer, normByPlayer)
+                applyDelta(eventId, m.id!!, b1, b2, -deltaTeamA, calibrationByPlayer, normByPlayer)
 
+                val matchNow = java.time.Instant.now()
                 listOf(a1, a2, b1, b2).forEach { p ->
                     p.gamesPlayed += 1
+                    p.lastMatchAt = matchNow
                     accountByPlayerId[p.id]?.let { acc ->
                         if (acc.calibrationMatchesRemaining > 0) {
                             acc.calibrationMatchesRemaining -= 1
@@ -775,11 +858,13 @@ class EventService(
 
             accounts.forEach { acc ->
                 val player = acc.playerId?.let { players[it] } ?: return@forEach
+                val before = ratingBefore[player.id] ?: player.rating
                 ratingNotificationRepo.save(
                     com.padelgo.domain.UserRatingNotification(
                         userId = acc.id!!,
                         eventId = eventId,
-                        newRating = player.rating
+                        newRating = player.rating,
+                        delta = player.rating - before
                     )
                 )
             }
@@ -824,13 +909,62 @@ class EventService(
         }
     }
 
+    private fun recalculateMatchRatings(event: Event, match: Match, setEntities: List<MatchSetScore>) {
+        val a1 = playerRepo.findById(match.teamAPlayer1Id!!).orElse(null) ?: return
+        val a2 = playerRepo.findById(match.teamAPlayer2Id!!).orElse(null) ?: return
+        val b1 = playerRepo.findById(match.teamBPlayer1Id!!).orElse(null) ?: return
+        val b2 = playerRepo.findById(match.teamBPlayer2Id!!).orElse(null) ?: return
+
+        ratingChangeRepo.deleteAllByMatchId(match.id!!)
+
+        val teamARating = EloRating.teamRating(a1.rating, a2.rating)
+        val teamBRating = EloRating.teamRating(b1.rating, b2.rating)
+        val kTeam = ((
+            EloRating.kFactor(a1.gamesPlayed) +
+                EloRating.kFactor(a2.gamesPlayed) +
+                EloRating.kFactor(b1.gamesPlayed) +
+                EloRating.kFactor(b2.gamesPlayed)
+            ) / 4.0).toInt()
+
+        val scoreA = scoreAFromSets(event.scoringMode, setEntities)
+        val (teamAPoints, teamBPoints, expectedTotal) = when (event.scoringMode) {
+            ScoringMode.POINTS -> {
+                val s1 = setEntities.first()
+                Triple(s1.teamAGames, s1.teamBGames, event.pointsPerPlayerPerMatch * 4)
+            }
+            ScoringMode.SETS -> {
+                val totalA = setEntities.sumOf { it.teamAGames }
+                val totalB = setEntities.sumOf { it.teamBGames }
+                val maxGames = (event.gamesPerSet * event.setsPerMatch) * 2
+                Triple(totalA, totalB, maxOf(maxGames, 1))
+            }
+        }
+
+        val marginMult = EloRating.marginMultiplier(teamAPoints, teamBPoints, expectedTotal)
+        val baseDelta = EloRating.teamDelta(teamARating, teamBRating, kTeam, scoreA)
+        val deltaTeamA = (baseDelta * marginMult).roundToInt()
+
+        val calibrationByPlayer = mapOf(
+            a1.id!! to (userRepo.findByPlayerId(a1.id!!)?.calibrationMatchesRemaining ?: 0),
+            a2.id!! to (userRepo.findByPlayerId(a2.id!!)?.calibrationMatchesRemaining ?: 0),
+            b1.id!! to (userRepo.findByPlayerId(b1.id!!)?.calibrationMatchesRemaining ?: 0),
+            b2.id!! to (userRepo.findByPlayerId(b2.id!!)?.calibrationMatchesRemaining ?: 0)
+        )
+
+        applyDelta(event.id!!, match.id!!, a1, a2, deltaTeamA, calibrationByPlayer)
+        applyDelta(event.id!!, match.id!!, b1, b2, -deltaTeamA, calibrationByPlayer)
+
+        playerRepo.saveAll(listOf(a1, a2, b1, b2))
+    }
+
     private fun applyDelta(
         eventId: UUID,
         matchId: UUID,
         p1: Player,
         p2: Player,
         deltaTeam: Int,
-        calibrationByPlayer: Map<UUID, Int>
+        calibrationByPlayer: Map<UUID, Int>,
+        normByPlayer: Map<UUID, Double> = emptyMap()
     ) {
         // делим нечетный delta "в пользу" игрока с меньшим количеством игр (чтобы новичков быстрее калибровало)
         val firstGetsMore = p1.gamesPlayed <= p2.gamesPlayed
@@ -839,8 +973,10 @@ class EventService(
 
         val m1 = if ((calibrationByPlayer[p1.id] ?: 0) > 0) 1.5 else 1.0
         val m2 = if ((calibrationByPlayer[p2.id] ?: 0) > 0) 1.5 else 1.0
-        applyDeltaSingle(eventId, matchId, p1, (d1 * m1).roundToInt())
-        applyDeltaSingle(eventId, matchId, p2, (d2 * m2).roundToInt())
+        val n1 = normByPlayer[p1.id] ?: 1.0
+        val n2 = normByPlayer[p2.id] ?: 1.0
+        applyDeltaSingle(eventId, matchId, p1, (d1 * m1 * n1).roundToInt())
+        applyDeltaSingle(eventId, matchId, p2, (d2 * m2 * n2).roundToInt())
     }
 
     private fun Int.sign(): Int = when {
@@ -885,6 +1021,9 @@ class EventService(
         val scores = my.associate { m ->
             m.id!! to scoreRepo.findAllByMatchIdOrderBySetNumberAsc(m.id!!)
         }
+        val draftScores = my.associate { m ->
+            m.id!! to (draftScoreRepo.findByMatchId(m.id!!)?.let { listOf(it) } ?: emptyList())
+        }
         val ratingByMatch = ratingChangeRepo.findAllByPlayerId(playerId)
             .filter { it.matchId != null }
             .groupBy { it.matchId!! }
@@ -894,6 +1033,7 @@ class EventService(
             val r = rounds[m.roundId] ?: return@mapNotNull null
             val e = events[r.eventId] ?: return@mapNotNull null
             val s = scores[m.id!!].orEmpty()
+            val ds = draftScores[m.id!!].orEmpty()
             val teamAIds = listOf(m.teamAPlayer1Id!!, m.teamAPlayer2Id!!)
             val teamBIds = listOf(m.teamBPlayer1Id!!, m.teamBPlayer2Id!!)
             val teamA = teamAIds.mapNotNull { playersById[it]?.name }
@@ -905,16 +1045,31 @@ class EventService(
             val oppIds = if (isTeamA) teamBIds else teamAIds
             val teamPlayerInfos = myIds.mapNotNull { id -> playersById[id]?.let { MatchPlayerInfo(it.name, it.avatarUrl) } }
             val opponentPlayerInfos = oppIds.mapNotNull { id -> playersById[id]?.let { MatchPlayerInfo(it.name, it.avatarUrl) } }
-            val result = if (s.isEmpty()) {
-                "—"
+            val scoreText = if (e.scoringMode == com.padelgo.domain.ScoringMode.POINTS) {
+                if (ds.isEmpty()) null else scoreToTextPoints(ds)
             } else {
-                val scoreA = scoreAFromSets(e.scoringMode, s)
-                when {
-                    scoreA == 0.5 -> "Ничья"
-                    isTeamA && scoreA > 0.5 -> "Победа"
-                    isTeamA && scoreA < 0.5 -> "Поражение"
-                    !isTeamA && scoreA < 0.5 -> "Победа"
-                    else -> "Поражение"
+                if (s.isEmpty()) null else scoreToText(e.scoringMode, s)
+            }
+            val result = when {
+                scoreText == null -> "—"
+                e.scoringMode == com.padelgo.domain.ScoringMode.POINTS -> {
+                    val myPoints = if (isTeamA) ds.firstOrNull()?.teamAPoints ?: 0 else ds.firstOrNull()?.teamBPoints ?: 0
+                    val oppPoints = if (isTeamA) ds.firstOrNull()?.teamBPoints ?: 0 else ds.firstOrNull()?.teamAPoints ?: 0
+                    when {
+                        myPoints > oppPoints -> "Победа"
+                        myPoints < oppPoints -> "Поражение"
+                        else -> "Ничья"
+                    }
+                }
+                else -> {
+                    val scoreA = scoreAFromSets(e.scoringMode, s)
+                    when {
+                        scoreA == 0.5 -> "Ничья"
+                        isTeamA && scoreA > 0.5 -> "Победа"
+                        isTeamA && scoreA < 0.5 -> "Поражение"
+                        !isTeamA && scoreA < 0.5 -> "Победа"
+                        else -> "Поражение"
+                    }
                 }
             }
             PlayerMatchHistoryItem(
@@ -927,7 +1082,7 @@ class EventService(
                 matchId = m.id!!,
                 courtNumber = m.courtNumber,
                 scoringMode = e.scoringMode.name,
-                score = if (s.isEmpty()) null else scoreToText(e.scoringMode, s),
+                score = scoreText,
                 status = m.status.name,
                 ratingDelta = ratingByMatch[m.id!!],
                 teamText = teamText,
@@ -957,6 +1112,9 @@ class EventService(
         val scoresByMatch = matches.associate { m ->
             m.matchId to scoreRepo.findAllByMatchIdOrderBySetNumberAsc(m.matchId)
         }
+        val draftScoresByMatch = matches.associate { m ->
+            m.matchId to (draftScoreRepo.findByMatchId(m.matchId)?.let { listOf(it) } ?: emptyList())
+        }
 
         val participantsByEvent = eventIds.associateWith { eid ->
             val regs = regRepo.findAllByEventIdAndStatus(eid)
@@ -971,11 +1129,12 @@ class EventService(
                 val e = events[eventId] ?: return@mapNotNull null
                 val totalPoints = if (e.scoringMode == ScoringMode.POINTS) {
                     items.sumOf { item ->
-                        val sets = scoresByMatch[item.matchId].orEmpty()
-                        val s1 = sets.firstOrNull() ?: return@sumOf 0
-                        val match = matchRepo.findById(item.matchId).orElse(null) ?: return@sumOf 0
-                        val isTeamA = match.teamAPlayer1Id == playerId || match.teamAPlayer2Id == playerId
-                        if (isTeamA) s1.teamAGames else s1.teamBGames
+                        val draftScores = draftScoresByMatch[item.matchId].orEmpty()
+                        draftScores.firstOrNull()?.let { ds ->
+                            val match = matchRepo.findById(item.matchId).orElse(null) ?: return@let 0
+                            val isTeamA = match.teamAPlayer1Id == playerId || match.teamAPlayer2Id == playerId
+                            if (isTeamA) ds.teamAPoints else ds.teamBPoints
+                        } ?: 0
                     }
                 } else {
                     null
@@ -1048,51 +1207,92 @@ class EventService(
         } else {
             sets.sortedBy { it.setNumber }.joinToString(" ") { "${it.teamAGames}:${it.teamBGames}" }
         }
+
+    private fun scoreToTextPoints(draftScores: List<com.padelgo.domain.MatchDraftScore>): String =
+        draftScores.firstOrNull()?.let { "${it.teamAPoints}:${it.teamBPoints}" } ?: ""
 }
 
+@Schema(description = "Игрок в матче (краткая информация)")
 data class MatchPlayerInfo(
+    @Schema(description = "Имя игрока")
     val name: String,
+    @Schema(description = "URL аватара или null")
     val avatarUrl: String? = null
 )
 
+@Schema(description = "Один матч из истории игрока")
 data class PlayerMatchHistoryItem(
+    @Schema(description = "UUID игры")
     val eventId: UUID,
+    @Schema(description = "Название игры")
     val eventTitle: String,
+    @Schema(description = "Дата игры")
     val eventDate: java.time.LocalDate,
+    @Schema(description = "Время начала игры")
     val eventStartTime: java.time.LocalTime? = null,
+    @Schema(description = "Время окончания игры")
     val eventEndTime: java.time.LocalTime? = null,
+    @Schema(description = "Номер раунда")
     val roundNumber: Int,
+    @Schema(description = "UUID матча")
     val matchId: UUID,
+    @Schema(description = "Номер корта")
     val courtNumber: Int,
+    @Schema(description = "Система счёта: SETS или POINTS")
     val scoringMode: String,
+    @Schema(description = "Счёт в виде строки, например «16:8» или «6:4, 4:6, 7:5». null — счёт не введён")
     val score: String?,
+    @Schema(description = "Статус матча: SCHEDULED или FINISHED")
     val status: String,
+    @Schema(description = "Изменение рейтинга за этот матч. null — рейтинг не пересчитывался")
     val ratingDelta: Int?,
+    @Schema(description = "Партнёры по команде через запятую")
     val teamText: String,
+    @Schema(description = "Соперники через запятую")
     val opponentText: String,
+    @Schema(description = "Результат: WIN / LOSS / DRAW")
     val result: String,
+    @Schema(description = "true — игрок был в команде A, false — в команде B")
     val isTeamA: Boolean = true,
+    @Schema(description = "Игроки своей команды")
     val teamPlayers: List<MatchPlayerInfo> = emptyList(),
+    @Schema(description = "Игроки команды соперника")
     val opponentPlayers: List<MatchPlayerInfo> = emptyList()
 )
 
+@Schema(description = "Точка графика изменения рейтинга")
 data class RatingHistoryPoint(
+    @Schema(description = "Дата в формате YYYY-MM-DD")
     val date: String,
+    @Schema(description = "Рейтинг после события")
     val rating: Int,
+    @Schema(description = "Изменение рейтинга (положительное — рост). null для начальной точки")
     val delta: Int?,
+    @Schema(description = "UUID игры, после которой изменился рейтинг. null для начальной точки")
     val eventId: UUID?
 )
 
+@Schema(description = "Игра из истории игрока (краткий итог)")
 data class PlayerEventHistoryItem(
+    @Schema(description = "UUID игры")
     val eventId: UUID,
+    @Schema(description = "Название игры")
     val eventTitle: String,
+    @Schema(description = "Дата игры")
     val eventDate: java.time.LocalDate,
+    @Schema(description = "Время начала")
     val eventStartTime: java.time.LocalTime? = null,
+    @Schema(description = "Время окончания")
     val eventEndTime: java.time.LocalTime? = null,
+    @Schema(description = "Имена других участников игры")
     val participants: List<String> = emptyList(),
+    @Schema(description = "Время завершения игры (UTC). null — игра ещё не завершена")
     val finishedAt: java.time.Instant? = null,
+    @Schema(description = "Количество матчей сыгранных игроком в этой игре")
     val matchesCount: Int,
+    @Schema(description = "Сумма очков игрока за все матчи (при scoringMode=POINTS). null при scoringMode=SETS")
     val totalPoints: Int?,
+    @Schema(description = "Суммарное изменение рейтинга за игру")
     val ratingDelta: Int
 )
 

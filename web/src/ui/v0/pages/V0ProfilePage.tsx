@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { api, EventHistoryItem, EventHistoryMatch, EventInviteItem, FriendsSnapshot, hasToken } from "../../../lib/api";
 import { ntrpLevel } from "../../../lib/rating";
@@ -7,6 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { ModalScrollArea } from "@/components/ui/modal-scroll-area";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { PlayerTooltip } from "@/components/player-tooltip";
@@ -30,6 +31,7 @@ import {
   Users2,
   X,
   XCircle,
+  ChevronDown,
 } from "lucide-react";
 
 function formatPublicId(publicId?: string | null) {
@@ -77,8 +79,12 @@ export function V0ProfilePage(props: { me: any; meLoaded?: boolean; onMeUpdate?:
   const [editError, setEditError] = useState<string | null>(null);
   const [info, setInfo] = useState<string | null>(null);
   const [idCopied, setIdCopied] = useState(false);
+  const [friendsExpanded, setFriendsExpanded] = useState(true);
+  const [historyExpanded, setHistoryExpanded] = useState(true);
   const [ratingHistory, setRatingHistory] = useState<{ date: string; rating: number; delta: number | null }[]>([]);
   const [graphOpen, setGraphOpen] = useState(false);
+  const [editGameOpen, setEditGameOpen] = useState(false);
+  const [editGameEventId, setEditGameEventId] = useState<string | null>(null);
 
   const persistAvatar = async (next: string | null) => {
     setAvatar(next);
@@ -314,17 +320,19 @@ export function V0ProfilePage(props: { me: any; meLoaded?: boolean; onMeUpdate?:
                 </td>
                 <td className="py-4 pl-2 align-middle">
                   <div className="flex flex-col items-center justify-center gap-1">
-                    {it.ratingDelta >= 0 ? (
-                      <Badge className="gap-1.5 w-fit bg-primary/20 text-primary border-primary/30 border">
-                        <TrendingUp className="h-3.5 w-3.5" />
-                        +{it.ratingDelta}
-                      </Badge>
-                    ) : (
-                      <Badge className="gap-1.5 w-fit bg-destructive/20 text-destructive border-destructive/30 border">
-                        <TrendingDown className="h-3.5 w-3.5" />
-                        {it.ratingDelta}
-                      </Badge>
-                    )}
+                    {(it.ratingDelta ?? 0) !== 0 ? (
+                      (it.ratingDelta ?? 0) >= 0 ? (
+                        <Badge className="gap-1.5 w-fit bg-primary/20 text-primary border-primary/30 border">
+                          <TrendingUp className="h-3.5 w-3.5" />
+                          +{it.ratingDelta}
+                        </Badge>
+                      ) : (
+                        <Badge className="gap-1.5 w-fit bg-destructive/20 text-destructive border-destructive/30 border">
+                          <TrendingDown className="h-3.5 w-3.5" />
+                          {it.ratingDelta}
+                        </Badge>
+                      )
+                    ) : null}
                     <span className="text-sm tabular-nums font-semibold">
                       {it.totalPoints ?? "—"}
                     </span>
@@ -419,8 +427,8 @@ export function V0ProfilePage(props: { me: any; meLoaded?: boolean; onMeUpdate?:
               </Button>
             </div>
 
-            <div className="mt-6 flex flex-wrap gap-3">
-              <Badge className="gap-2 px-4 py-2 bg-primary/10 text-primary border border-primary/20 text-base">
+            <div className="mt-6 flex flex-wrap items-center gap-3">
+              <Badge className="h-10 gap-2 px-4 py-0 bg-primary/10 text-primary border border-primary/20 text-base">
                 <Trophy className="h-4 w-4" />
                 {calibration ? (
                   "на калибровке"
@@ -430,12 +438,12 @@ export function V0ProfilePage(props: { me: any; meLoaded?: boolean; onMeUpdate?:
                   </>
                 )}
               </Badge>
-              <Badge className="gap-2 px-4 py-2 bg-accent/10 text-accent border border-accent/20 text-base">
+              <Badge className="h-10 gap-2 px-4 py-0 bg-accent/10 text-accent border border-accent/20 text-base">
                 <Gamepad2 className="h-4 w-4" />
                 {viewMe.gamesPlayed} матчей
               </Badge>
               {viewMe.gender ? (
-                <Badge variant="secondary" className="gap-2 px-4 py-2 text-base">
+                <Badge variant="secondary" className="h-10 gap-2 px-4 py-0 text-base">
                   {viewMe.gender === "M" ? "М" : "Ж"}
                 </Badge>
               ) : null}
@@ -456,7 +464,7 @@ export function V0ProfilePage(props: { me: any; meLoaded?: boolean; onMeUpdate?:
                   aria-label="Скопировать ID"
                   title="Скопировать ID"
                 >
-                  <Badge variant="secondary" className="gap-2 px-4 py-2">
+                  <Badge variant="secondary" className="h-10 gap-2 px-4 py-0 text-sm">
                     <span className="text-xs uppercase text-muted-foreground">ID</span>
                     {formatPublicId(viewMe.publicId)}
                   </Badge>
@@ -766,14 +774,27 @@ export function V0ProfilePage(props: { me: any; meLoaded?: boolean; onMeUpdate?:
           </Card>
 
           <Card className="border-border/50 flex flex-col">
-            <CardHeader className="pb-4">
-              <CardTitle className="flex items-center gap-2">
-                <Users className="h-5 w-5 text-primary" />
-                Друзья
-              </CardTitle>
+            <CardHeader
+              className="pb-4 cursor-pointer select-none"
+              onClick={() => setFriendsExpanded((v) => !v)}
+              role="button"
+              aria-expanded={friendsExpanded}
+            >
+              <div className="flex items-center justify-between gap-2">
+                <CardTitle className="flex items-center gap-2">
+                  <Users className="h-5 w-5 text-primary" />
+                  Друзья
+                  {(friends?.friends ?? []).length > 0 && (
+                    <span className="text-sm font-normal text-muted-foreground">
+                      ({(friends?.friends ?? []).length})
+                    </span>
+                  )}
+                </CardTitle>
+                <ChevronDown className={cn("h-4 w-4 text-muted-foreground transition-transform", !friendsExpanded && "-rotate-90")} />
+              </div>
               <CardDescription>Добавьте друзей по их ID</CardDescription>
             </CardHeader>
-            <CardContent className="space-y-4 flex-1">
+            <CardContent className={cn("space-y-4 flex-1", !friendsExpanded && "hidden")}>
               <div className="flex gap-2">
                 <Input
                   placeholder="#123456789"
@@ -822,6 +843,7 @@ export function V0ProfilePage(props: { me: any; meLoaded?: boolean; onMeUpdate?:
               {(friends?.friends ?? []).length > 0 ? (
                 <div className="space-y-2 pt-2 border-t border-border">
                   <p className="text-xs font-medium text-muted-foreground uppercase">Ваши друзья</p>
+                  <div className="space-y-2 max-h-[280px] overflow-y-auto pr-1">
                   {(friends?.friends ?? []).map((friend) => (
                     <PlayerTooltip
                       key={friend.userId}
@@ -851,6 +873,7 @@ export function V0ProfilePage(props: { me: any; meLoaded?: boolean; onMeUpdate?:
                       </div>
                     </PlayerTooltip>
                   ))}
+                  </div>
                 </div>
               ) : (
                 <div className="text-sm text-muted-foreground">Пока нет друзей.</div>
@@ -922,19 +945,27 @@ export function V0ProfilePage(props: { me: any; meLoaded?: boolean; onMeUpdate?:
         )}
 
         <Card className="border-border/50">
-          <CardHeader className="pb-4">
-            <CardTitle className="flex items-center gap-2">
-              <Calendar className="h-5 w-5 text-primary" />
-              История матчей
-            </CardTitle>
+          <CardHeader
+            className="pb-4 cursor-pointer select-none"
+            onClick={() => setHistoryExpanded((v) => !v)}
+            role="button"
+            aria-expanded={historyExpanded}
+          >
+            <div className="flex items-center justify-between gap-2">
+              <CardTitle className="flex items-center gap-2">
+                <Calendar className="h-5 w-5 text-primary" />
+                История матчей
+              </CardTitle>
+              <ChevronDown className={cn("h-4 w-4 text-muted-foreground transition-transform", !historyExpanded && "-rotate-90")} />
+            </div>
             <CardDescription>История ваших игр и изменение рейтинга</CardDescription>
           </CardHeader>
-          <CardContent>{historyContent}</CardContent>
+          <CardContent className={cn(!historyExpanded && "hidden")}>{historyContent}</CardContent>
         </Card>
 
         {details ? (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-6" onClick={() => { setDetails(null); setDetailsStatsOpen(false); }}>
-            <div className="w-full max-w-5xl max-h-[90vh] overflow-y-auto rounded-xl border border-border bg-card p-6" onClick={(e) => e.stopPropagation()}>
+            <ModalScrollArea className="w-full max-w-5xl max-h-[90vh] overflow-y-auto rounded-xl border border-border bg-card p-6" onClick={(e) => e.stopPropagation()}>
               <div className="flex items-start justify-between gap-3">
                 <div>
                   <div className="text-lg font-semibold">{detailsTitle}</div>
@@ -948,9 +979,22 @@ export function V0ProfilePage(props: { me: any; meLoaded?: boolean; onMeUpdate?:
                     <div className="text-sm text-muted-foreground">{details[0].eventDate}</div>
                   ) : null}
                 </div>
-                <Button variant="outline" size="sm" className="shrink-0" onClick={() => { setDetails(null); setDetailsStatsOpen(false); }}>
-                  Закрыть
-                </Button>
+                <div className="flex items-center gap-2 shrink-0">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      setEditGameEventId(detailsEventId);
+                      setEditGameOpen(true);
+                    }}
+                  >
+                    <Pencil className="h-4 w-4 mr-1.5" />
+                    Редактировать счет
+                  </Button>
+                  <Button variant="outline" size="sm" onClick={() => { setDetails(null); setDetailsStatsOpen(false); }}>
+                    Закрыть
+                  </Button>
+                </div>
               </div>
               <Button
                 variant="secondary"
@@ -1140,11 +1184,201 @@ export function V0ProfilePage(props: { me: any; meLoaded?: boolean; onMeUpdate?:
                   );
                 })}
               </div>
-            </div>
+            </ModalScrollArea>
           </div>
+        ) : null}
+
+        {editGameOpen && editGameEventId ? (
+          <EditGameScoresDialog
+            eventId={editGameEventId}
+            onClose={() => {
+              setEditGameOpen(false);
+              setEditGameEventId(null);
+            }}
+            onSave={async () => {
+              setEditGameOpen(false);
+              setEditGameEventId(null);
+              if (detailsEventId === editGameEventId) {
+                try {
+                  const updated = await api.myHistory();
+                  setHistory(updated);
+                } catch {}
+              }
+            }}
+          />
         ) : null}
       </div>
     </TooltipProvider>
   );
 }
 
+function EditGameScoresDialog(props: {
+  eventId: string;
+  onClose: () => void;
+  onSave: () => void;
+}) {
+  const [eventData, setEventData] = useState<any | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [scores, setScores] = useState<Record<string, { teamAPoints: number; teamBPoints: number }>>({});
+  const originalScoresRef = useRef<Record<string, { teamAPoints: number; teamBPoints: number }>>({});
+
+  useEffect(() => {
+    const load = async () => {
+      try {
+        const data = await api.getEventDetails(props.eventId);
+        setEventData(data);
+        const initialScores: Record<string, { teamAPoints: number; teamBPoints: number }> = {};
+        data.rounds.flatMap((r: any) => r.matches).forEach((m: any) => {
+          const score = m.score?.points;
+          initialScores[m.id] = {
+            teamAPoints: score?.teamAPoints ?? 0,
+            teamBPoints: score?.teamBPoints ?? 0,
+          };
+        });
+        setScores(initialScores);
+        originalScoresRef.current = initialScores;
+      } catch (e: any) {
+        setError(e?.message ?? "Ошибка загрузки события");
+      } finally {
+        setLoading(false);
+      }
+    };
+    load();
+  }, [props.eventId]);
+
+  const handleSave = async () => {
+    try {
+      setSaving(true);
+      setError(null);
+      const matches = eventData.rounds.flatMap((r: any) => r.matches);
+      for (const match of matches) {
+        const newScore = scores[match.id];
+        const originalScore = originalScoresRef.current[match.id];
+
+        // Only submit if scores changed
+        if (newScore && (newScore.teamAPoints !== originalScore?.teamAPoints || newScore.teamBPoints !== originalScore?.teamBPoints)) {
+          await api.saveDraftScore(match.id, newScore);
+          await api.submitScore(match.id, newScore);
+        }
+      }
+      props.onSave();
+    } catch (e: any) {
+      setError(e?.message ?? "Ошибка сохранения счёта");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  if (!eventData && !loading) {
+    return (
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-6" onClick={props.onClose}>
+        <div className="bg-card border border-border rounded-lg p-6 max-w-md" onClick={(e) => e.stopPropagation()}>
+          <div className="text-red-500">Ошибка загрузки события</div>
+          <Button variant="outline" size="sm" className="mt-4 w-full" onClick={props.onClose}>
+            Закрыть
+          </Button>
+        </div>
+      </div>
+    );
+  }
+
+  const matches = eventData?.rounds.flatMap((r: any) => r.matches) ?? [];
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-6" onClick={props.onClose}>
+      <ModalScrollArea
+        className="w-full max-w-2xl max-h-[90vh] overflow-y-auto rounded-xl border border-border bg-card p-6"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-center justify-between mb-6">
+          <div className="text-lg font-semibold">Редактирование счёта</div>
+          <Button variant="outline" size="sm" onClick={props.onClose}>
+            <X className="h-4 w-4" />
+          </Button>
+        </div>
+
+        {error && (
+          <div className="mb-4 p-3 rounded-md bg-destructive/10 text-destructive text-sm">{error}</div>
+        )}
+
+        {loading ? (
+          <div className="text-center py-6 text-muted-foreground">Загрузка...</div>
+        ) : (
+          <>
+            <div className="space-y-4">
+              {matches.map((match: any) => (
+                <div key={match.id} className="border border-border rounded-lg p-4 space-y-3">
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <div className="text-sm font-medium mb-1">Команда A</div>
+                      <div className="flex items-center gap-1 text-sm text-muted-foreground">
+                        {match.teamA?.map((p: any) => p.name).join(" + ")}
+                      </div>
+                    </div>
+                    <div>
+                      <div className="text-sm font-medium mb-1">Команда B</div>
+                      <div className="flex items-center gap-1 text-sm text-muted-foreground">
+                        {match.teamB?.map((p: any) => p.name).join(" + ")}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-3">
+                    <div className="flex-1">
+                      <label className="text-xs text-muted-foreground">Точки Team A</label>
+                      <Input
+                        type="number"
+                        min="0"
+                        value={scores[match.id]?.teamAPoints ?? 0}
+                        onChange={(e) =>
+                          setScores({
+                            ...scores,
+                            [match.id]: {
+                              ...scores[match.id],
+                              teamAPoints: parseInt(e.target.value) || 0,
+                            },
+                          })
+                        }
+                        disabled={saving}
+                      />
+                    </div>
+                    <div className="text-xl font-bold mt-5">:</div>
+                    <div className="flex-1">
+                      <label className="text-xs text-muted-foreground">Точки Team B</label>
+                      <Input
+                        type="number"
+                        min="0"
+                        value={scores[match.id]?.teamBPoints ?? 0}
+                        onChange={(e) =>
+                          setScores({
+                            ...scores,
+                            [match.id]: {
+                              ...scores[match.id],
+                              teamBPoints: parseInt(e.target.value) || 0,
+                            },
+                          })
+                        }
+                        disabled={saving}
+                      />
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            <div className="flex gap-2 mt-6">
+              <Button variant="outline" onClick={props.onClose} disabled={saving} className="flex-1">
+                Отмена
+              </Button>
+              <Button onClick={handleSave} disabled={saving} className="flex-1">
+                {saving ? "Сохранение..." : "Сохранить"}
+              </Button>
+            </div>
+          </>
+        )}
+      </ModalScrollArea>
+    </div>
+  );
+}

@@ -177,17 +177,17 @@ export type EventInviteStatusItem = {
 };
 
 function getToken(): string | null {
-  const t = localStorage.getItem("padelgo_token");
+  const t = localStorage.getItem("padix_token");
   return t?.trim() || null;
 }
 
 function getAdminToken(): string | null {
-  return localStorage.getItem("padelgo_admin_token");
+  return localStorage.getItem("padix_admin_token");
 }
 
 export function setToken(token: string | null) {
-  if (!token) localStorage.removeItem("padelgo_token");
-  else localStorage.setItem("padelgo_token", token);
+  if (!token) localStorage.removeItem("padix_token");
+  else localStorage.setItem("padix_token", token);
 }
 
 export function hasToken(): boolean {
@@ -195,8 +195,8 @@ export function hasToken(): boolean {
 }
 
 export function setAdminToken(token: string | null) {
-  if (!token) localStorage.removeItem("padelgo_admin_token");
-  else localStorage.setItem("padelgo_admin_token", token);
+  if (!token) localStorage.removeItem("padix_admin_token");
+  else localStorage.setItem("padix_admin_token", token);
 }
 
 export function adminToken() {
@@ -304,6 +304,26 @@ export const api = {
     request(`/api/events/${eventId}/rounds/add`, { method: "POST" }),
   addFinalRound: (eventId: string) =>
     request(`/api/events/${eventId}/rounds/final`, { method: "POST" }),
+  deleteRound: (eventId: string, roundId: string) =>
+    request(`/api/events/${eventId}/rounds/${roundId}`, { method: "DELETE" }),
+  deleteEvent: (eventId: string) =>
+    request(`/api/events/${eventId}`, { method: "DELETE" }),
+  updateEvent: (
+    eventId: string,
+    payload: {
+      title?: string;
+      date?: string;
+      startTime?: string;
+      endTime?: string;
+      pointsPerPlayerPerMatch?: number;
+      courtsCount?: number;
+      pairingMode?: PairingMode;
+    },
+  ) =>
+    request<Event>(`/api/events/${eventId}`, {
+      method: "PATCH",
+      body: JSON.stringify(payload),
+    }),
   createEvent: (payload: {
     title: string;
     date: string;
@@ -347,6 +367,8 @@ export const api = {
     request("/api/friends/decline", { method: "POST", body: JSON.stringify({ publicId }) }),
   inviteFriendToEvent: (eventId: string, publicId: string) =>
     request(`/api/events/${eventId}/invite`, { method: "POST", body: JSON.stringify({ publicId }) }),
+  addFriendToEvent: (eventId: string, publicId: string) =>
+    request(`/api/events/${eventId}/add-friend`, { method: "POST", body: JSON.stringify({ publicId }) }),
   getInvites: () => request<EventInviteItem[]>("/api/invites"),
   acceptEventInvite: (eventId: string) =>
     request(`/api/events/${eventId}/invites/accept`, { method: "POST" }),
@@ -369,7 +391,7 @@ export const api = {
   getRatingHistory: () =>
     request<{ date: string; rating: number; delta: number | null; eventId: string | null }[]>("/api/me/rating-history"),
   getRatingNotification: () =>
-    request<{ id: string; newRating: number; eventId: string } | null>("/api/me/rating-notification"),
+    request<{ id: string; newRating: number; delta: number; eventId: string } | null>("/api/me/rating-notification"),
   markRatingNotificationSeen: (id: string) =>
     request(`/api/me/rating-notification/${id}/seen`, { method: "POST" }),
 

@@ -1,12 +1,17 @@
 package com.padelgo.admin
 
 import com.padelgo.api.ApiException
+import com.padelgo.api.SubmitScoreRequest
 import com.padelgo.auth.JwtPrincipal
 import com.padelgo.auth.JwtService
 import com.padelgo.auth.UserRepository
 import com.padelgo.domain.Player
 import com.padelgo.repo.PlayerRepository
+import com.padelgo.repo.MatchRepository
+import com.padelgo.repo.RoundRepository
+import com.padelgo.service.EventService
 import jakarta.validation.constraints.NotBlank
+import io.swagger.v3.oas.annotations.tags.Tag
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.http.HttpStatus
 import org.springframework.security.core.context.SecurityContextHolder
@@ -18,10 +23,13 @@ import org.springframework.web.bind.annotation.PathVariable
 import org.springframework.web.bind.annotation.PostMapping
 import org.springframework.web.bind.annotation.RequestBody
 import org.springframework.web.bind.annotation.RequestMapping
+import org.springframework.web.bind.annotation.RequestParam
 import org.springframework.web.bind.annotation.RestController
 import java.security.SecureRandom
+import java.time.LocalDate
 import java.util.UUID
 
+@Tag(name = "Admin", description = "Административные операции. Требуют отдельный admin-токен из POST /api/admin/login.")
 @RestController
 @RequestMapping("/api/admin")
 class AdminController(
@@ -29,6 +37,9 @@ class AdminController(
     private val players: PlayerRepository,
     private val encoder: PasswordEncoder,
     private val jwt: JwtService,
+    private val eventService: EventService,
+    private val roundRepo: RoundRepository,
+    private val matchRepo: MatchRepository,
     @Value("\${app.admin.username}") private val adminUsername: String,
     @Value("\${app.admin.password}") private val adminPassword: String
 ) {
@@ -181,6 +192,101 @@ class AdminController(
         }
         throw ApiException(HttpStatus.CONFLICT, "Failed to generate public id")
     }
+
+    @PostMapping("/complete-games")
+    fun completeGames(@RequestParam(required = false) date: String?): CompleteGamesResponse {
+        requireAdmin()
+        val targetDate = date?.let { LocalDate.parse(it) } ?: LocalDate.now()
+        val events = eventService.getToday(targetDate).filter { it.status != com.padelgo.domain.EventStatus.FINISHED }
+
+        val systemUserId = UUID.fromString("00000000-0000-0000-0000-000000000000")
+        var completedCount = 0
+        var errorCount = 0
+
+        for (event in events) {
+            try {
+                val eventId = event.id ?: continue
+
+                // Get first N registered players to ensure we have minimum required
+                val registeredPlayers = eventService.getRegisteredPlayers(eventId)
+                if (registeredPlayers.isEmpty()) continue
+
+                // Get all players if needed for registration
+                val allPlayers = players.findAll().sortedByDescending { it.rating }.take(20)
+
+                // Register players (at least courtsCount * 4)
+                val neededPlayers = maxOf(
+                    event.courtsCount * 4,
+                    registeredPlayers.size
+                )
+
+                for (player in allPlayers.take(neededPlayers)) {
+                    try {
+                        eventService.register(eventId, player.id!!)
+                    } catch (e: Exception) {
+                        // Player already registered or some other registration issue
+                    }
+                }
+
+                // Close registration
+                try {
+                    eventService.closeRegistration(eventId, event.createdByUserId ?: systemUserId)
+                } catch (e: Exception) {
+                    // Might already be closed
+                }
+
+                // Start event
+                try {
+                    eventService.startEvent(eventId, event.createdByUserId ?: systemUserId)
+                } catch (e: Exception) {
+                    // Might already be started
+                    throw e
+                }
+
+                // Score all matches
+                val rounds = roundRepo.findAllByEventIdOrderByRoundNumberAsc(eventId)
+                for (round in rounds) {
+                    val matches = matchRepo.findAllByRoundIdOrderByCourtNumberAsc(round.id!!)
+                    for (match in matches) {
+                        try {
+                            val scoreReq = SubmitScoreRequest(
+                                points = com.padelgo.api.PointsScoreRequest(
+                                    teamAPoints = 21,
+                                    teamBPoints = 15
+                                )
+                            )
+                            eventService.submitScore(match.id!!, event.createdByUserId ?: systemUserId, scoreReq)
+                        } catch (e: Exception) {
+                            // Match already scored
+                        }
+                    }
+                }
+
+                // Finish event
+                try {
+                    eventService.finishEvent(eventId, event.createdByUserId ?: systemUserId)
+                } catch (e: Exception) {
+                    // Try force finish
+                    try {
+                        eventService.forceFinishEvent(eventId, event.createdByUserId ?: systemUserId)
+                    } catch (e2: Exception) {
+                        // Already finished
+                    }
+                }
+
+                completedCount++
+            } catch (e: Exception) {
+                errorCount++
+            }
+        }
+
+        return CompleteGamesResponse(
+            date = targetDate,
+            completedCount = completedCount,
+            totalCount = events.size,
+            errorCount = errorCount
+        )
+    }
 }
 
 data class AdminLoginRequest(
@@ -256,3 +362,10 @@ data class AdminUserResponse(
         }
     }
 }
+
+data class CompleteGamesResponse(
+    val date: LocalDate,
+    val completedCount: Int,
+    val totalCount: Int,
+    val errorCount: Int
+)

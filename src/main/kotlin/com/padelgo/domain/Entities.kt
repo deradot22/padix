@@ -41,7 +41,10 @@ class Player(
 
     @CreationTimestamp
     @Column(name = "created_at", nullable = false)
-    var createdAt: Instant? = null
+    var createdAt: Instant? = null,
+
+    @Column(name = "last_match_at")
+    var lastMatchAt: Instant? = null
 )
 
 @Entity
@@ -299,6 +302,9 @@ class UserRatingNotification(
 
     @Column(name = "new_rating", nullable = false)
     var newRating: Int = 0,
+
+    @Column(name = "delta", nullable = false)
+    var delta: Int = 0,
 
     @CreationTimestamp
     @Column(name = "created_at", nullable = false)

@@ -12,6 +12,7 @@ import { V0LoginPage } from "./v0/pages/V0LoginPage";
 import { V0RegisterPage } from "./v0/pages/V0RegisterPage";
 import { V0SurveyPage } from "./v0/pages/V0SurveyPage";
 import { V0AdminPage } from "./v0/pages/V0AdminPage";
+import { V0LandingPage } from "./v0/pages/V0LandingPage";
 import { MainLayout } from "@/components/main-layout";
 
 export function App() {
@@ -38,6 +39,7 @@ export function App() {
   const [ratingNotification, setRatingNotification] = useState<{
     id: string;
     newRating: number;
+    delta: number;
     eventId: string;
   } | null>(null);
 
@@ -132,6 +134,10 @@ export function App() {
         {/* обратная совместимость: старый префикс */}
         <Route path="/v0/*" element={<Navigate to="/" replace />} />
 
+        {/* Landing page без header для неавторизованных */}
+        {!authed && <Route index element={<V0LandingPage />} />}
+
+        {/* Layout с header для всех */}
         <Route
           element={
             <MainLayout
@@ -148,7 +154,7 @@ export function App() {
             </MainLayout>
           }
         >
-          <Route index element={<V0HomePage me={me} />} />
+          {authed && <Route index element={<V0HomePage me={me} />} />}
           <Route path="rating" element={<V0RatingPage authed={authed} me={me} />} />
           <Route path="login" element={<V0LoginPage onAuth={(m) => setMe(m)} />} />
           <Route path="register" element={<V0RegisterPage onAuth={(m) => setMe(m)} />} />
@@ -198,6 +204,7 @@ export function App() {
       {ratingNotification ? (
         <RatingNotificationModal
           newRating={ratingNotification.newRating}
+          delta={ratingNotification.delta}
           onClose={closeRatingNotification}
         />
       ) : null}

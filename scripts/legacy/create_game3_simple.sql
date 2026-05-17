@@ -1,0 +1,2 @@
+INSERT INTO events (id, title, event_date, start_time, end_time, format, status, courts_count, rounds_planned, scoring_mode, points_per_player_per_match, auto_rounds, created_at, pairing_mode, created_by_user_id)
+VALUES (gen_random_uuid(), 'Игра 3: User 1', CURRENT_DATE, '18:00:00'::time, '20:00:00'::time, 'AMERICANA', 'IN_PROGRESS', 1, 1, 'POINTS', 6, true, CURRENT_TIMESTAMP, 'ROUND_ROBIN', '5ed135c7-27de-4da1-9b8d-952fa51ecb18'::uuid);

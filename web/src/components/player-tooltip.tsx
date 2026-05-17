@@ -73,24 +73,28 @@ export function PlayerTooltip({
     return () => window.removeEventListener("player-tooltip-open", onAnyOpen as EventListener);
   }, [tooltipId]);
 
-  const [pos, setPos] = useState<{ top: number; left: number } | null>(null);
+  const [pos, setPos] = useState<{ top: number; left: number; placeBelow: boolean } | null>(null);
   const tooltipRef = useRef<HTMLDivElement | null>(null);
   const TOOLTIP_WIDTH = 220;
   const PADDING = 8;
+  const GAP = 6;
 
   const updatePos = useCallback(() => {
     if (!containerRef.current) return;
     const rect = containerRef.current.getBoundingClientRect();
+    const vh = window.innerHeight;
     const vw = window.innerWidth;
 
-    let left = rect.left + rect.width / 2;
-    const halfW = TOOLTIP_WIDTH / 2;
-    if (left - halfW < PADDING) left = halfW + PADDING;
-    if (left + halfW > vw - PADDING) left = vw - halfW - PADDING;
+    const placeBelow = vh - rect.bottom >= 260 || rect.top < 260;
+
+    let left = rect.left;
+    if (left + TOOLTIP_WIDTH > vw - PADDING) left = vw - TOOLTIP_WIDTH - PADDING;
+    if (left < PADDING) left = PADDING;
 
     setPos({
-      top: rect.top,
+      top: placeBelow ? rect.bottom + GAP : rect.top - GAP,
       left,
+      placeBelow,
     });
   }, []);
 
@@ -143,10 +147,10 @@ export function PlayerTooltip({
         <div
           ref={tooltipRef}
           className="fixed z-[9999]"
-          style={{ top: pos.top, left: pos.left, transform: "translate(-50%, -100%)" }}
+          style={{ top: pos.top, left: pos.left, transform: pos.placeBelow ? "none" : "translateY(-100%)" }}
           data-player-tooltip
         >
-          <div className="mb-2 p-3 min-w-[180px] max-w-[220px] rounded-lg bg-card border border-border shadow-xl">
+          <div className="p-3 min-w-[180px] max-w-[220px] rounded-lg bg-card border border-border shadow-xl">
             <div className="mb-3 flex items-center gap-3">
               {player.avatarUrl ? (
                 <div className="h-10 w-10 shrink-0 overflow-hidden rounded-full border border-border">

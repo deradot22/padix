@@ -9,17 +9,24 @@ import jakarta.servlet.FilterChain
 import jakarta.servlet.http.HttpServletRequest
 import jakarta.servlet.http.HttpServletResponse
 import org.slf4j.LoggerFactory
+import org.springframework.beans.factory.annotation.Value
 import org.springframework.context.annotation.Bean
 import org.springframework.context.annotation.Configuration
+import org.springframework.core.annotation.Order
 import org.springframework.http.HttpHeaders
 import org.springframework.http.HttpStatus
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken
 import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity
 import org.springframework.security.config.annotation.web.builders.HttpSecurity
 import org.springframework.security.config.http.SessionCreationPolicy
+import org.springframework.security.authentication.ProviderManager
+import org.springframework.security.authentication.dao.DaoAuthenticationProvider
+import org.springframework.security.core.authority.SimpleGrantedAuthority
 import org.springframework.security.core.context.SecurityContextHolder
+import org.springframework.security.core.userdetails.User
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder
 import org.springframework.security.crypto.password.PasswordEncoder
+import org.springframework.security.provisioning.InMemoryUserDetailsManager
 import org.springframework.security.web.SecurityFilterChain
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter
 import org.springframework.web.cors.CorsConfiguration
@@ -31,12 +38,35 @@ import org.springframework.web.filter.OncePerRequestFilter
 @EnableMethodSecurity
 class SecurityConfig(
     private val jwtService: JwtService,
-    private val userRepo: UserRepository
+    private val userRepo: UserRepository,
+    @Value("\${app.swagger.username}") private val swaggerUsername: String,
+    @Value("\${app.swagger.password}") private val swaggerPassword: String
 ) {
     @Bean
     fun passwordEncoder(): PasswordEncoder = BCryptPasswordEncoder()
 
     @Bean
+    @Order(1)
+    fun swaggerFilterChain(http: HttpSecurity): SecurityFilterChain {
+        val userDetails = InMemoryUserDetailsManager(
+            User.withUsername(swaggerUsername)
+                .password("{noop}$swaggerPassword")
+                .authorities(SimpleGrantedAuthority("ROLE_SWAGGER"))
+                .build()
+        )
+        val provider = DaoAuthenticationProvider().also { it.setUserDetailsService(userDetails) }
+
+        http
+            .securityMatcher("/swagger-ui.html", "/swagger-ui/**", "/v3/api-docs/**")
+            .csrf { it.disable() }
+            .authorizeHttpRequests { it.anyRequest().authenticated() }
+            .httpBasic { }
+            .authenticationManager(ProviderManager(provider))
+        return http.build()
+    }
+
+    @Bean
+    @Order(2)
     fun filterChain(http: HttpSecurity): SecurityFilterChain {
         http.csrf { it.disable() }
         http.cors { }
@@ -48,10 +78,7 @@ class SecurityConfig(
                 .requestMatchers(
                     "/api/auth/**",
                     "/api/admin/login",
-                    "/api/players/rating",
-                    "/swagger-ui.html",
-                    "/swagger-ui/**",
-                    "/v3/api-docs/**"
+                    "/api/players/rating"
                 ).permitAll()
                 .requestMatchers(org.springframework.http.HttpMethod.GET, "/api/events/*", "/api/events/today", "/api/events/upcoming").permitAll()
                 .anyRequest().authenticated()
@@ -78,11 +105,18 @@ class SecurityConfig(
     @Bean
     fun corsConfigurationSource(): CorsConfigurationSource {
         val config = CorsConfiguration()
+        // Exact production origins
         config.allowedOrigins = listOf(
             "https://padix.club",
             "https://www.padix.club",
             "http://localhost:5173",
-            "http://localhost:8081"
+            "http://localhost:8081",
+            "http://localhost:8083"
+        )
+        // Patterns (allowedOriginPatterns supports wildcards, allowedOrigins does not).
+        // Covers Cloudflare Pages preview deployments (<hash>.padix.pages.dev).
+        config.allowedOriginPatterns = listOf(
+            "https://*.padix.pages.dev"
         )
         config.allowedMethods = listOf("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS")
         config.allowedHeaders = listOf("*")

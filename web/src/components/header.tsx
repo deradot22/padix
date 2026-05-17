@@ -381,11 +381,11 @@ export function Header(props: {
           </Button>
 
           {props.authed ? (
-            <Button variant="outline" size="sm" className="ml-2 bg-transparent" onClick={props.onLogout}>
+            <Button variant="outline" size="sm" className="ml-2 bg-transparent hidden md:inline-flex" onClick={props.onLogout}>
               Выйти
             </Button>
           ) : (
-            <Button variant="outline" size="sm" className="ml-2 bg-transparent" onClick={() => nav("/login")}>
+            <Button variant="outline" size="sm" className="ml-2 bg-transparent hidden md:inline-flex" onClick={() => nav("/login")}>
               Войти
             </Button>
           )}
@@ -399,6 +399,7 @@ export function Header(props: {
               <NavLink
                 key={item.name}
                 to={item.href}
+                onClick={() => setMobileOpen(false)}
                 className={({ isActive }) =>
                   cn(
                     "rounded-lg px-3 py-2 text-sm font-medium transition-all duration-200",
@@ -411,6 +412,24 @@ export function Header(props: {
                 {item.name}
               </NavLink>
             ))}
+            <div className="my-1 h-px bg-border" />
+            {props.authed ? (
+              <button
+                type="button"
+                onClick={() => { setMobileOpen(false); props.onLogout?.(); }}
+                className="rounded-lg px-3 py-2 text-left text-sm font-medium text-muted-foreground hover:bg-secondary/50 hover:text-foreground transition-colors"
+              >
+                Выйти
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={() => { setMobileOpen(false); nav("/login"); }}
+                className="rounded-lg px-3 py-2 text-left text-sm font-medium text-muted-foreground hover:bg-secondary/50 hover:text-foreground transition-colors"
+              >
+                Войти
+              </button>
+            )}
           </div>
         </div>
       ) : null}

@@ -12,3 +12,14 @@ target/
 application-local.yml
 application-local.yaml
 
+# Local / IDE / Claude
+.claude/
+.vscode/
+
+# Node
+node_modules/
+**/node_modules/
+dist/
+
+# OS
+Thumbs.db
