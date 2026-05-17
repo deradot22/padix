@@ -1,4 +1,4 @@
-## padix backend (MVP)
+## Padix Backend (MVP)
 
 Бэкенд для падельного приложения:
 - Главная: игры на сегодня
@@ -15,7 +15,7 @@
 - OpenAPI/Swagger UI
 
 ### Запуск
-Требования: JDK 21.
+Требования: JDK 21+
 
 ```bash
 gradle bootRun

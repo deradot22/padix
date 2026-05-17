@@ -7,13 +7,13 @@
 1) БД (один раз):
 
 ```
-podman network create padelgo-net || true
-podman rm -f padelgo-db || true
-podman run -d --name padelgo-db --restart unless-stopped \
-  --network padelgo-net \
-  -e POSTGRES_DB=padelgo \
-  -e POSTGRES_USER=padelgo \
-  -e POSTGRES_PASSWORD=padelgo \
+podman network create padix-net || true
+podman rm -f padix-db || true
+podman run -d --name padix-db --restart unless-stopped \
+  --network padix-net \
+  -e POSTGRES_DB=padix \
+  -e POSTGRES_USER=padix \
+  -e POSTGRES_PASSWORD=padix \
   -p 5432:5432 \
   docker.io/library/postgres:16
 ```
@@ -21,22 +21,22 @@ podman run -d --name padelgo-db --restart unless-stopped \
 2) Backend:
 
 ```
-podman build -t padelgo-api:latest .
-podman rm -f padelgo-api || true
-podman run -d --name padelgo-api --restart unless-stopped \
-  --network padelgo-net \
+podman build -t padix-api:latest .
+podman rm -f padix-api || true
+podman run -d --name padix-api --restart unless-stopped \
+  --network padix-net \
   -p 8080:8080 \
-  -e SPRING_DATASOURCE_URL=jdbc:postgresql://padelgo-db:5432/padelgo \
+  -e SPRING_DATASOURCE_URL=jdbc:postgresql://padix-db:5432/padelgo \
   -e SPRING_DATASOURCE_USERNAME=padelgo \
   -e SPRING_DATASOURCE_PASSWORD=padelgo \
-  padelgo-api:latest
+  padix-api:latest
 ```
 
 3) Frontend (Vite dev + HMR):
 
 ```
-podman rm -f padelgo-web || true
-podman run -d --name padelgo-web --restart unless-stopped \
+podman rm -f padix-web || true
+podman run -d --name padix-web --restart unless-stopped \
   -p 8081:5173 \
   -v "/Users/ruazrh/IdeaProjects/padix/web:/app" \
   -w /app \
@@ -52,8 +52,8 @@ podman run -d --name padelgo-web --restart unless-stopped \
 
 Полезно:
 ```
-podman logs -f padelgo-api
-podman logs -f padelgo-web
+podman logs -f padix-api
+podman logs -f padix-web
 ```
 
 ---

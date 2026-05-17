@@ -1,6 +1,6 @@
 # Build JAR on host first: ./gradlew bootJar
-# Then: podman build -f Dockerfile.localbuild -t padelgo-api:latest .
-FROM eclipse-temurin:17-jre
+# Then: podman build -f Dockerfile.localbuild -t padix-api:latest .
+FROM eclipse-temurin:21-jre
 WORKDIR /app
 COPY build/libs/app.jar /app/app.jar
 EXPOSE 8080
