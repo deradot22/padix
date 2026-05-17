@@ -1,0 +1,23 @@
+<svg viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg">
+  <!-- Фон -->
+  <rect width="512" height="512" fill="#000000"/>
+
+  <!-- Буква "p" -->
+  <g fill="#22C55E">
+    <!-- Вертикальная линия -->
+    <rect x="104" y="154" width="47" height="252" rx="6"/>
+    <!-- Округлая часть "p" -->
+    <circle cx="175" cy="220" r="71" />
+    <circle cx="175" cy="220" r="47" fill="#000000"/>
+  </g>
+
+  <!-- Буква "x" -->
+  <g fill="#22C55E">
+    <!-- Первая диагональ -->
+    <rect x="293" y="154" width="47" height="252" rx="6"
+          transform="rotate(45 316.5 280)"/>
+    <!-- Вторая диагональ -->
+    <rect x="293" y="154" width="47" height="252" rx="6"
+          transform="rotate(-45 372.5 280)"/>
+  </g>
+</svg>

@@ -250,6 +250,7 @@ export function V0RatingPage(props: { authed: boolean; me?: { playerId?: string 
     );
   };
 
+  const hasAnyPlayer = !loading && !error && (data?.length ?? 0) > 0;
   const hasData = !loading && !error && (filteredPlayers?.length ?? 0) > 0;
   const topPlayersLocal = hasData ? filteredPlayers.slice(0, 3) : [];
 
@@ -379,10 +380,10 @@ export function V0RatingPage(props: { authed: boolean; me?: { playerId?: string 
 
       {topCards}
 
-      {hasData && (
+      {hasAnyPlayer && (
         <div className="flex flex-col gap-2 sm:gap-3">
-          <div className="flex flex-col sm:flex-row sm:flex-wrap gap-2">
-            <div className="relative flex-1 min-w-0">
+          <div className="flex flex-wrap gap-2 items-center">
+            <div className="relative flex-1 min-w-[180px]">
               <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
               <Input
                 placeholder="Поиск по имени..."
@@ -391,71 +392,67 @@ export function V0RatingPage(props: { authed: boolean; me?: { playerId?: string 
                 className="pl-9 h-9"
               />
             </div>
-            <div className="flex flex-col gap-2">
-              <div className="flex flex-wrap gap-2 items-center">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="h-9 gap-1.5 shrink-0"
-                  onClick={() => setFilterOpen((o) => !o)}
-                >
-                  <Filter className="h-4 w-4" />
-                  Фильтр
-                  {activeFiltersCount > 0 && (
-                    <span className="rounded-full bg-primary/20 px-1.5 py-0.5 text-xs font-medium text-primary">
-                      {activeFiltersCount}
-                    </span>
-                  )}
-                  <ChevronDown className={cn("h-4 w-4 transition-transform", filterOpen && "rotate-180")} />
-                </Button>
-                {meId && myRank !== null && myRank > topCount && (
-                  <Button variant="outline" size="sm" className="h-9 shrink-0" onClick={scrollToMe}>
-                    К моему рейтингу (#{myRank})
-                  </Button>
-                )}
-              </div>
-              {filterOpen && (
-                <div className="flex flex-col sm:flex-row sm:flex-wrap gap-2 rounded-lg border border-border bg-secondary/30 p-2.5 sm:p-3 w-fit max-w-full">
-                  <Select value={calibrationFilter} onValueChange={(v: any) => setCalibrationFilter(v)}>
-                    <SelectTrigger className="h-9 w-[200px]">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="calibrated">Только откалиброванные</SelectItem>
-                      <SelectItem value="in_calibration">В калибровке</SelectItem>
-                      <SelectItem value="all">Все</SelectItem>
-                    </SelectContent>
-                  </Select>
-                  <div className="flex items-center gap-1.5">
-                    <span className="text-muted-foreground text-xs shrink-0">NTRP</span>
-                    <Select value={ntrpMin || "min"} onValueChange={(v) => setNtrpMin(v === "min" ? "" : v)}>
-                      <SelectTrigger className="h-9 w-[88px] sm:w-[100px]">
-                        <SelectValue placeholder="от" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="min">—</SelectItem>
-                        {NTRP_LEVELS.map((n) => (
-                          <SelectItem key={n} value={n}>{n}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                    <span className="text-muted-foreground text-xs shrink-0">–</span>
-                    <Select value={ntrpMax || "max"} onValueChange={(v) => setNtrpMax(v === "max" ? "" : v)}>
-                      <SelectTrigger className="h-9 w-[88px] sm:w-[100px]">
-                        <SelectValue placeholder="до" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="max">—</SelectItem>
-                        {NTRP_LEVELS.map((n) => (
-                          <SelectItem key={n} value={n}>{n}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                </div>
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-9 gap-1.5 shrink-0"
+              onClick={() => setFilterOpen((o) => !o)}
+            >
+              <Filter className="h-4 w-4" />
+              Фильтр
+              {activeFiltersCount > 0 && (
+                <span className="rounded-full bg-primary/20 px-1.5 py-0.5 text-xs font-medium text-primary">
+                  {activeFiltersCount}
+                </span>
               )}
-            </div>
+              <ChevronDown className={cn("h-4 w-4 transition-transform", filterOpen && "rotate-180")} />
+            </Button>
+            {meId && myRank !== null && myRank > topCount && (
+              <Button variant="outline" size="sm" className="h-9 shrink-0" onClick={scrollToMe}>
+                К моему рейтингу (#{myRank})
+              </Button>
+            )}
           </div>
+          {filterOpen && (
+            <div className="flex flex-col sm:flex-row sm:flex-wrap gap-2 rounded-lg border border-border bg-secondary/30 p-2.5 sm:p-3">
+              <Select value={calibrationFilter} onValueChange={(v: any) => setCalibrationFilter(v)}>
+                <SelectTrigger className="h-9 w-full sm:w-[200px]">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="calibrated">Только откалиброванные</SelectItem>
+                  <SelectItem value="in_calibration">В калибровке</SelectItem>
+                  <SelectItem value="all">Все</SelectItem>
+                </SelectContent>
+              </Select>
+              <div className="flex items-center gap-1.5">
+                <span className="text-muted-foreground text-xs shrink-0">NTRP</span>
+                <Select value={ntrpMin || "min"} onValueChange={(v) => setNtrpMin(v === "min" ? "" : v)}>
+                  <SelectTrigger className="h-9 w-[88px] sm:w-[100px]">
+                    <SelectValue placeholder="от" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="min">—</SelectItem>
+                    {NTRP_LEVELS.map((n) => (
+                      <SelectItem key={n} value={n}>{n}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <span className="text-muted-foreground text-xs shrink-0">–</span>
+                <Select value={ntrpMax || "max"} onValueChange={(v) => setNtrpMax(v === "max" ? "" : v)}>
+                  <SelectTrigger className="h-9 w-[88px] sm:w-[100px]">
+                    <SelectValue placeholder="до" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="max">—</SelectItem>
+                    {NTRP_LEVELS.map((n) => (
+                      <SelectItem key={n} value={n}>{n}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+          )}
         </div>
       )}
 
@@ -466,7 +463,11 @@ export function V0RatingPage(props: { authed: boolean; me?: { playerId?: string 
         </div>
       )}
       {!loading && !error && !hasData && (
-        <div className="text-sm text-muted-foreground py-8 text-center">Пока нет участников.</div>
+        <div className="text-sm text-muted-foreground py-8 text-center">
+          {hasAnyPlayer
+            ? "По выбранному фильтру нет игроков. Попробуйте изменить условия."
+            : "Пока нет участников."}
+        </div>
       )}
 
       {hasData && (

@@ -1,10 +1,14 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Link, useParams } from "react-router-dom";
-import { ArrowLeft, Check, ChevronDown, Clock, MapPin, Share2, Target, Trophy, UserPlus, Users, Zap, X } from "lucide-react";
+import { Link, useParams, useLocation } from "react-router-dom";
+import { ArrowLeft, Check, ChevronDown, Clock, MapPin, Pencil, Share2, Target, Trash2, Trophy, UserPlus, Users, Zap, X } from "lucide-react";
+import { useNavigate } from "react-router-dom";
 import { api, EventDetails, FriendItem, FriendsSnapshot, Match } from "../../../lib/api";
 import { PlayerTooltip } from "@/components/player-tooltip";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { ModalScrollArea } from "@/components/ui/modal-scroll-area";
+import { useConfirm } from "@/components/ui/confirm-dialog";
+import { DatePicker, TimePicker } from "@/components/ui/date-picker";
 import { cn, formatEventDate, timeRange } from "../utils";
 
 function statusLabel(status: string): string {
@@ -33,6 +37,22 @@ function pairingLabel(mode?: string): string {
 
 export function V0EventPage(props: { me: any; meLoaded?: boolean }) {
   const { eventId } = useParams();
+  const location = useLocation();
+  const confirm = useConfirm();
+  const navigate = useNavigate();
+  const [editOpen, setEditOpen] = useState(false);
+  const [editTitle, setEditTitle] = useState("");
+  const [editDate, setEditDate] = useState("");
+  const [editStartTime, setEditStartTime] = useState("");
+  const [editEndTime, setEditEndTime] = useState("");
+  const [editPoints, setEditPoints] = useState<number | "">("");
+  const [editCourts, setEditCourts] = useState<number | "">("");
+  const [editPairing, setEditPairing] = useState<"ROUND_ROBIN" | "BALANCED">("ROUND_ROBIN");
+  const [editSaving, setEditSaving] = useState(false);
+  const [editError, setEditError] = useState<string | null>(null);
+  const [infoExpanded, setInfoExpanded] = useState(false);
+  const editOpenRef = useRef(false);
+  useEffect(() => { editOpenRef.current = editOpen; }, [editOpen]);
   const [data, setData] = useState<EventDetails | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -43,6 +63,12 @@ export function V0EventPage(props: { me: any; meLoaded?: boolean }) {
   const [finishing, setFinishing] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
   const [info, setInfo] = useState<string | null>(null);
+  // Авто-скрытие info-сообщений через 4 сек, чтобы не залипали
+  useEffect(() => {
+    if (!info) return;
+    const t = setTimeout(() => setInfo(null), 4000);
+    return () => clearTimeout(t);
+  }, [info]);
   const [inviteOpen, setInviteOpen] = useState(false);
   const [friends, setFriends] = useState<FriendsSnapshot | null>(null);
   const [friendsError, setFriendsError] = useState<string | null>(null);
@@ -67,6 +93,7 @@ export function V0EventPage(props: { me: any; meLoaded?: boolean }) {
   const userCollapsedRef = useRef(false);
   const [finishedMatchIds, setFinishedMatchIds] = useState<Set<string>>(new Set());
   const autoSavingRef = useRef<Set<string>>(new Set());
+  const [editScoresOpen, setEditScoresOpen] = useState(false);
 
   const navigateAfterScore = (rounds: EventDetails["rounds"], savedMatchId: string) => {
     const currentIdx = rounds.findIndex((round) =>
@@ -128,13 +155,14 @@ export function V0EventPage(props: { me: any; meLoaded?: boolean }) {
   const scrollTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const scrollCancelledRef = useRef(false);
   const scrollToBottomRef = useRef(false);
-  /** Scroll: при открытии — к раунду ("Раунд N"), при клике на счёт — к названию корта, или вниз если все сыграны */
+  /** Scroll: при открытии — к раунду ("Раунд N"), при клике на счёт — к матчу с раскрытой клавиатурой */
   useEffect(() => {
     if (!roundsOpen) return;
     scrollCancelledRef.current = false;
     const scrollToBottom = scrollToBottomRef.current;
     const scrollToRound = !scorePadOpen && !scrollToBottom;
-    const delay = scrollToRound || scrollToBottom ? 300 : 80;
+    const padOpening = scorePadOpen && !!activeMatchId;
+    const delay = scrollToRound || scrollToBottom ? 300 : padOpening ? 20 : 80;
     const maxRetries = 20;
     let retries = 0;
     const attemptScroll = () => {
@@ -162,6 +190,18 @@ export function V0EventPage(props: { me: any; meLoaded?: boolean }) {
       }
       const targetRect = el.getBoundingClientRect();
       const containerRect = scrollEl.getBoundingClientRect();
+      if (padOpening) {
+        const fitsCompletely = targetRect.height <= containerRect.height - 16;
+        const newScrollTop = fitsCompletely
+          ? scrollEl.scrollTop + (targetRect.top - containerRect.top) - 8
+          : scrollEl.scrollTop + (targetRect.bottom - containerRect.bottom) + 16;
+        const maxScroll = scrollEl.scrollHeight - scrollEl.clientHeight;
+        scrollEl.scrollTo({
+          top: Math.max(0, Math.min(maxScroll, newScrollTop)),
+          behavior: "smooth",
+        });
+        return;
+      }
       const targetOffset = scrollEl.scrollTop + (targetRect.top - containerRect.top);
       const topPadding = scrollToRound ? 25 : 8;
       const newScrollTop = Math.max(0, targetOffset - topPadding);
@@ -244,17 +284,28 @@ export function V0EventPage(props: { me: any; meLoaded?: boolean }) {
         </div>
       </div>
     );
+    const makePlayerTooltip = (p: typeof first, center = false) => {
+      if (!p) return <span className={center ? "truncate w-full text-center" : "truncate"}>?</span>;
+      return (
+        <PlayerTooltip
+          player={{ id: p.id, name: p.name, rating: p.rating, ntrp: p.ntrp, matches: p.gamesPlayed, odid: p.publicId, avatarUrl: p.avatarUrl }}
+          showAddFriend={false}
+        >
+          <span className={center ? "truncate w-full text-center cursor-pointer" : "truncate cursor-pointer"}>{p.name}</span>
+        </PlayerTooltip>
+      );
+    };
     const names = (
       <div className="grid w-full min-w-0 grid-rows-[44px_44px] items-center gap-2 px-1 text-xs text-muted-foreground text-left">
-        <div className="flex h-full items-center truncate w-full">{first?.name ?? "?"}</div>
-        <div className="flex h-full items-center truncate w-full">{second?.name ?? "?"}</div>
+        <div className="flex h-full items-center w-full min-w-0">{makePlayerTooltip(first)}</div>
+        <div className="flex h-full items-center w-full min-w-0">{makePlayerTooltip(second)}</div>
       </div>
     );
     const mobileCenter = (
       <div className="flex min-w-0 flex-col items-center justify-center text-xs text-muted-foreground">
-        <div className="truncate w-full text-center">{first?.name ?? "?"}</div>
+        {makePlayerTooltip(first, true)}
         <div className="text-2xl font-semibold text-foreground">{score}</div>
-        <div className="truncate w-full text-center">{second?.name ?? "?"}</div>
+        {makePlayerTooltip(second, true)}
       </div>
     );
     return (
@@ -347,6 +398,8 @@ export function V0EventPage(props: { me: any; meLoaded?: boolean }) {
 
     const poll = () => {
       if (document.hidden) return;
+      // Не обновляем data пока открыт модал — иначе ремаунт смажет state ввода.
+      if (editOpenRef.current) return;
       api.getEventDetails(eventId).then(setData).catch(() => {});
     };
     const id = setInterval(poll, 5000);
@@ -363,7 +416,7 @@ export function V0EventPage(props: { me: any; meLoaded?: boolean }) {
     }
     if (data.event?.status === "FINISHED") setActionError(null);
     if (eventId) {
-      const stored = localStorage.getItem(`padelgo_final_round_${eventId}`);
+      const stored = localStorage.getItem(`padix_final_round_${eventId}`);
       setFinalRoundLocked(stored === "1");
     }
     const rounds = data.rounds ?? [];
@@ -434,11 +487,18 @@ export function V0EventPage(props: { me: any; meLoaded?: boolean }) {
 
     data.rounds.flatMap((r) => r.matches).forEach((m) => {
       const score = m.score;
-      if (!score) return;
+      if (!score) {
+        console.log("[statsRows] No score for match", m.id);
+        return;
+      }
       const mode = score.mode;
-      if (mode !== "POINTS") return;
+      if (mode !== "POINTS") {
+        console.log("[statsRows] Wrong mode", mode, "for match", m.id);
+        return;
+      }
       const pointsA = score.points?.teamAPoints ?? 0;
       const pointsB = score.points?.teamBPoints ?? 0;
+      console.log("[statsRows] Match", m.id, "scores:", pointsA, pointsB);
 
       m.teamA.forEach((p) => {
         if (!p?.id) return;
@@ -472,6 +532,7 @@ export function V0EventPage(props: { me: any; meLoaded?: boolean }) {
         <div className="space-y-6 pb-8">
           <Link
             to="/games"
+            state={location.state}
             className="inline-flex items-center gap-2 text-muted-foreground hover:text-foreground transition-colors group"
           >
             <ArrowLeft className="h-4 w-4 group-hover:-translate-x-1 transition-transform" />
@@ -535,9 +596,11 @@ export function V0EventPage(props: { me: any; meLoaded?: boolean }) {
     const outgoingPublicIds = new Set((friends?.outgoing ?? []).map((f) => f.publicId));
 
     return (
-      <div className="space-y-8 pb-8">
+      <>
+        <div className="space-y-8 pb-8">
         <Link
           to="/games"
+          state={location.state}
           className="inline-flex items-center gap-2 text-muted-foreground hover:text-foreground transition-colors group"
         >
           <ArrowLeft className="h-4 w-4 group-hover:-translate-x-1 transition-transform" />
@@ -586,7 +649,7 @@ export function V0EventPage(props: { me: any; meLoaded?: boolean }) {
                     {isRegistered ? (
                       <button
                         type="button"
-                        className="h-12 w-full px-6 rounded-md border border-primary bg-primary/10 text-primary text-base font-medium hover:bg-primary/20 transition-colors inline-flex items-center justify-center"
+                        className="h-11 w-full sm:w-[240px] px-6 rounded-md border border-primary bg-primary/10 text-primary text-sm font-medium hover:bg-primary/20 transition-colors inline-flex items-center justify-center"
                         disabled={canceling}
                         onClick={async () => {
                           if (!eventId) return;
@@ -594,10 +657,10 @@ export function V0EventPage(props: { me: any; meLoaded?: boolean }) {
                           setActionError(null);
                           setInfo(null);
                           try {
-                            const res = await api.cancelRegistration(eventId);
-                            setInfo(res.message);
+                            await api.cancelRegistration(eventId);
                             const refreshed = await api.getEventDetails(eventId);
                             setData(refreshed);
+                            setInfo("Регистрация отменена");
                           } catch (err: any) {
                             setActionError(err?.message ?? "Ошибка отмены");
                           } finally {
@@ -611,17 +674,19 @@ export function V0EventPage(props: { me: any; meLoaded?: boolean }) {
                     ) : e.status === "OPEN_FOR_REGISTRATION" ? (
                       <button
                         type="button"
-                        className="h-12 w-full px-6 rounded-md bg-primary text-primary-foreground text-base font-medium hover:bg-primary/90 transition-colors"
+                        className="h-11 w-full sm:w-[240px] px-6 rounded-md bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 transition-colors"
                         disabled={registering}
                         onClick={async () => {
                           if (!eventId) return;
                           if (!meId) return;
                           setRegistering(true);
                           setActionError(null);
+                          setInfo(null);
                           try {
                             await api.registerForEvent(eventId, meId);
                             const refreshed = await api.getEventDetails(eventId);
                             setData(refreshed);
+                            setInfo("Вы записаны");
                           } catch (err: any) {
                             setActionError(err?.message ?? "Ошибка регистрации");
                           } finally {
@@ -635,14 +700,20 @@ export function V0EventPage(props: { me: any; meLoaded?: boolean }) {
                       <div className="text-sm text-muted-foreground">Регистрация закрыта</div>
                     )}
 
-                    <div className="flex flex-wrap items-center gap-2 w-full">
+                    <div className="flex flex-wrap items-center gap-2">
                       {isAuthor && e.status === "OPEN_FOR_REGISTRATION" ? (
                         <button
                           type="button"
-                          className="flex-1 h-11 rounded-md border border-border bg-secondary text-sm font-medium hover:bg-secondary/80 transition-colors"
+                          className="w-full sm:w-[240px] h-11 px-6 rounded-md border border-border bg-secondary text-sm font-medium hover:bg-secondary/80 transition-colors"
                           disabled={closing}
                           onClick={async () => {
                             if (!eventId) return;
+                            const ok = await confirm({
+                              title: "Закрыть регистрацию?",
+                              description: "Новые игроки не смогут присоединиться к игре. После закрытия можно будет начать игру.",
+                              confirmLabel: "Закрыть",
+                            });
+                            if (!ok) return;
                             setClosing(true);
                             setActionError(null);
                             setInfo(null);
@@ -666,7 +737,7 @@ export function V0EventPage(props: { me: any; meLoaded?: boolean }) {
                       {isAuthor && e.status === "REGISTRATION_CLOSED" ? (
                         <button
                           type="button"
-                          className="flex-1 h-11 rounded-md bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 transition-colors inline-flex items-center justify-center"
+                          className="w-full sm:w-[240px] h-11 px-6 rounded-md bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 transition-colors inline-flex items-center justify-center"
                           disabled={starting}
                           onClick={() => setStartPromptOpen(true)}
                         >
@@ -689,7 +760,7 @@ export function V0EventPage(props: { me: any; meLoaded?: boolean }) {
                       {isAuthor ? (
                         <button
                           type="button"
-                          className="h-12 px-6 rounded-md bg-primary text-primary-foreground text-base font-medium hover:bg-primary/90 transition-colors"
+                          className="h-11 w-full sm:w-auto px-6 rounded-md bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 transition-colors"
                           onClick={() => {
                             setActionError(null);
                             const rounds = data?.rounds ?? [];
@@ -718,7 +789,7 @@ export function V0EventPage(props: { me: any; meLoaded?: boolean }) {
                       )}
                       <button
                         type="button"
-                        className="h-10 px-4 rounded-md border border-border bg-secondary text-sm font-medium hover:bg-secondary/80 transition-colors"
+                        className="h-11 w-full sm:w-auto px-6 rounded-md border border-border bg-secondary text-sm font-medium hover:bg-secondary/80 transition-colors"
                         onClick={() => setStatsOpen(true)}
                       >
                         Таблица лидеров
@@ -735,9 +806,18 @@ export function V0EventPage(props: { me: any; meLoaded?: boolean }) {
                 ) : e.status === "FINISHED" ? (
                   <div className="flex flex-wrap items-center gap-2">
                     <div className="text-sm text-muted-foreground">Игра завершена</div>
+                    {isAuthor && (
+                      <button
+                        type="button"
+                        className="h-11 w-full sm:w-auto px-6 rounded-md bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 transition-colors"
+                        onClick={() => setEditScoresOpen(true)}
+                      >
+                        Редактировать счет
+                      </button>
+                    )}
                     <button
                       type="button"
-                      className="h-10 px-4 rounded-md border border-border bg-secondary text-sm font-medium hover:bg-secondary/80 transition-colors"
+                      className="h-11 w-full sm:w-auto px-6 rounded-md border border-border bg-secondary text-sm font-medium hover:bg-secondary/80 transition-colors"
                       onClick={() => setStatsOpen(true)}
                     >
                       Таблица лидеров
@@ -747,7 +827,7 @@ export function V0EventPage(props: { me: any; meLoaded?: boolean }) {
                   <div className="text-sm text-muted-foreground">Статус: {statusLabel(e.status)}</div>
                 )}
 
-                <div className="flex items-center gap-3 self-start">
+                <div className="flex items-center gap-2 self-start sm:self-end justify-start sm:justify-end flex-wrap">
                   <button
                     type="button"
                     className="h-10 w-10 rounded-md border border-border bg-transparent hover:bg-secondary transition-colors inline-flex items-center justify-center"
@@ -757,9 +837,64 @@ export function V0EventPage(props: { me: any; meLoaded?: boolean }) {
                   >
                     <UserPlus className="h-4 w-4" />
                   </button>
+                  {isAuthor && e.status !== "FINISHED" && (
+                    <button
+                      type="button"
+                      className="h-10 w-10 rounded-md border border-border bg-transparent hover:bg-secondary transition-colors inline-flex items-center justify-center"
+                      title="Редактировать игру"
+                      aria-label="Редактировать игру"
+                      onClick={() => {
+                        setEditTitle(e.title ?? "");
+                        setEditDate(typeof e.date === "string" ? e.date : "");
+                        setEditStartTime(typeof e.startTime === "string" ? e.startTime.slice(0, 5) : "");
+                        setEditEndTime(typeof e.endTime === "string" ? e.endTime.slice(0, 5) : "");
+                        setEditPoints(typeof e.pointsPerPlayerPerMatch === "number" ? e.pointsPerPlayerPerMatch : "");
+                        setEditCourts(typeof e.courtsCount === "number" ? e.courtsCount : "");
+                        setEditPairing(e.pairingMode === "BALANCED" ? "BALANCED" : "ROUND_ROBIN");
+                        setEditError(null);
+                        setEditOpen(true);
+                      }}
+                    >
+                      <Pencil className="h-4 w-4" />
+                    </button>
+                  )}
+                  {isAuthor && e.status === "OPEN_FOR_REGISTRATION" && (
+                    <button
+                      type="button"
+                      className="h-10 w-10 rounded-md border border-border bg-transparent hover:bg-destructive/10 hover:border-destructive hover:text-destructive transition-colors inline-flex items-center justify-center"
+                      title="Удалить игру"
+                      aria-label="Удалить игру"
+                      onClick={async () => {
+                        if (!eventId) return;
+                        const ok = await confirm({
+                          title: "Удалить игру?",
+                          description: (
+                            <>
+                              Игра <b>{e.title}</b> будет удалена со всеми регистрациями.
+                            </>
+                          ),
+                          warning: "Действие нельзя отменить.",
+                          confirmLabel: "Удалить",
+                          confirmVariant: "destructive",
+                        });
+                        if (!ok) return;
+                        setActionError(null);
+                        try {
+                          await api.deleteEvent(eventId);
+                          navigate("/events");
+                        } catch (err: any) {
+                          setActionError(err?.message ?? "Не удалось удалить игру");
+                        }
+                      }}
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </button>
+                  )}
                   <button
                     type="button"
-                    className="text-muted-foreground text-sm inline-flex items-center justify-center hover:text-foreground"
+                    className="h-10 w-10 rounded-md border border-border bg-transparent hover:bg-secondary transition-colors inline-flex items-center justify-center"
+                    title="Поделиться"
+                    aria-label="Поделиться"
                     onClick={async () => {
                       try {
                         await navigator.clipboard.writeText(window.location.href);
@@ -769,14 +904,125 @@ export function V0EventPage(props: { me: any; meLoaded?: boolean }) {
                       }
                     }}
                   >
-                    <Share2 className="h-4 w-4 mr-2" />
-                    Поделиться
+                    <Share2 className="h-4 w-4" />
                   </button>
                 </div>
               </div>
             </div>
           </div>
         </div>
+
+        <Dialog open={editOpen} onOpenChange={(o) => { if (!editSaving) setEditOpen(o); }}>
+          <DialogContent className="sm:max-w-md">
+            <DialogHeader>
+              <DialogTitle>Редактировать игру</DialogTitle>
+            </DialogHeader>
+            <div className="space-y-3 text-sm">
+              <div>
+                <label className="block mb-1 text-muted-foreground">Название</label>
+                <input
+                  type="text"
+                  className="w-full rounded-md border border-border bg-transparent px-3 py-2"
+                  value={editTitle}
+                  onChange={(ev) => setEditTitle(ev.target.value)}
+                />
+              </div>
+              <div>
+                <label className="block mb-1 text-muted-foreground">Дата</label>
+                <DatePicker value={editDate} onChange={setEditDate} />
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block mb-1 text-muted-foreground">Начало</label>
+                  <TimePicker value={editStartTime} onChange={setEditStartTime} />
+                </div>
+                <div>
+                  <label className="block mb-1 text-muted-foreground">Окончание</label>
+                  <TimePicker value={editEndTime} onChange={setEditEndTime} />
+                </div>
+              </div>
+              {e.status === "OPEN_FOR_REGISTRATION" ? (
+                <>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block mb-1 text-muted-foreground">Очков на игрока</label>
+                      <input
+                        type="number"
+                        min={1}
+                        className="w-full rounded-md border border-border bg-transparent px-3 py-2"
+                        value={editPoints}
+                        onChange={(ev) => setEditPoints(ev.target.value === "" ? "" : Number(ev.target.value))}
+                      />
+                    </div>
+                    <div>
+                      <label className="block mb-1 text-muted-foreground">Кортов</label>
+                      <input
+                        type="number"
+                        min={1}
+                        className="w-full rounded-md border border-border bg-transparent px-3 py-2"
+                        value={editCourts}
+                        onChange={(ev) => setEditCourts(ev.target.value === "" ? "" : Number(ev.target.value))}
+                      />
+                    </div>
+                  </div>
+                  <div>
+                    <label className="block mb-1 text-muted-foreground">Режим</label>
+                    <select
+                      className="w-full rounded-md border border-border bg-transparent px-3 py-2"
+                      value={editPairing}
+                      onChange={(ev) => setEditPairing(ev.target.value as "ROUND_ROBIN" | "BALANCED")}
+                    >
+                      <option value="ROUND_ROBIN">Каждый с каждым</option>
+                      <option value="BALANCED">Равный бой</option>
+                    </select>
+                  </div>
+                </>
+              ) : (
+                <div className="text-xs text-muted-foreground">
+                  Игра уже стартовала — можно редактировать только название, дату и время.
+                </div>
+              )}
+              {editError && <div className="text-destructive text-xs">{editError}</div>}
+            </div>
+            <div className="mt-4 flex items-center gap-2 justify-end">
+              <Button variant="outline" className="bg-transparent" disabled={editSaving} onClick={() => setEditOpen(false)}>
+                Отмена
+              </Button>
+              <Button
+                disabled={editSaving}
+                onClick={async () => {
+                  if (!eventId) return;
+                  setEditSaving(true);
+                  setEditError(null);
+                  try {
+                    const payload: Record<string, unknown> = {
+                      title: editTitle.trim(),
+                      date: editDate,
+                      startTime: editStartTime.length === 5 ? `${editStartTime}:00` : editStartTime,
+                      endTime: editEndTime.length === 5 ? `${editEndTime}:00` : editEndTime,
+                    };
+                    if (e.status === "OPEN_FOR_REGISTRATION") {
+                      if (editPoints !== "") payload.pointsPerPlayerPerMatch = editPoints;
+                      if (editCourts !== "") payload.courtsCount = editCourts;
+                      payload.pairingMode = editPairing;
+                    }
+                    await api.updateEvent(eventId, payload);
+                    const refreshed = await api.getEventDetails(eventId);
+                    setData(refreshed);
+                    setInfo("Игра обновлена.");
+                    setEditOpen(false);
+                  } catch (err: any) {
+                    setEditError(err?.message ?? "Не удалось сохранить");
+                  } finally {
+                    setEditSaving(false);
+                  }
+                }}
+              >
+                {editSaving ? "Сохраняем…" : "Сохранить"}
+              </Button>
+            </div>
+          </DialogContent>
+        </Dialog>
 
         <Dialog open={inviteOpen} onOpenChange={setInviteOpen}>
           <DialogContent className="sm:max-w-md">
@@ -804,32 +1050,59 @@ export function V0EventPage(props: { me: any; meLoaded?: boolean }) {
                         <p className="text-sm text-muted-foreground">Рейтинг: {friend.rating}</p>
                       </div>
                     </div>
-                    <Button
-                      size="sm"
-                      variant={invited[friend.publicId] ? "default" : "outline"}
-                      disabled={!eventId || invitingId === friend.publicId}
-                      onClick={async () => {
-                        if (!eventId) return;
-                        setInvitingId(friend.publicId);
-                        try {
-                          await api.inviteFriendToEvent(eventId, friend.publicId);
-                          setInvited((m) => ({ ...m, [friend.publicId]: true }));
-                        } catch (e: any) {
-                          setFriendsError(e?.message ?? "Ошибка приглашения");
-                        } finally {
-                          setInvitingId(null);
-                        }
-                      }}
-                    >
-                      {invited[friend.publicId] ? (
-                        <>
-                          <Check className="h-4 w-4 mr-1" />
-                          Отправлено
-                        </>
-                      ) : (
-                        "Пригласить"
-                      )}
-                    </Button>
+                    <div className="flex items-center gap-2">
+                      <Button
+                        size="sm"
+                        variant="default"
+                        disabled={!eventId || invitingId === friend.publicId || !!invited[friend.publicId]}
+                        title="Добавить в игру сразу, без согласия друга"
+                        onClick={async () => {
+                          if (!eventId) return;
+                          setInvitingId(friend.publicId);
+                          setFriendsError(null);
+                          try {
+                            await api.addFriendToEvent(eventId, friend.publicId);
+                            setInvited((m) => ({ ...m, [friend.publicId]: true }));
+                            const refreshed = await api.getEventDetails(eventId);
+                            setData(refreshed);
+                          } catch (e: any) {
+                            setFriendsError(e?.message ?? "Не удалось добавить");
+                          } finally {
+                            setInvitingId(null);
+                          }
+                        }}
+                      >
+                        {invited[friend.publicId] ? (
+                          <>
+                            <Check className="h-4 w-4 mr-1" />
+                            Добавлен
+                          </>
+                        ) : (
+                          "Добавить"
+                        )}
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        disabled={!eventId || invitingId === friend.publicId || !!invited[friend.publicId]}
+                        title="Отправить приглашение — друг сам решит присоединиться"
+                        onClick={async () => {
+                          if (!eventId) return;
+                          setInvitingId(friend.publicId);
+                          setFriendsError(null);
+                          try {
+                            await api.inviteFriendToEvent(eventId, friend.publicId);
+                            setInvited((m) => ({ ...m, [friend.publicId]: true }));
+                          } catch (e: any) {
+                            setFriendsError(e?.message ?? "Ошибка приглашения");
+                          } finally {
+                            setInvitingId(null);
+                          }
+                        }}
+                      >
+                        Пригласить
+                      </Button>
+                    </div>
                   </div>
                 ))
               )}
@@ -875,7 +1148,69 @@ export function V0EventPage(props: { me: any; meLoaded?: boolean }) {
           </DialogContent>
         </Dialog>
 
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        {/* Компактная сводка на мобильном */}
+        <div className="md:hidden">
+          <button
+            type="button"
+            onClick={() => setInfoExpanded((v) => !v)}
+            className="w-full flex items-center justify-between gap-3 p-4 rounded-xl bg-card border border-border/50 hover:bg-card/80 transition-colors"
+            aria-expanded={infoExpanded}
+          >
+            <div className="flex items-center gap-3 text-sm text-muted-foreground flex-wrap text-left">
+              <span className="flex items-center gap-1"><MapPin className="h-3.5 w-3.5" />{e.courtsCount}</span>
+              <span className="text-border">·</span>
+              <span className="flex items-center gap-1"><Zap className="h-3.5 w-3.5" />{pairingLabel(e.pairingMode)}</span>
+              <span className="text-border">·</span>
+              <span className="flex items-center gap-1"><Users className="h-3.5 w-3.5" />{registered.length}/{e.courtsCount * 4}</span>
+            </div>
+            <ChevronDown className={cn("h-4 w-4 shrink-0 transition-transform", infoExpanded && "rotate-180")} />
+          </button>
+          <div
+            className={cn(
+              "grid transition-[grid-template-rows] duration-300 ease-in-out overflow-hidden",
+              infoExpanded ? "grid-rows-[1fr]" : "grid-rows-[0fr]",
+            )}
+          >
+            <div className="min-h-0 overflow-hidden">
+              <div className="grid grid-cols-2 gap-3 pt-3">
+                <div className="p-4 rounded-xl bg-card border border-border/50 space-y-2">
+                  <div className="flex items-center gap-2 text-muted-foreground">
+                    <MapPin className="h-4 w-4" />
+                    <span className="text-sm">Корты</span>
+                  </div>
+                  <p className="text-2xl font-bold">{e.courtsCount}</p>
+                </div>
+                <div className="p-4 rounded-xl bg-card border border-border/50 space-y-2">
+                  <div className="flex items-center gap-2 text-muted-foreground">
+                    <Zap className="h-4 w-4" />
+                    <span className="text-sm">Режим</span>
+                  </div>
+                  <p className="text-base font-bold leading-tight">{pairingLabel(e.pairingMode)}</p>
+                </div>
+                <div className="p-4 rounded-xl bg-card border border-border/50 space-y-2">
+                  <div className="flex items-center gap-2 text-muted-foreground">
+                    <Target className="h-4 w-4" />
+                    <span className="text-sm">{e.scoringMode === "POINTS" ? "Подач на игрока" : "Сетов"}</span>
+                  </div>
+                  <p className="text-2xl font-bold">{e.scoringMode === "POINTS" ? e.pointsPerPlayerPerMatch : e.setsPerMatch}</p>
+                </div>
+                <div className="p-4 rounded-xl bg-card border border-border/50 space-y-2">
+                  <div className="flex items-center gap-2 text-muted-foreground">
+                    <Users className="h-4 w-4" />
+                    <span className="text-sm">Игроков</span>
+                  </div>
+                  <p className="text-2xl font-bold">
+                    {registered.length}
+                    <span className="text-base font-normal text-muted-foreground">/{e.courtsCount * 4}</span>
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Полный grid на десктопе */}
+        <div className="hidden md:grid grid-cols-2 lg:grid-cols-4 gap-4">
           <div className="p-5 rounded-xl bg-card border border-border/50 space-y-2">
             <div className="flex items-center gap-2 text-muted-foreground">
               <MapPin className="h-4 w-4" />
@@ -926,7 +1261,7 @@ export function V0EventPage(props: { me: any; meLoaded?: boolean }) {
               </div>
               <span
                 className={cn(
-                  "px-3 py-1.5 text-sm rounded-md",
+                  "px-3 py-1.5 text-sm rounded-md whitespace-nowrap shrink-0",
                   registered.length >= e.courtsCount * 4 ? "bg-primary/20 text-primary" : "bg-secondary text-secondary-foreground",
                 )}
               >
@@ -944,7 +1279,7 @@ export function V0EventPage(props: { me: any; meLoaded?: boolean }) {
           </div>
 
           <div className="p-6">
-            <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-3">
+            <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-5">
               {registered.map((p, idx) => (
                 <PlayerTooltip
                   key={p.id}
@@ -991,13 +1326,19 @@ export function V0EventPage(props: { me: any; meLoaded?: boolean }) {
                     {isAuthor && data?.event?.status === "OPEN_FOR_REGISTRATION" ? (
                       <button
                         type="button"
-                        className="absolute -top-2 -left-2 h-6 w-6 rounded-full bg-destructive text-white flex items-center justify-center shadow-sm"
+                        className="absolute -top-2 -left-2 h-6 w-6 rounded-full bg-destructive text-white flex items-center justify-center shadow-sm z-10"
                         title="Исключить"
                         aria-label="Исключить"
                         onClick={async (ev) => {
                           ev.stopPropagation();
                           if (!eventId) return;
-                          if (!window.confirm("Исключить игрока из регистрации?")) return;
+                          const ok = await confirm({
+                            title: "Исключить игрока?",
+                            description: <>Игрок <b>{p.firstName} {p.lastName}</b> будет удалён из регистрации.</>,
+                            confirmLabel: "Исключить",
+                            confirmVariant: "destructive",
+                          });
+                          if (!ok) return;
                           setActionError(null);
                           setInfo(null);
                           try {
@@ -1111,54 +1452,104 @@ export function V0EventPage(props: { me: any; meLoaded?: boolean }) {
               <DialogTitle>Раунды</DialogTitle>
             </DialogHeader>
 
-            <div ref={roundsScrollRef} className="space-y-3 max-h-[70vh] overflow-y-auto pr-1">
+            <ModalScrollArea ref={roundsScrollRef} className="space-y-4 max-h-[70vh] overflow-y-auto pr-4">
               {(data.rounds ?? []).map((r, idx) => {
                 const expanded = r.id === expandedRoundId;
                 const isFinalRound = finalRoundLocked && idx === (data.rounds?.length ?? 0) - 1;
                 const allPlayed = r.matches.every(isMatchFinished);
+                const finishedCount = r.matches.filter(isMatchFinished).length;
+                const canDeleteRound =
+                  !!data.isAuthor &&
+                  data.event?.status === "IN_PROGRESS" &&
+                  (r.matches.length === 0 || finishedCount < r.matches.length);
                 return (
                   <div
                     key={r.id}
                     ref={r.id === expandedRoundId ? activeRoundRef : undefined}
                     className={cn(
-                      "rounded-xl border bg-card transition-colors scroll-mt-4",
-                      allPlayed && !expanded ? "border-primary/40 bg-primary/5" : "border-border",
+                      "rounded-xl border bg-card/50 shadow-sm p-0 transition-all scroll-mt-4 hover:shadow-md hover:bg-card",
+                      allPlayed && !expanded ? "border-primary/30 bg-primary/5" : "border-border/70",
                     )}
                   >
-                    <button
-                      type="button"
-                      className="w-full flex items-center justify-between gap-3 p-4 text-left"
-                      onClick={() => {
-                        setExpandedRoundId((prev) => {
-                          if (prev === r.id) {
-                            userCollapsedRef.current = true;
-                            return null;
-                          }
-                          userCollapsedRef.current = false;
-                          return r.id;
-                        });
-                        setScorePadOpen(false);
-                      }}
-                    >
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <div>
-                          <div className="text-lg font-semibold flex items-center gap-2">
-                            Раунд {r.roundNumber}
-                            {isFinalRound && (
-                              <span className="inline-flex items-center gap-1 rounded-full bg-amber-500/20 px-2 py-0.5 text-xs font-medium text-amber-600 dark:text-amber-400">
-                                <Trophy className="h-3.5 w-3.5" />
-                                Финальный
-                              </span>
-                            )}
-                          </div>
-                          <div className="text-sm text-muted-foreground">
-                            Матчей: {r.matches.length}
-                            {allPlayed && " • Сыгран"}
+                    <div className="flex items-stretch">
+                      <button
+                        type="button"
+                        className="flex-1 flex items-center justify-between gap-3 p-4 text-left"
+                        onClick={() => {
+                          setExpandedRoundId((prev) => {
+                            if (prev === r.id) {
+                              userCollapsedRef.current = true;
+                              return null;
+                            }
+                            userCollapsedRef.current = false;
+                            return r.id;
+                          });
+                          setScorePadOpen(false);
+                        }}
+                      >
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <div>
+                            <div className="text-lg font-semibold flex items-center gap-2">
+                              Раунд {r.roundNumber}
+                              {isFinalRound && (
+                                <span className="inline-flex items-center gap-1 rounded-full bg-amber-500/20 px-2 py-0.5 text-xs font-medium text-amber-600 dark:text-amber-400">
+                                  <Trophy className="h-3.5 w-3.5" />
+                                  Финальный
+                                </span>
+                              )}
+                            </div>
+                            <div className="text-sm text-muted-foreground">
+                              Матчей: {r.matches.length}
+                              {allPlayed && r.matches.length > 0 && " • Сыгран"}
+                            </div>
                           </div>
                         </div>
-                      </div>
-                      <ChevronDown className={cn("h-5 w-5 transition-transform", expanded ? "rotate-180" : "")} />
-                    </button>
+                        <ChevronDown className={cn("h-5 w-5 transition-transform", expanded ? "rotate-180" : "")} />
+                      </button>
+                      {canDeleteRound && (
+                        <button
+                          type="button"
+                          aria-label="Удалить раунд"
+                          className="px-3 my-3 mr-2 rounded-md text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors"
+                          onClick={async (ev) => {
+                            ev.stopPropagation();
+                            if (!eventId) return;
+                            const ok = await confirm({
+                              title: "Удалить раунд?",
+                              description: (
+                                <>
+                                  Раунд <b>{r.roundNumber}</b>
+                                  {r.matches.length > 0
+                                    ? ` и его ${r.matches.length} ${r.matches.length === 1 ? "матч" : r.matches.length < 5 ? "матча" : "матчей"} будут удалены.`
+                                    : " будет удалён."} Действие нельзя отменить.
+                                </>
+                              ),
+                              warning: finishedCount > 0 ? (
+                                <>
+                                  Из них <b>{finishedCount} {finishedCount === 1 ? "сыгран" : "сыграно"}</b> — счёт будет потерян. Рейтинги ещё не применены (применяются только при завершении игры).
+                                </>
+                              ) : undefined,
+                              confirmLabel: "Удалить",
+                              confirmVariant: "destructive",
+                            });
+                            if (!ok) return;
+                            setActionError(null);
+                            setInfo(null);
+                            try {
+                              await api.deleteRound(eventId, r.id);
+                              const refreshed = await api.getEventDetails(eventId);
+                              setData(refreshed);
+                              if (expandedRoundId === r.id) setExpandedRoundId(null);
+                              setInfo("Раунд удалён.");
+                            } catch (err: any) {
+                              setActionError(err?.message ?? "Не удалось удалить раунд");
+                            }
+                          }}
+                        >
+                          <X className="h-4 w-4" />
+                        </button>
+                      )}
+                    </div>
 
                     <div
                       className={cn(
@@ -1172,6 +1563,7 @@ export function V0EventPage(props: { me: any; meLoaded?: boolean }) {
                           {r.matches.map((m) => {
                             const scores = scoreByMatch[m.id] ?? { a: 0, b: 0 };
                             const active = m.id === activeMatchId;
+                            const showPadHere = active && scorePadOpen;
                             return (
                               <div
                                 key={m.id}
@@ -1181,8 +1573,8 @@ export function V0EventPage(props: { me: any; meLoaded?: boolean }) {
                                   }
                                 }}
                                 className={cn(
-                                  "rounded-lg border border-border/50 p-3 transition-colors scroll-mt-4",
-                                  active ? "bg-secondary/30" : "bg-secondary/10",
+                                  "rounded-lg border p-3 transition-colors scroll-mt-4",
+                                  active ? "border-primary/50 bg-secondary/30 shadow-sm" : "border-border/50 bg-secondary/10",
                                 )}
                               >
                                 <div className="text-sm text-muted-foreground">{m.courtName ?? `Корт ${m.courtNumber}`}</div>
@@ -1216,115 +1608,94 @@ export function V0EventPage(props: { me: any; meLoaded?: boolean }) {
                                     {renderTeamScore(m.teamB, scores.b, "right")}
                                   </button>
                                 </div>
+                                {showPadHere && (
+                                  <div data-pad="1" className="mt-3 pt-3 border-t border-border/40">
+                                      <div className="grid grid-cols-6 gap-2">
+                                        {[0, ...Array.from({ length: (e.pointsPerPlayerPerMatch ?? 6) * 4 }, (_, i) => i + 1)].map((n) => (
+                                          <button
+                                            key={n}
+                                            type="button"
+                                            className="rounded-lg border border-border bg-secondary/20 py-2 text-sm font-semibold hover:bg-secondary"
+                                            onClick={() => {
+                                              const totalPoints = (e.pointsPerPlayerPerMatch ?? 6) * 4;
+                                              const current = scoreByMatch[m.id] ?? { a: 0, b: 0 };
+                                              let nextA = activeTeam === "A" ? n : current.a;
+                                              let nextB = activeTeam === "B" ? n : current.b;
+                                              const autoFilled = autoFilledByMatch[m.id];
+                                              const canAutoFill =
+                                                !autoFilled &&
+                                                ((activeTeam === "A" && current.b === 0) ||
+                                                  (activeTeam === "B" && current.a === 0));
+                                              if (canAutoFill) {
+                                                if (activeTeam === "A") {
+                                                  nextB = Math.max(0, totalPoints - n);
+                                                } else {
+                                                  nextA = Math.max(0, totalPoints - n);
+                                                }
+                                                setAutoFilledByMatch((prev) => ({ ...prev, [m.id]: true }));
+                                              }
+                                              setScoreByMatch((prev) => ({
+                                                ...prev,
+                                                [m.id]: { a: nextA, b: nextB },
+                                              }));
+                                              if (nextA + nextB === totalPoints && eventId && !autoSavingRef.current.has(m.id)) {
+                                                autoSavingRef.current.add(m.id);
+                                                setScoreSavingId(m.id);
+                                                setScoreError(null);
+                                                api.submitScore(m.id, { teamAPoints: nextA, teamBPoints: nextB })
+                                                  .then(async () => {
+                                                    setFinishedMatchIds((prev) => new Set([...prev, m.id]));
+                                                    setInfo("Счёт сохранён");
+                                                    setScorePadOpen(false);
+                                                    const refreshed = await api.getEventDetails(eventId);
+                                                    setData(refreshed);
+                                                  })
+                                                  .catch((err: any) => {
+                                                    setScoreError(err?.message ?? "Не удалось сохранить счёт");
+                                                  })
+                                                  .finally(() => {
+                                                    autoSavingRef.current.delete(m.id);
+                                                    setScoreSavingId(null);
+                                                  });
+                                              }
+                                            }}
+                                          >
+                                            {n}
+                                          </button>
+                                        ))}
+                                      </div>
+                                    <div className="mt-3 text-xs">
+                                      {scoreError && active ? (
+                                        <span className="text-destructive">{scoreError}</span>
+                                      ) : scoreSavingId === m.id ? (
+                                        <span className="text-muted-foreground">Сохраняем…</span>
+                                      ) : (
+                                        <span className="text-muted-foreground">
+                                          Выберите значение для команды {activeTeam === "A" ? "слева" : "справа"}
+                                        </span>
+                                      )}
+                                    </div>
+                                  </div>
+                                )}
                               </div>
                             );
                           })}
                         </div>
 
-                        <div
-                          className={cn(
-                            "mt-4 overflow-hidden transition-[max-height] duration-400 ease-in-out",
-                            activeMatchId && scorePadOpen ? "max-h-[320px]" : "max-h-[80px]",
-                          )}
-                        >
-                        {activeMatchId && scorePadOpen ? (
-                          <div>
-                            <div className="grid grid-cols-6 gap-2">
-                              {[0, ...Array.from({ length: (e.pointsPerPlayerPerMatch ?? 6) * 4 }, (_, i) => i + 1)].map((n) => (
-                                <button
-                                  key={n}
-                                  type="button"
-                                  className="rounded-lg border border-border bg-secondary/20 py-2 text-sm font-semibold hover:bg-secondary"
-                                  onClick={() => {
-                                    const totalPoints = (e.pointsPerPlayerPerMatch ?? 6) * 4;
-                                    const current = scoreByMatch[activeMatchId] ?? { a: 0, b: 0 };
-                                    let nextA = activeTeam === "A" ? n : current.a;
-                                    let nextB = activeTeam === "B" ? n : current.b;
-                                    const autoFilled = autoFilledByMatch[activeMatchId];
-                                    const canAutoFill =
-                                      !autoFilled &&
-                                      ((activeTeam === "A" && current.b === 0) ||
-                                        (activeTeam === "B" && current.a === 0));
-                                    if (canAutoFill) {
-                                      if (activeTeam === "A") {
-                                        nextB = Math.max(0, totalPoints - n);
-                                      } else {
-                                        nextA = Math.max(0, totalPoints - n);
-                                      }
-                                      setAutoFilledByMatch((m) => ({ ...m, [activeMatchId]: true }));
-                                    }
-                                    setScoreByMatch((prev) => ({
-                                      ...prev,
-                                      [activeMatchId]: { a: nextA, b: nextB },
-                                    }));
-                                    if (nextA + nextB === totalPoints && eventId && !autoSavingRef.current.has(activeMatchId)) {
-                                      autoSavingRef.current.add(activeMatchId);
-                                      setScoreSavingId(activeMatchId);
-                                      setScoreError(null);
-                                      api.submitScore(activeMatchId, { teamAPoints: nextA, teamBPoints: nextB })
-                                        .then(async () => {
-                                          setFinishedMatchIds((prev) => new Set([...prev, activeMatchId]));
-                                          setInfo("Счёт сохранён");
-                                          setScorePadOpen(false);
-                                          const refreshed = await api.getEventDetails(eventId);
-                                          setData(refreshed);
-                                        })
-                                        .catch((err: any) => {
-                                          setScoreError(err?.message ?? "Не удалось сохранить счёт");
-                                        })
-                                        .finally(() => {
-                                          autoSavingRef.current.delete(activeMatchId);
-                                          setScoreSavingId(null);
-                                        });
-                                    }
-                                  }}
-                                >
-                                  {n}
-                                </button>
-                              ))}
-                            </div>
-                            <div className="mt-3 flex items-center justify-between gap-3">
-                              {scoreError ? (
-                                <div className="text-xs text-destructive">{scoreError}</div>
-                              ) : scoreSavingId === activeMatchId ? (
-                                <div className="text-xs text-muted-foreground">Сохраняем…</div>
-                              ) : (
-                                <div className="text-xs text-muted-foreground">Выберите значение для активной команды</div>
-                              )}
-                              {nextButtonLabel && (
-                              <Button
-                                size="sm"
-                                disabled={scoreSavingId === activeMatchId}
-                                onClick={async () => {
-                                  if (!eventId) return;
-                                  const rounds = data?.rounds ?? [];
-                                  const curIdx = rounds.findIndex((r) => r.matches.some((m) => m.id === activeMatchId));
-                                  const nextRound = curIdx >= 0 ? rounds[curIdx + 1] : null;
-                                  if (nextRound) {
-                                    setExpandedRoundId(nextRound.id);
-                                    setActiveMatchId(nextRound.matches[0]?.id ?? null);
-                                    setScorePadOpen(false);
-                                    setScoreError(null);
-                                  }
-                                }}
-                              >
-                                {nextButtonLabel}
-                              </Button>
-                              )}
-                            </div>
-                          </div>
-                        ) : (
-                          <div className="flex items-center justify-between gap-3">
+                        {r.matches.length > 0 && (!activeMatchId || !scorePadOpen) && (
+                          <div className="mt-4 flex items-center justify-between gap-3">
                             <div className="text-xs text-muted-foreground">Нажмите на счёт команды, чтобы выбрать очки.</div>
-                            {nextButtonLabel && (
+                          </div>
+                        )}
+                        {nextButtonLabel && expanded && (
+                          <div className="mt-4 flex justify-end">
                             <Button
                               size="sm"
-                              variant="default"
                               disabled={scoreSavingId === activeMatchId}
                               onClick={async () => {
                                 if (!eventId) return;
                                 const rounds = data?.rounds ?? [];
-                                const curIdx = rounds.findIndex((r) => r.matches.some((m) => m.id === activeMatchId));
+                                const curIdx = rounds.findIndex((rr) => rr.matches.some((mm) => mm.id === activeMatchId));
                                 const nextRound = curIdx >= 0 ? rounds[curIdx + 1] : null;
                                 if (nextRound) {
                                   setExpandedRoundId(nextRound.id);
@@ -1336,17 +1707,15 @@ export function V0EventPage(props: { me: any; meLoaded?: boolean }) {
                             >
                               {nextButtonLabel}
                             </Button>
-                            )}
                           </div>
                         )}
-                        </div>
                       </div>
                       </div>
                     </div>
                   </div>
                 );
               })}
-            </div>
+            </ModalScrollArea>
 
             <div className="mt-5 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
               <div className="flex flex-wrap items-center gap-2">
@@ -1381,7 +1750,12 @@ export function V0EventPage(props: { me: any; meLoaded?: boolean }) {
                   disabled={finalRoundLocked}
                   onClick={async () => {
                     if (!eventId) return;
-                    if (!window.confirm("Добавить финальный раунд? Пары будут расставлены по турнирной таблице.")) return;
+                    const ok = await confirm({
+                      title: "Добавить финальный раунд?",
+                      description: "Пары будут расставлены по турнирной таблице. После добавления финального раунда новые обычные раунды создавать нельзя.",
+                      confirmLabel: "Добавить",
+                    });
+                    if (!ok) return;
                     setInfo(null);
                     setActionError(null);
                     try {
@@ -1390,7 +1764,7 @@ export function V0EventPage(props: { me: any; meLoaded?: boolean }) {
                       const refreshed = await api.getEventDetails(eventId);
                       setData(refreshed);
                       setInfo("Финальный раунд добавлен.");
-                      localStorage.setItem(`padelgo_final_round_${eventId}`, "1");
+                      localStorage.setItem(`padix_final_round_${eventId}`, "1");
                       setFinalRoundLocked(true);
                       const rounds = refreshed.rounds ?? [];
                       const newRound = rounds[rounds.length - 1];
@@ -1411,7 +1785,39 @@ export function V0EventPage(props: { me: any; meLoaded?: boolean }) {
                 disabled={finishing}
                 onClick={async () => {
                   if (!eventId) return;
-                  if (!window.confirm("Вы уверены, что хотите завершить игру? Рейтинг будет пересчитан.")) return;
+                  // Считаем матчи на игрока — для предупреждения о неравномерности.
+                  const matchesPerPlayer = new Map<string, number>();
+                  (data.rounds ?? []).forEach((rd) => {
+                    rd.matches.forEach((mm) => {
+                      if (!isMatchFinished(mm)) return;
+                      [...(mm.teamA ?? []), ...(mm.teamB ?? [])].forEach((p) => {
+                        if (!p?.id) return;
+                        matchesPerPlayer.set(p.id, (matchesPerPlayer.get(p.id) ?? 0) + 1);
+                      });
+                    });
+                  });
+                  const counts = Array.from(matchesPerPlayer.values());
+                  const minMatches = counts.length ? Math.min(...counts) : 0;
+                  const maxMatches = counts.length ? Math.max(...counts) : 0;
+                  const uneven = maxMatches - minMatches > 0;
+                  const ok = await confirm({
+                    title: "Завершить игру?",
+                    description: "Игра будет завершена, рейтинги участников пересчитаны. Дальше изменить счёт нельзя.",
+                    warning: (
+                      <>
+                        {uneven ? (
+                          <div>
+                            У игроков разное число сыгранных матчей (<b>{minMatches}–{maxMatches}</b>).
+                            Рейтинги будут <b>нормализованы</b>: у тех, кто сыграл больше, движения слегка уменьшатся; у тех, кто меньше — увеличатся.
+                          </div>
+                        ) : null}
+                        <div>Действие нельзя отменить.</div>
+                      </>
+                    ),
+                    confirmLabel: "Завершить",
+                    confirmVariant: "destructive",
+                  });
+                  if (!ok) return;
                   setFinishing(true);
                   setActionError(null);
                   setInfo(null);
@@ -1446,7 +1852,9 @@ export function V0EventPage(props: { me: any; meLoaded?: boolean }) {
               )}
             </DialogHeader>
             {statsRows.length === 0 ? (
-              <div className="text-sm text-muted-foreground">Нет данных по очкам.</div>
+              <div className="text-sm text-muted-foreground">
+                Нет данных по очкам. (Раундов: {data?.rounds?.length}, Матчей: {data?.rounds?.flatMap(r => r.matches).length})
+              </div>
             ) : (
               <div className="space-y-2">
                 {statsRows.map((row) => (
@@ -1473,13 +1881,31 @@ export function V0EventPage(props: { me: any; meLoaded?: boolean }) {
         </Dialog>
 
         {/* info/actionError are now shown near the actions */}
+
+        {editScoresOpen && eventId && data ? (
+          <EditGameScoresDialog
+            eventId={eventId}
+            onClose={() => setEditScoresOpen(false)}
+            onSave={async () => {
+              setEditScoresOpen(false);
+              if (eventId) {
+                try {
+                  const refreshed = await api.getEventDetails(eventId);
+                  setData(refreshed);
+                } catch {}
+              }
+            }}
+          />
+        ) : null}
       </div>
+      </>
     );
   }, [
     actionError,
     canceling,
     closing,
     data,
+    editScoresOpen,
     finishedMatchIds,
     finalRoundLocked,
     roundsOpen,
@@ -1508,8 +1934,199 @@ export function V0EventPage(props: { me: any; meLoaded?: boolean }) {
     eventId,
     props.me,
     props.meLoaded,
+    editOpen,
+    editTitle,
+    editDate,
+    editStartTime,
+    editEndTime,
+    editPoints,
+    editCourts,
+    editPairing,
+    editSaving,
+    editError,
+    infoExpanded,
   ]);
 
   return <>{content}</>;
 }
 
+function EditGameScoresDialog(props: {
+  eventId: string;
+  onClose: () => void;
+  onSave: () => void;
+}) {
+  const [eventData, setEventData] = useState<EventDetails | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [scores, setScores] = useState<Record<string, { teamAPoints: number; teamBPoints: number }>>({});
+  const originalScoresRef = useRef<Record<string, { teamAPoints: number; teamBPoints: number }>>({});
+
+  useEffect(() => {
+    const load = async () => {
+      try {
+        const data = await api.getEventDetails(props.eventId);
+        setEventData(data);
+        const initialScores: Record<string, { teamAPoints: number; teamBPoints: number }> = {};
+        data.rounds.flatMap((r: any) => r.matches).forEach((m: any) => {
+          const score = m.score?.points;
+          initialScores[m.id] = {
+            teamAPoints: score?.teamAPoints ?? 0,
+            teamBPoints: score?.teamBPoints ?? 0,
+          };
+        });
+        setScores(initialScores);
+        originalScoresRef.current = initialScores;
+      } catch (e: any) {
+        setError(e?.message ?? "Ошибка загрузки события");
+      } finally {
+        setLoading(false);
+      }
+    };
+    load();
+  }, [props.eventId]);
+
+  const handleSave = async () => {
+    try {
+      setSaving(true);
+      setError(null);
+      const matches = eventData?.rounds.flatMap((r: any) => r.matches) ?? [];
+      for (const match of matches) {
+        const newScore = scores[match.id];
+        const originalScore = originalScoresRef.current[match.id];
+
+        // Only submit if scores changed
+        if (newScore && (newScore.teamAPoints !== originalScore?.teamAPoints || newScore.teamBPoints !== originalScore?.teamBPoints)) {
+          await api.saveDraftScore(match.id, newScore);
+          await api.submitScore(match.id, newScore);
+        }
+      }
+      props.onSave();
+    } catch (e: any) {
+      setError(e?.message ?? "Ошибка сохранения счёта");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  if (!eventData && !loading) {
+    return (
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-6" onClick={props.onClose}>
+        <div className="bg-card border border-border rounded-lg p-6 max-w-md" onClick={(e) => e.stopPropagation()}>
+          <div className="text-red-500">Ошибка загрузки события</div>
+          <button onClick={props.onClose} className="mt-4 px-4 py-2 bg-primary text-primary-foreground rounded w-full">
+            Закрыть
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  const matches = eventData?.rounds.flatMap((r: any) => r.matches) ?? [];
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-6" onClick={props.onClose}>
+      <ModalScrollArea
+        className="w-full max-w-2xl max-h-[90vh] overflow-y-auto rounded-xl border border-border bg-card p-6"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-center justify-between mb-6">
+          <div className="text-lg font-semibold">Редактирование счёта</div>
+          <button onClick={props.onClose} className="text-muted-foreground hover:text-foreground">
+            <X className="h-5 w-5" />
+          </button>
+        </div>
+
+        {error && (
+          <div className="mb-4 p-3 rounded-md bg-destructive/10 text-destructive text-sm">{error}</div>
+        )}
+
+        {loading ? (
+          <div className="text-center py-6 text-muted-foreground">Загрузка...</div>
+        ) : (
+          <>
+            <div className="space-y-4">
+              {matches.map((match: any) => (
+                <div key={match.id} className="border border-border rounded-lg p-4 space-y-3">
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <div className="text-sm font-medium mb-1">Команда A</div>
+                      <div className="flex items-center gap-1 text-sm text-muted-foreground">
+                        {match.teamA?.map((p: any) => p.name).join(" + ")}
+                      </div>
+                    </div>
+                    <div>
+                      <div className="text-sm font-medium mb-1">Команда B</div>
+                      <div className="flex items-center gap-1 text-sm text-muted-foreground">
+                        {match.teamB?.map((p: any) => p.name).join(" + ")}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-3">
+                    <div className="flex-1">
+                      <label className="text-xs text-muted-foreground">Счёт Team A</label>
+                      <input
+                        type="number"
+                        min="0"
+                        value={scores[match.id]?.teamAPoints ?? 0}
+                        onChange={(e) =>
+                          setScores({
+                            ...scores,
+                            [match.id]: {
+                              ...scores[match.id],
+                              teamAPoints: parseInt(e.target.value) || 0,
+                            },
+                          })
+                        }
+                        disabled={saving}
+                        className="w-full px-3 py-2 border border-border rounded-md bg-background text-foreground"
+                      />
+                    </div>
+                    <div className="text-xl font-bold mt-5">:</div>
+                    <div className="flex-1">
+                      <label className="text-xs text-muted-foreground">Счёт Team B</label>
+                      <input
+                        type="number"
+                        min="0"
+                        value={scores[match.id]?.teamBPoints ?? 0}
+                        onChange={(e) =>
+                          setScores({
+                            ...scores,
+                            [match.id]: {
+                              ...scores[match.id],
+                              teamBPoints: parseInt(e.target.value) || 0,
+                            },
+                          })
+                        }
+                        disabled={saving}
+                        className="w-full px-3 py-2 border border-border rounded-md bg-background text-foreground"
+                      />
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            <div className="flex gap-2 mt-6">
+              <button
+                onClick={props.onClose}
+                disabled={saving}
+                className="flex-1 px-4 py-2 border border-border rounded-md hover:bg-secondary disabled:opacity-50"
+              >
+                Отмена
+              </button>
+              <button
+                onClick={handleSave}
+                disabled={saving}
+                className="flex-1 px-4 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90 disabled:opacity-50"
+              >
+                {saving ? "Сохранение..." : "Сохранить"}
+              </button>
+            </div>
+          </>
+        )}
+      </ModalScrollArea>
+    </div>
+  );
+}

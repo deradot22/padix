@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useNavigate, useLocation } from "react-router-dom";
 import { Calendar, CalendarDays, Clock, Info, List, Plus, Users } from "lucide-react";
 import { api, Event } from "../../../lib/api";
 import { Badge } from "@/components/ui/badge";
@@ -9,6 +9,12 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { GamesCalendar } from "@/components/games-calendar";
 import { cn } from "@/lib/utils";
 import { formatEventDate, timeRange } from "../utils";
+
+interface GamesPageLocationState {
+  view?: 'list' | 'calendar';
+  selectedDate?: string;
+  selectedEventIds?: string[];
+}
 
 function formatDate(d: Date): string {
   const yyyy = d.getFullYear();
@@ -48,6 +54,7 @@ function getStatusBadge(status: Event["status"], className?: string) {
 
 export function V0GamesPage(props: { me: any }) {
   const nav = useNavigate();
+  const location = useLocation();
   const [events, setEvents] = useState<Event[] | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -119,6 +126,36 @@ export function V0GamesPage(props: { me: any }) {
     }
   }, [view]);
 
+  useEffect(() => {
+    const state = location.state as GamesPageLocationState | undefined;
+    if (!state?.view) return;
+
+    setView(state.view);
+
+    if (state.view === "calendar" && state.selectedDate) {
+      const restoredDate = new Date(state.selectedDate);
+      setSelectedDate(restoredDate);
+
+      // Перезагрузить события для месяца при восстановлении календаря
+      const from = formatDate(new Date(restoredDate.getFullYear(), restoredDate.getMonth(), 1));
+      const to = formatDate(new Date(restoredDate.getFullYear(), restoredDate.getMonth() + 1, 0));
+      setCalendarLoading(true);
+      api.getUpcomingEvents(from, to)
+        .then(res => {
+          setCalendarEvents(res ?? []);
+          // Восстановить выбранные события для даты
+          const dayKey = formatDate(restoredDate);
+          const selectedEvts = (res ?? []).filter(e => e.date === dayKey);
+          setSelectedEvents(selectedEvts);
+        })
+        .catch(() => {
+          setCalendarEvents([]);
+          setSelectedEvents([]);
+        })
+        .finally(() => setCalendarLoading(false));
+    }
+  }, [location.state]);
+
   const shortMonths = ["янв", "фев", "мар", "апр", "май", "июн", "июл", "авг", "сен", "окт", "ноя", "дек"];
   const shortDate = (dateStr: string) => {
     const [, m, d] = dateStr.split("-").map((v) => Number(v));
@@ -154,19 +191,27 @@ export function V0GamesPage(props: { me: any }) {
               key={e.id}
               type="button"
               className="w-full text-left rounded-lg border border-border bg-card p-3 hover:bg-secondary/50 transition-colors flex gap-3"
-              onClick={() => nav(`/events/${e.id}`)}
+              onClick={() => {
+                const navigationState: GamesPageLocationState = {
+                  view,
+                  selectedDate: selectedDate ? selectedDate.toISOString() : undefined,
+                  selectedEventIds: selectedEvents.map(se => se.id),
+                };
+                nav(`/events/${e.id}`, { state: navigationState });
+              }}
             >
-              <div className="flex flex-col gap-2 min-w-0 flex-1">
-                <div className="flex items-center gap-2">
-                  <Calendar className="h-4 w-4 text-muted-foreground shrink-0" />
-                  <span className="font-medium text-sm whitespace-nowrap">{shortDate(e.date)}</span>
-                  <span className="text-muted-foreground text-sm tabular-nums">{timeRange(e.startTime, e.endTime)}</span>
+              <div className="flex flex-col gap-1 min-w-0 flex-1">
+                {e.title && <div className="font-medium text-sm truncate">{e.title}</div>}
+                <div className="flex items-center gap-2 flex-wrap">
+                  <Calendar className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                  <span className="text-xs text-muted-foreground whitespace-nowrap">{shortDate(e.date)}</span>
+                  <span className="text-xs text-muted-foreground tabular-nums">{timeRange(e.startTime, e.endTime)}</span>
                 </div>
-                <div className="flex items-center gap-2">
-                  <span className="text-sm text-muted-foreground">{e.pairingMode === "BALANCED" ? "Баланс" : "Американка"}</span>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="text-xs text-muted-foreground">{e.pairingMode === "BALANCED" ? "Баланс" : "Каждый с каждым"}</span>
                   <span className="text-muted-foreground">·</span>
                   <Users className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-                  <span className="text-sm text-muted-foreground tabular-nums">{e.registeredCount}/{e.courtsCount * 4}</span>
+                  <span className="text-xs text-muted-foreground tabular-nums">{e.registeredCount}/{e.courtsCount * 4}</span>
                 </div>
               </div>
               <div className="flex flex-col items-end justify-center gap-1.5 shrink-0">
@@ -188,7 +233,7 @@ export function V0GamesPage(props: { me: any }) {
               <tr className="border-b border-border text-left text-xs uppercase tracking-wider text-muted-foreground">
                 <th className="pb-4 pl-4 pr-6 font-medium">Дата</th>
                 <th className="pb-4 px-4 font-medium">Время</th>
-                <th className="pb-4 px-4 font-medium">Формат</th>
+                <th className="pb-4 px-4 font-medium">Режим</th>
                 <th className="pb-4 px-4 font-medium">Игроки</th>
                 <th className="pb-4 pr-4 pl-4 font-medium">Статус</th>
               </tr>
@@ -198,14 +243,26 @@ export function V0GamesPage(props: { me: any }) {
                 <tr
                   key={e.id}
                   className="group cursor-pointer transition-colors hover:bg-secondary/50"
-                  onClick={() => nav(`/events/${e.id}`)}
+                  onClick={() => {
+                    const navigationState: GamesPageLocationState = {
+                      view,
+                      selectedDate: selectedDate ? selectedDate.toISOString() : undefined,
+                      selectedEventIds: selectedEvents.map(se => se.id),
+                    };
+                    nav(`/events/${e.id}`, { state: navigationState });
+                  }}
                 >
                   <td className="py-5 pl-4 pr-6 align-middle">
                     <div className="flex items-center gap-3">
                       <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-secondary">
                         <Calendar className="h-5 w-5 text-muted-foreground" />
                       </div>
-                      <span className="font-medium whitespace-nowrap">{formatEventDate(e.date)}</span>
+                      <div className="min-w-0">
+                        {e.title && <div className="font-medium truncate">{e.title}</div>}
+                        <div className={cn("text-muted-foreground whitespace-nowrap", e.title ? "text-xs" : "font-medium text-sm text-foreground")}>
+                          {formatEventDate(e.date)}
+                        </div>
+                      </div>
                     </div>
                   </td>
                   <td className="py-5 px-4 align-middle">
@@ -215,7 +272,7 @@ export function V0GamesPage(props: { me: any }) {
                     </div>
                   </td>
                   <td className="py-5 px-4 align-middle">
-                    <span className="whitespace-nowrap">{e.pairingMode === "BALANCED" ? "Баланс" : "Американка"}</span>
+                    <span className="whitespace-nowrap">{e.pairingMode === "BALANCED" ? "Равный бой" : "Каждый с каждым"}</span>
                   </td>
                   <td className="py-5 px-4 align-middle">
                     <div className="flex items-center gap-2">
@@ -360,7 +417,14 @@ export function V0GamesPage(props: { me: any }) {
                           key={e.id}
                           type="button"
                           className="w-full text-left rounded-lg border border-border bg-secondary/30 p-3 hover:bg-secondary/50 transition-colors"
-                          onClick={() => nav(`/events/${e.id}`)}
+                          onClick={() => {
+                            const navigationState: GamesPageLocationState = {
+                              view,
+                              selectedDate: selectedDate ? selectedDate.toISOString() : undefined,
+                              selectedEventIds: selectedEvents.map(se => se.id),
+                            };
+                            nav(`/events/${e.id}`, { state: navigationState });
+                          }}
                         >
                           <div className="flex items-center justify-between gap-3">
                             <div className="min-w-0">
@@ -416,8 +480,13 @@ export function V0GamesPage(props: { me: any }) {
                   type="button"
                   className="w-full text-left rounded-lg border border-border bg-secondary/30 p-4 hover:bg-secondary/50 transition-colors"
                   onClick={() => {
+                    const navigationState: GamesPageLocationState = {
+                      view,
+                      selectedDate: selectedDate ? selectedDate.toISOString() : undefined,
+                      selectedEventIds: selectedEvents.map(se => se.id),
+                    };
                     setDayOpen(false);
-                    nav(`/events/${e.id}`);
+                    nav(`/events/${e.id}`, { state: navigationState });
                   }}
                 >
                   <div className="flex items-center justify-between gap-3">
