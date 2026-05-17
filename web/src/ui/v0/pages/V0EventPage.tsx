@@ -1334,7 +1334,7 @@ export function V0EventPage(props: { me: any; meLoaded?: boolean }) {
                           if (!eventId) return;
                           const ok = await confirm({
                             title: "Исключить игрока?",
-                            description: <>Игрок <b>{p.firstName} {p.lastName}</b> будет удалён из регистрации.</>,
+                            description: <>Игрок <b>{p.name}</b> будет удалён из регистрации.</>,
                             confirmLabel: "Исключить",
                             confirmVariant: "destructive",
                           });
