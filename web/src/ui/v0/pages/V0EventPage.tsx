@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useParams, useLocation } from "react-router-dom";
-import { ArrowLeft, Check, ChevronDown, Clock, MapPin, Pencil, Share2, Target, Trash2, Trophy, UserPlus, Users, Zap, X } from "lucide-react";
+import { AlertTriangle, ArrowLeft, Check, ChevronDown, Clock, MapPin, Pencil, Scale, Share2, Target, Trash2, Trophy, UserPlus, Users, Zap, X } from "lucide-react";
 import { useNavigate } from "react-router-dom";
-import { api, EventDetails, FriendItem, FriendsSnapshot, Match } from "../../../lib/api";
+import { api, BalancePreview, EventDetails, FriendItem, FriendsSnapshot, Match } from "../../../lib/api";
 import { PlayerTooltip } from "@/components/player-tooltip";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -30,6 +30,14 @@ function statusLabel(status: string): string {
   }
 }
 
+function roundWord(n: number): string {
+  const mod10 = n % 10;
+  const mod100 = n % 100;
+  if (mod10 === 1 && mod100 !== 11) return "равный раунд";
+  if (mod10 >= 2 && mod10 <= 4 && (mod100 < 10 || mod100 >= 20)) return "равных раунда";
+  return "равных раундов";
+}
+
 function pairingLabel(mode?: string): string {
   if (mode === "BALANCED") return "Равный бой";
   return "Каждый с каждым";
@@ -53,6 +61,7 @@ export function V0EventPage(props: { me: any; meLoaded?: boolean }) {
   const [infoExpanded, setInfoExpanded] = useState(false);
   const editOpenRef = useRef(false);
   useEffect(() => { editOpenRef.current = editOpen; }, [editOpen]);
+  const modalOpenRef = useRef(false);
   const [data, setData] = useState<EventDetails | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -94,6 +103,13 @@ export function V0EventPage(props: { me: any; meLoaded?: boolean }) {
   const [finishedMatchIds, setFinishedMatchIds] = useState<Set<string>>(new Set());
   const autoSavingRef = useRef<Set<string>>(new Set());
   const [editScoresOpen, setEditScoresOpen] = useState(false);
+  const [balanceModalOpen, setBalanceModalOpen] = useState(false);
+  const [balancePreview, setBalancePreview] = useState<BalancePreview | null>(null);
+  const [switchingMode, setSwitchingMode] = useState(false);
+  useEffect(() => {
+    modalOpenRef.current =
+      balanceModalOpen || editOpen || inviteOpen || roundsOpen || statsOpen || startPromptOpen || editScoresOpen || scorePadOpen;
+  }, [balanceModalOpen, editOpen, inviteOpen, roundsOpen, statsOpen, startPromptOpen, editScoresOpen, scorePadOpen]);
 
   const navigateAfterScore = (rounds: EventDetails["rounds"], savedMatchId: string) => {
     const currentIdx = rounds.findIndex((round) =>
@@ -398,13 +414,37 @@ export function V0EventPage(props: { me: any; meLoaded?: boolean }) {
 
     const poll = () => {
       if (document.hidden) return;
-      // Не обновляем data пока открыт модал — иначе ремаунт смажет state ввода.
+      // Не обновляем data пока открыт любой модал — иначе ремаунт смажет state ввода
+      // и/или заставляет тяжёлый ре-рендер прямо в момент взаимодействия (тормозит кнопки).
       if (editOpenRef.current) return;
+      if (modalOpenRef.current) return;
       api.getEventDetails(eventId).then(setData).catch(() => {});
     };
     const id = setInterval(poll, 5000);
     return () => clearInterval(id);
   }, [eventId, data?.event?.status]);
+
+  // Live-обновление прогноза баланса по мере регистрации игроков.
+  // Дёргаем balance-preview при каждом изменении состава/режима/раундов в режиме BALANCED,
+  // пока эвент ещё не стартовал.
+  const registeredCount = data?.registeredPlayers?.length ?? 0;
+  const evStatus = data?.event?.status;
+  const evPairingMode = data?.event?.pairingMode;
+  const evCourtsCount = data?.event?.courtsCount;
+  const evRoundsPlanned = data?.event?.roundsPlanned;
+  useEffect(() => {
+    if (!eventId) return;
+    const beforeStart = evStatus === "OPEN_FOR_REGISTRATION" || evStatus === "REGISTRATION_CLOSED";
+    if (!beforeStart || evPairingMode !== "BALANCED" || registeredCount < 4) {
+      setBalancePreview(null);
+      return;
+    }
+    let cancelled = false;
+    api.getBalancePreview(eventId)
+      .then((p) => { if (!cancelled) setBalancePreview(p); })
+      .catch(() => { if (!cancelled) setBalancePreview(null); });
+    return () => { cancelled = true; };
+  }, [eventId, evStatus, evPairingMode, evCourtsCount, evRoundsPlanned, registeredCount]);
 
   const prevEventIdRef = useRef<string | null>(null);
   useEffect(() => {
@@ -487,18 +527,11 @@ export function V0EventPage(props: { me: any; meLoaded?: boolean }) {
 
     data.rounds.flatMap((r) => r.matches).forEach((m) => {
       const score = m.score;
-      if (!score) {
-        console.log("[statsRows] No score for match", m.id);
-        return;
-      }
+      if (!score) return;
       const mode = score.mode;
-      if (mode !== "POINTS") {
-        console.log("[statsRows] Wrong mode", mode, "for match", m.id);
-        return;
-      }
+      if (mode !== "POINTS") return;
       const pointsA = score.points?.teamAPoints ?? 0;
       const pointsB = score.points?.teamBPoints ?? 0;
-      console.log("[statsRows] Match", m.id, "scores:", pointsA, pointsB);
 
       m.teamA.forEach((p) => {
         if (!p?.id) return;
@@ -708,21 +741,36 @@ export function V0EventPage(props: { me: any; meLoaded?: boolean }) {
                           disabled={closing}
                           onClick={async () => {
                             if (!eventId) return;
+                            setClosing(true);
+                            setActionError(null);
+                            setInfo(null);
+                            try {
+                              const preview = await api.getBalancePreview(eventId);
+                              if (preview.shouldWarn) {
+                                setBalancePreview(preview);
+                                setBalanceModalOpen(true);
+                                setClosing(false);
+                                return;
+                              }
+                            } catch (err: any) {
+                              // Превью не критично — если упало, продолжаем по обычному пути
+                              console.error("balance preview failed", err);
+                            }
                             const ok = await confirm({
                               title: "Закрыть регистрацию?",
                               description: "Новые игроки не смогут присоединиться к игре. После закрытия можно будет начать игру.",
                               confirmLabel: "Закрыть",
                             });
-                            if (!ok) return;
-                            setClosing(true);
-                            setActionError(null);
-                            setInfo(null);
+                            if (!ok) {
+                              setClosing(false);
+                              return;
+                            }
                             try {
                               await api.closeRegistration(eventId);
                               const refreshed = await api.getEventDetails(eventId);
                               setData(refreshed);
                               setInfo("Регистрация закрыта");
-                            setStartPromptOpen(true);
+                              setStartPromptOpen(true);
                             } catch (err: any) {
                               setActionError(err?.message ?? "Ошибка закрытия");
                             } finally {
@@ -881,7 +929,7 @@ export function V0EventPage(props: { me: any; meLoaded?: boolean }) {
                         setActionError(null);
                         try {
                           await api.deleteEvent(eventId);
-                          navigate("/events");
+                          navigate("/games");
                         } catch (err: any) {
                           setActionError(err?.message ?? "Не удалось удалить игру");
                         }
@@ -1051,62 +1099,181 @@ export function V0EventPage(props: { me: any; meLoaded?: boolean }) {
                       </div>
                     </div>
                     <div className="flex items-center gap-2">
-                      <Button
-                        size="sm"
-                        variant="default"
-                        disabled={!eventId || invitingId === friend.publicId || !!invited[friend.publicId]}
-                        title="Добавить в игру сразу, без согласия друга"
-                        onClick={async () => {
-                          if (!eventId) return;
-                          setInvitingId(friend.publicId);
-                          setFriendsError(null);
-                          try {
-                            await api.addFriendToEvent(eventId, friend.publicId);
-                            setInvited((m) => ({ ...m, [friend.publicId]: true }));
-                            const refreshed = await api.getEventDetails(eventId);
-                            setData(refreshed);
-                          } catch (e: any) {
-                            setFriendsError(e?.message ?? "Не удалось добавить");
-                          } finally {
-                            setInvitingId(null);
-                          }
-                        }}
-                      >
-                        {invited[friend.publicId] ? (
+                      {(() => {
+                        const isInEvent = (data?.registeredPlayers ?? []).some(
+                          (p) => p.publicId === friend.publicId
+                        );
+                        const sentInvite = !!invited[friend.publicId];
+                        return (
                           <>
-                            <Check className="h-4 w-4 mr-1" />
-                            Добавлен
+                            <Button
+                              size="sm"
+                              variant="default"
+                              disabled={!eventId || invitingId === friend.publicId || isInEvent}
+                              title="Добавить в игру сразу, без согласия друга"
+                              onClick={async () => {
+                                if (!eventId) return;
+                                setInvitingId(friend.publicId);
+                                setFriendsError(null);
+                                try {
+                                  await api.addFriendToEvent(eventId, friend.publicId);
+                                  const refreshed = await api.getEventDetails(eventId);
+                                  setData(refreshed);
+                                } catch (e: any) {
+                                  setFriendsError(e?.message ?? "Не удалось добавить");
+                                } finally {
+                                  setInvitingId(null);
+                                }
+                              }}
+                            >
+                              {isInEvent ? (
+                                <>
+                                  <Check className="h-4 w-4 mr-1" />
+                                  Добавлен
+                                </>
+                              ) : (
+                                "Добавить"
+                              )}
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              disabled={!eventId || invitingId === friend.publicId || isInEvent || sentInvite}
+                              title="Отправить приглашение — друг сам решит присоединиться"
+                              onClick={async () => {
+                                if (!eventId) return;
+                                setInvitingId(friend.publicId);
+                                setFriendsError(null);
+                                try {
+                                  await api.inviteFriendToEvent(eventId, friend.publicId);
+                                  setInvited((m) => ({ ...m, [friend.publicId]: true }));
+                                } catch (e: any) {
+                                  setFriendsError(e?.message ?? "Ошибка приглашения");
+                                } finally {
+                                  setInvitingId(null);
+                                }
+                              }}
+                            >
+                              {sentInvite ? "Приглашён" : "Пригласить"}
+                            </Button>
                           </>
-                        ) : (
-                          "Добавить"
-                        )}
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        disabled={!eventId || invitingId === friend.publicId || !!invited[friend.publicId]}
-                        title="Отправить приглашение — друг сам решит присоединиться"
-                        onClick={async () => {
-                          if (!eventId) return;
-                          setInvitingId(friend.publicId);
-                          setFriendsError(null);
-                          try {
-                            await api.inviteFriendToEvent(eventId, friend.publicId);
-                            setInvited((m) => ({ ...m, [friend.publicId]: true }));
-                          } catch (e: any) {
-                            setFriendsError(e?.message ?? "Ошибка приглашения");
-                          } finally {
-                            setInvitingId(null);
-                          }
-                        }}
-                      >
-                        Пригласить
-                      </Button>
+                        );
+                      })()}
                     </div>
                   </div>
                 ))
               )}
             </div>
+          </DialogContent>
+        </Dialog>
+
+        <Dialog open={balanceModalOpen} onOpenChange={(o) => { if (!closing && !switchingMode) setBalanceModalOpen(o); }}>
+          <DialogContent className="sm:max-w-md">
+            {balancePreview ? (
+              <div className="space-y-4">
+                <div className="flex justify-center pt-2">
+                  <div className={cn(
+                    "w-14 h-14 rounded-full flex items-center justify-center ring-1",
+                    balancePreview.severity === "LARGE" && "bg-rose-500/10 text-rose-400 ring-rose-500/30",
+                    balancePreview.severity === "MEDIUM" && "bg-amber-500/10 text-amber-300 ring-amber-500/30",
+                    balancePreview.severity === "SMALL" && "bg-emerald-500/10 text-emerald-300 ring-emerald-500/30",
+                  )}>
+                    <AlertTriangle className="h-7 w-7" />
+                  </div>
+                </div>
+
+                <DialogHeader>
+                  <DialogTitle className="text-center text-xl">
+                    {balancePreview.maxGoodRounds === 0 ? (
+                      "Нет равных раундов"
+                    ) : (
+                      <>
+                        Возможно{" "}
+                        <span className={cn(
+                          balancePreview.severity === "LARGE" && "text-rose-400",
+                          balancePreview.severity === "MEDIUM" && "text-amber-300",
+                          balancePreview.severity === "SMALL" && "text-emerald-300",
+                        )}>
+                          {balancePreview.maxGoodRounds}
+                        </span>{" "}
+                        {roundWord(balancePreview.maxGoodRounds)}
+                      </>
+                    )}
+                  </DialogTitle>
+                </DialogHeader>
+
+                <p className="text-center text-sm text-muted-foreground leading-relaxed px-2">
+                  {(() => {
+                    const N = balancePreview.maxGoodRounds;
+                    const req = balancePreview.requestedRounds;
+                    const spread = balancePreview.ratingSpread;
+                    if (N === 0) {
+                      return `Состав слишком разнородный (разброс ${spread}) — нет варианта, где команды получились бы равны по силе.`;
+                    }
+                    if (req !== null && N < req) {
+                      return `Разброс рейтингов ${spread}. С таким составом это максимум — больше равных раундов не получится. Запрошено ${req}.`;
+                    }
+                    return `Разброс рейтингов ${spread}, но команды получится сбалансировать во всех раундах.`;
+                  })()}
+                </p>
+
+                <div className="flex flex-col-reverse sm:flex-row sm:flex-wrap sm:items-center sm:justify-end gap-2">
+                  <Button
+                    variant="ghost"
+                    onClick={() => setBalanceModalOpen(false)}
+                    disabled={closing || switchingMode}
+                  >
+                    Отмена
+                  </Button>
+                  <Button
+                    variant="outline"
+                    className="bg-transparent"
+                    disabled={closing || switchingMode}
+                    onClick={async () => {
+                      if (!eventId) return;
+                      setSwitchingMode(true);
+                      setActionError(null);
+                      try {
+                        await api.updatePairingMode(eventId, "ROUND_ROBIN");
+                        const refreshed = await api.getEventDetails(eventId);
+                        setData(refreshed);
+                        setBalanceModalOpen(false);
+                        setInfo("Режим переключён на «Каждый с каждым». Теперь можно закрыть регистрацию.");
+                      } catch (err: any) {
+                        setActionError(err?.message ?? "Не удалось сменить режим");
+                      } finally {
+                        setSwitchingMode(false);
+                      }
+                    }}
+                  >
+                    {switchingMode ? "Переключаем…" : "Каждый с каждым"}
+                  </Button>
+                  <Button
+                    disabled={closing || switchingMode || balancePreview.maxGoodRounds === 0}
+                    onClick={async () => {
+                      if (!eventId) return;
+                      setClosing(true);
+                      setActionError(null);
+                      setInfo(null);
+                      try {
+                        await api.closeRegistration(eventId);
+                        const refreshed = await api.getEventDetails(eventId);
+                        setData(refreshed);
+                        setBalanceModalOpen(false);
+                        setInfo("Регистрация закрыта");
+                        setStartPromptOpen(true);
+                      } catch (err: any) {
+                        setActionError(err?.message ?? "Ошибка закрытия");
+                      } finally {
+                        setClosing(false);
+                      }
+                    }}
+                  >
+                    {closing ? "Закрываем…" : "Продолжить"}
+                  </Button>
+                </div>
+              </div>
+            ) : null}
           </DialogContent>
         </Dialog>
 
@@ -1162,6 +1329,20 @@ export function V0EventPage(props: { me: any; meLoaded?: boolean }) {
               <span className="flex items-center gap-1"><Zap className="h-3.5 w-3.5" />{pairingLabel(e.pairingMode)}</span>
               <span className="text-border">·</span>
               <span className="flex items-center gap-1"><Users className="h-3.5 w-3.5" />{registered.length}/{e.courtsCount * 4}</span>
+              {balancePreview && balancePreview.severity !== "NONE" ? (
+                <>
+                  <span className="text-border">·</span>
+                  <span className={cn(
+                    "flex items-center gap-1",
+                    balancePreview.severity === "LARGE" && "text-rose-300",
+                    balancePreview.severity === "MEDIUM" && "text-amber-300",
+                    balancePreview.severity === "SMALL" && "text-emerald-300",
+                  )}>
+                    <Scale className="h-3.5 w-3.5" />
+                    {balancePreview.maxGoodRounds} {roundWord(balancePreview.maxGoodRounds)}
+                  </span>
+                </>
+              ) : null}
             </div>
             <ChevronDown className={cn("h-4 w-4 shrink-0 transition-transform", infoExpanded && "rotate-180")} />
           </button>
@@ -1204,13 +1385,38 @@ export function V0EventPage(props: { me: any; meLoaded?: boolean }) {
                     <span className="text-base font-normal text-muted-foreground">/{e.courtsCount * 4}</span>
                   </p>
                 </div>
+                {balancePreview && balancePreview.severity !== "NONE" ? (
+                  <div className={cn(
+                    "p-4 rounded-xl bg-card border space-y-2 col-span-2",
+                    balancePreview.severity === "LARGE" && "border-rose-500/40",
+                    balancePreview.severity === "MEDIUM" && "border-amber-500/40",
+                    balancePreview.severity === "SMALL" && "border-emerald-500/40",
+                  )}>
+                    <div className="flex items-center gap-2 text-muted-foreground">
+                      <Scale className="h-4 w-4" />
+                      <span className="text-sm">Баланс</span>
+                    </div>
+                    <p className="text-2xl font-bold leading-none">
+                      {balancePreview.maxGoodRounds}
+                      <span className="text-sm font-normal text-muted-foreground ml-2">
+                        {roundWord(balancePreview.maxGoodRounds)}
+                      </span>
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      разброс {balancePreview.ratingSpread}
+                    </p>
+                  </div>
+                ) : null}
               </div>
             </div>
           </div>
         </div>
 
         {/* Полный grid на десктопе */}
-        <div className="hidden md:grid grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className={cn(
+          "hidden md:grid grid-cols-2 gap-4",
+          balancePreview && balancePreview.severity !== "NONE" ? "lg:grid-cols-5" : "lg:grid-cols-4"
+        )}>
           <div className="p-5 rounded-xl bg-card border border-border/50 space-y-2">
             <div className="flex items-center gap-2 text-muted-foreground">
               <MapPin className="h-4 w-4" />
@@ -1245,6 +1451,29 @@ export function V0EventPage(props: { me: any; meLoaded?: boolean }) {
               <span className="text-base font-normal text-muted-foreground">/{e.courtsCount * 4}</span>
             </p>
           </div>
+
+          {balancePreview && balancePreview.severity !== "NONE" ? (
+            <div className={cn(
+              "p-5 rounded-xl bg-card border space-y-2",
+              balancePreview.severity === "LARGE" && "border-rose-500/40",
+              balancePreview.severity === "MEDIUM" && "border-amber-500/40",
+              balancePreview.severity === "SMALL" && "border-emerald-500/40",
+            )}>
+              <div className="flex items-center gap-2 text-muted-foreground">
+                <Scale className="h-4 w-4" />
+                <span className="text-sm">Баланс</span>
+              </div>
+              <p className="text-2xl font-bold leading-none">
+                {balancePreview.maxGoodRounds}
+                <span className="text-sm font-normal text-muted-foreground ml-2">
+                  {roundWord(balancePreview.maxGoodRounds)}
+                </span>
+              </p>
+              <p className="text-xs text-muted-foreground">
+                разброс {balancePreview.ratingSpread}
+              </p>
+            </div>
+          ) : null}
         </div>
 
         <div className="rounded-2xl bg-card border border-border/50 overflow-hidden">
@@ -1945,6 +2174,9 @@ export function V0EventPage(props: { me: any; meLoaded?: boolean }) {
     editSaving,
     editError,
     infoExpanded,
+    balanceModalOpen,
+    balancePreview,
+    switchingMode,
   ]);
 
   return <>{content}</>;

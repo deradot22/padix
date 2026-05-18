@@ -5,10 +5,10 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Gamepad2, Users, Clock, Calendar, Lightbulb, Users2, MapPin, Zap } from "lucide-react";
+import { Gamepad2, Users, Clock, Calendar, Lightbulb, Users2, MapPin, Zap, Send, MessageCircle, Users as UsersIcon } from "lucide-react";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
-import { api, PairingMode } from "../../../lib/api";
+import { api, PairingMode, TelegramChat } from "../../../lib/api";
 
 function todayIso(): string {
   const d = new Date();
@@ -40,6 +40,26 @@ export function V0CreateEventPage(props: {
   const [gameMode, setGameMode] = useState<"round_robin" | "balanced">("round_robin");
   const [roundsMode, setRoundsMode] = useState<"auto" | "manual">("auto");
   const [step] = useState(1);
+  const [telegramChats, setTelegramChats] = useState<TelegramChat[]>([]);
+  const [selectedTgChatIds, setSelectedTgChatIds] = useState<Set<string>>(new Set());
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const status = await api.getTelegramStatus();
+        if (!status.enabled) return;
+        const list = await api.getTelegramChats();
+        // Личный чат автора в анонсе не нужен — он сам создаёт игру и про неё знает.
+        // Личные напоминания о собственных играх (если автор зарегистрирован участником)
+        // придут отдельно по reminder-cron.
+        const groupOnly = list.filter((c) => c.chatType !== "PRIVATE");
+        setTelegramChats(groupOnly);
+        setSelectedTgChatIds(new Set(groupOnly.map((c) => c.id)));
+      } catch {
+        // тихо — фича опциональная
+      }
+    })();
+  }, []);
 
   useEffect(() => {
     if (!props.meLoaded) return;
@@ -112,6 +132,7 @@ export function V0CreateEventPage(props: {
         roundsPlanned: autoRounds ? undefined : rounds,
         scoringMode: "POINTS",
         pointsPerPlayerPerMatch: pointsPerPlayer,
+        telegramChatIds: selectedTgChatIds.size > 0 ? Array.from(selectedTgChatIds) : undefined,
       });
       nav(`/events/${created.id}`);
     } catch (err: any) {
@@ -435,6 +456,43 @@ export function V0CreateEventPage(props: {
                   <div className="font-semibold text-lg">{pointsPerPlayer} подач на игрока</div>
                 </div>
               </div>
+
+              {telegramChats.length > 0 && (
+                <div className="rounded-lg border border-border bg-secondary/30 p-4 space-y-3">
+                  <div className="flex items-center gap-2">
+                    <Send className="h-4 w-4 text-sky-400" />
+                    <div className="text-sm font-medium">Отправить анонс в Telegram</div>
+                  </div>
+                  <div className="space-y-2">
+                    {telegramChats.map((chat) => {
+                      const checked = selectedTgChatIds.has(chat.id);
+                      const Icon = chat.chatType === "PRIVATE" ? MessageCircle : chat.chatType === "CHANNEL" ? Send : UsersIcon;
+                      return (
+                        <label
+                          key={chat.id}
+                          className="flex items-center gap-3 rounded-md bg-background/60 hover:bg-background px-3 py-2 cursor-pointer transition-colors"
+                        >
+                          <input
+                            type="checkbox"
+                            className="h-4 w-4 accent-sky-500"
+                            checked={checked}
+                            onChange={(e) => {
+                              setSelectedTgChatIds((prev) => {
+                                const next = new Set(prev);
+                                if (e.target.checked) next.add(chat.id);
+                                else next.delete(chat.id);
+                                return next;
+                              });
+                            }}
+                          />
+                          <Icon className="h-4 w-4 text-sky-400" />
+                          <span className="text-sm flex-1 truncate">{chat.title}</span>
+                        </label>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
 
               <div className="flex gap-3 pt-4">
                 <Button variant="outline" className="flex-1 h-12 bg-transparent" type="button" onClick={() => nav("/games")} disabled={loading}>

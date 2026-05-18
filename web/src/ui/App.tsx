@@ -7,6 +7,7 @@ import { V0GamesPage } from "./v0/pages/V0GamesPage";
 import { V0EventPage } from "./v0/pages/V0EventPage";
 import { V0CreateEventPage } from "./v0/pages/V0CreateEventPage";
 import { V0ProfilePage } from "./v0/pages/V0ProfilePage";
+import { V0SettingsPage } from "./v0/pages/V0SettingsPage";
 import { V0RatingPage } from "./v0/pages/V0RatingPage";
 import { V0LoginPage } from "./v0/pages/V0LoginPage";
 import { V0RegisterPage } from "./v0/pages/V0RegisterPage";
@@ -163,6 +164,7 @@ export function App() {
           <Route path="games" element={<V0GamesPage me={me} />} />
           <Route path="create" element={<V0CreateEventPage me={me} meLoaded={meLoaded} />} />
           <Route path="profile" element={<V0ProfilePage me={me} meLoaded={meLoaded} onMeUpdate={setMe} />} />
+          <Route path="settings" element={<V0SettingsPage me={me} meLoaded={meLoaded} onMeUpdate={setMe} />} />
           <Route path="events/:eventId" element={<V0EventPage me={me} meLoaded={meLoaded} />} />
           <Route path="admin" element={<V0AdminPage />} />
         </Route>

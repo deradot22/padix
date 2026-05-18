@@ -1,0 +1,44 @@
+server:
+  port: 8080
+
+spring:
+  datasource:
+    url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5432/padix}
+    username: ${SPRING_DATASOURCE_USERNAME:padix}
+    password: ${SPRING_DATASOURCE_PASSWORD:padix}
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    properties:
+      hibernate:
+        format_sql: true
+    open-in-view: false
+  flyway:
+    enabled: true
+
+logging:
+  level:
+    org.hibernate.SQL: info
+
+springdoc:
+  api-docs:
+    enabled: false
+  swagger-ui:
+    enabled: false
+
+app:
+  jwt:
+    # В проде вынести в секрет/ENV. Для дев-старта ок.
+    secret: ${APP_JWT_SECRET:change-me-in-prod-change-me-in-prod-change-me}
+    ttlSeconds: ${APP_JWT_TTL_SECONDS:2592000} # 30 дней
+  admin:
+    username: ${APP_ADMIN_USERNAME:admin228}
+    password: ${APP_ADMIN_PASSWORD:admin228}
+  swagger:
+    username: ${APP_SWAGGER_USERNAME:css101}
+    password: ${APP_SWAGGER_PASSWORD:101css101}
+  bot:
+    base-url: ${APP_BOT_BASE_URL:}
+  internal:
+    secret: ${APP_INTERNAL_SECRET:}
+

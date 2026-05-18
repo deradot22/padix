@@ -67,6 +67,19 @@ export type EventDetails = {
   authorName: string;
 };
 
+export type BalanceSeverity = "NONE" | "SMALL" | "MEDIUM" | "LARGE";
+
+export type BalancePreview = {
+  playerCount: number;
+  capacity: number;
+  ratingSpread: number;
+  severity: BalanceSeverity;
+  maxGoodRounds: number;
+  requestedRounds: number | null;
+  currentPairingMode: PairingMode;
+  shouldWarn: boolean;
+};
+
 export type MeResponse = {
   email: string;
   playerId: string;
@@ -169,6 +182,39 @@ export type EventInviteItem = {
 };
 
 export type InviteStatus = "PENDING" | "ACCEPTED" | "DECLINED";
+
+export type TelegramChatType = "PRIVATE" | "GROUP" | "SUPERGROUP" | "CHANNEL";
+
+export type TelegramChat = {
+  id: string;
+  chatType: TelegramChatType;
+  title: string;
+  linkedAt?: string | null;
+  notifyUpdated: boolean;
+  notifyFinished: boolean;
+  notifyReminder: boolean;
+};
+
+export type TelegramSettings = {
+  enabled: boolean;
+  reminderHours: number;
+  quietHoursStart: string | null;  // "HH:mm" или null
+  quietHoursEnd: string | null;
+  timezone: string;
+};
+
+export type TelegramLinkToken = {
+  token: string;
+  botUsername: string;
+  deeplink: string;
+  linkCommand: string;
+  expiresAt: string;
+};
+
+export type TelegramStatus = {
+  enabled: boolean;
+  botUsername: string;
+};
 
 export type EventInviteStatusItem = {
   publicId: string;
@@ -280,6 +326,13 @@ export const api = {
     }),
   closeRegistration: (eventId: string) =>
     request(`/api/events/${eventId}/close-registration`, { method: "POST" }),
+  getBalancePreview: (eventId: string) =>
+    request<BalancePreview>(`/api/events/${eventId}/balance-preview`),
+  updatePairingMode: (eventId: string, pairingMode: PairingMode) =>
+    request<Event>(`/api/events/${eventId}/pairing-mode`, {
+      method: "PATCH",
+      body: JSON.stringify({ pairingMode }),
+    }),
   startEvent: (eventId: string) =>
     request(`/api/events/${eventId}/start`, { method: "POST" }),
   cancelRegistration: (eventId: string) =>
@@ -337,9 +390,39 @@ export const api = {
     roundsPlanned?: number;
     scoringMode: "POINTS" | "SETS";
     pointsPerPlayerPerMatch?: number;
+    telegramChatIds?: string[];
   }) =>
     request<Event>("/api/events", {
       method: "POST",
+      body: JSON.stringify(payload),
+    }),
+
+  // ---------- Telegram integration ----------
+  getTelegramStatus: () => request<TelegramStatus>("/api/telegram/status"),
+  getTelegramChats: () => request<TelegramChat[]>("/api/telegram/chats"),
+  createTelegramLinkToken: () =>
+    request<TelegramLinkToken>("/api/telegram/link-token", { method: "POST" }),
+  unlinkTelegramChat: (chatId: string) =>
+    request(`/api/telegram/chats/${chatId}`, { method: "DELETE" }),
+  getTelegramSettings: () => request<TelegramSettings>("/api/telegram/settings"),
+  updateTelegramSettings: (payload: {
+    enabled?: boolean;
+    reminderHours?: number;
+    quietHoursStart?: string | null;
+    quietHoursEnd?: string | null;
+    quietHoursDisabled?: boolean;
+    timezone?: string;
+  }) =>
+    request<TelegramSettings>("/api/telegram/settings", {
+      method: "PATCH",
+      body: JSON.stringify(payload),
+    }),
+  updateTelegramChatPreferences: (
+    chatId: string,
+    payload: { notifyUpdated?: boolean; notifyFinished?: boolean; notifyReminder?: boolean }
+  ) =>
+    request<TelegramChat>(`/api/telegram/chats/${chatId}/preferences`, {
+      method: "PATCH",
       body: JSON.stringify(payload),
     }),
 

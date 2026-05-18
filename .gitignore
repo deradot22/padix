@@ -12,6 +12,9 @@ target/
 application-local.yml
 application-local.yaml
 
+# Secrets (Telegram bot token и т.п.)
+.env
+
 # Local / IDE / Claude
 .claude/
 .vscode/
