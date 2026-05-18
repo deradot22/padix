@@ -1,7 +1,7 @@
 "use client";
 
 import { Link, NavLink, useLocation, useNavigate } from "react-router-dom";
-import { Bell, Check, Menu, Moon, Sun, UserPlus, X } from "lucide-react";
+import { Bell, Check, LogOut, Menu, Moon, Settings, Sun, UserPlus, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { useEffect, useMemo, useState } from "react";
@@ -31,8 +31,11 @@ export function Header(props: {
   const [incomingFriends, setIncomingFriends] = useState<FriendRequestItem[]>([]);
   const [actionKey, setActionKey] = useState<string | null>(null);
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
   const bellRef = useRef<HTMLButtonElement | null>(null);
   const panelRef = useRef<HTMLDivElement | null>(null);
+  const settingsBtnRef = useRef<HTMLButtonElement | null>(null);
+  const settingsPanelRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     const stored = localStorage.getItem("theme");
@@ -105,7 +108,20 @@ export function Header(props: {
   }, [notificationsOpen]);
 
   useEffect(() => {
+    if (!settingsOpen) return;
+    const onClick = (ev: MouseEvent) => {
+      const target = ev.target as Node;
+      if (settingsBtnRef.current?.contains(target)) return;
+      if (settingsPanelRef.current?.contains(target)) return;
+      setSettingsOpen(false);
+    };
+    window.addEventListener("click", onClick);
+    return () => window.removeEventListener("click", onClick);
+  }, [settingsOpen]);
+
+  useEffect(() => {
     setMobileOpen(false);
+    setSettingsOpen(false);
   }, [pathname]);
 
   return (
@@ -381,9 +397,42 @@ export function Header(props: {
           </Button>
 
           {props.authed ? (
-            <Button variant="outline" size="sm" className="ml-2 bg-transparent hidden md:inline-flex" onClick={props.onLogout}>
-              Выйти
-            </Button>
+            <div className="relative ml-2 hidden md:inline-flex">
+              <Button
+                ref={settingsBtnRef}
+                variant="ghost"
+                size="icon"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setSettingsOpen((v) => !v);
+                }}
+                aria-label="Настройки"
+                aria-expanded={settingsOpen}
+                title="Настройки"
+              >
+                <Settings className="h-5 w-5" />
+              </Button>
+              <div
+                ref={settingsPanelRef}
+                className={cn(
+                  "absolute right-0 top-full mt-2 w-48 rounded-xl border border-border bg-card p-1 shadow-xl z-50",
+                  settingsOpen ? "block" : "hidden",
+                )}
+                onClick={(e) => e.stopPropagation()}
+              >
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSettingsOpen(false);
+                    props.onLogout?.();
+                  }}
+                  className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm font-medium text-muted-foreground hover:bg-secondary/50 hover:text-foreground transition-colors"
+                >
+                  <LogOut className="h-4 w-4" />
+                  Выйти
+                </button>
+              </div>
+            </div>
           ) : (
             <Button variant="outline" size="sm" className="ml-2 bg-transparent hidden md:inline-flex" onClick={() => nav("/login")}>
               Войти
