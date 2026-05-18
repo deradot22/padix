@@ -82,6 +82,8 @@ export function V0ProfilePage(props: { me: any; meLoaded?: boolean; onMeUpdate?:
   const [friendsExpanded, setFriendsExpanded] = useState(false);
   const [historyExpanded, setHistoryExpanded] = useState(false);
   const [ratingHistory, setRatingHistory] = useState<{ date: string; rating: number; delta: number | null }[]>([]);
+  const [ratingHistoryLoaded, setRatingHistoryLoaded] = useState(false);
+  const [invitesDetailsLoaded, setInvitesDetailsLoaded] = useState(false);
   const [graphOpen, setGraphOpen] = useState(false);
   const [editGameOpen, setEditGameOpen] = useState(false);
   const [editGameEventId, setEditGameEventId] = useState<string | null>(null);
@@ -196,9 +198,11 @@ export function V0ProfilePage(props: { me: any; meLoaded?: boolean; onMeUpdate?:
 
   useEffect(() => {
     if (!props.me?.playerId) return;
-    const items = invites ?? [];
+    if (invites === null) return;
+    const items = invites;
     if (items.length === 0) {
       setInviteEventJoined(new Set());
+      setInvitesDetailsLoaded(true);
       return;
     }
     let cancelled = false;
@@ -217,6 +221,9 @@ export function V0ProfilePage(props: { me: any; meLoaded?: boolean; onMeUpdate?:
       })
       .catch(() => {
         if (!cancelled) setInviteEventJoined(new Set());
+      })
+      .finally(() => {
+        if (!cancelled) setInvitesDetailsLoaded(true);
       });
     return () => {
       cancelled = true;
@@ -248,12 +255,16 @@ export function V0ProfilePage(props: { me: any; meLoaded?: boolean; onMeUpdate?:
   }, [props.me]);
 
   useEffect(() => {
-    if (!props.me?.playerId || !hasToken()) return;
+    if (!props.me?.playerId || !hasToken()) {
+      setRatingHistoryLoaded(true);
+      return;
+    }
     let cancelled = false;
     api
       .getRatingHistory()
       .then((h) => { if (!cancelled) setRatingHistory(h); })
-      .catch(() => { if (!cancelled) setRatingHistory([]); });
+      .catch(() => { if (!cancelled) setRatingHistory([]); })
+      .finally(() => { if (!cancelled) setRatingHistoryLoaded(true); });
     return () => { cancelled = true; };
   }, [props.me?.playerId]);
 
@@ -372,6 +383,24 @@ export function V0ProfilePage(props: { me: any; meLoaded?: boolean; onMeUpdate?:
   const calibrationMatchesLeft = viewMe.calibrationMatchesRemaining ?? 0;
   const calibration = calibrationMatchesLeft > 0;
   const calibrationPlayed = Math.max(30 - calibrationMatchesLeft, 0);
+
+  const pageLoading =
+    friends === null ||
+    invites === null ||
+    !invitesDetailsLoaded ||
+    historyLoading ||
+    !ratingHistoryLoaded;
+
+  if (pageLoading) {
+    return (
+      <div className="space-y-8">
+        <h1 className="text-4xl font-bold tracking-tight">Профиль</h1>
+        <div className="flex items-center justify-center py-20 text-sm text-muted-foreground">
+          Загрузка…
+        </div>
+      </div>
+    );
+  }
 
   return (
     <TooltipProvider>
