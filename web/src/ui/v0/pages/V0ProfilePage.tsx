@@ -79,8 +79,8 @@ export function V0ProfilePage(props: { me: any; meLoaded?: boolean; onMeUpdate?:
   const [editError, setEditError] = useState<string | null>(null);
   const [info, setInfo] = useState<string | null>(null);
   const [idCopied, setIdCopied] = useState(false);
-  const [friendsExpanded, setFriendsExpanded] = useState(true);
-  const [historyExpanded, setHistoryExpanded] = useState(true);
+  const [friendsExpanded, setFriendsExpanded] = useState(false);
+  const [historyExpanded, setHistoryExpanded] = useState(false);
   const [ratingHistory, setRatingHistory] = useState<{ date: string; rating: number; delta: number | null }[]>([]);
   const [graphOpen, setGraphOpen] = useState(false);
   const [editGameOpen, setEditGameOpen] = useState(false);
@@ -927,20 +927,23 @@ export function V0ProfilePage(props: { me: any; meLoaded?: boolean; onMeUpdate?:
 
         {ratingHistory.length > 1 && (
           <Card className="border-border/50">
-            <CardHeader className="pb-3">
-              <Button variant="ghost" className="w-full justify-between" onClick={() => setGraphOpen((o) => !o)}>
-                <CardTitle className="flex items-center gap-2 text-lg">
+            <CardHeader
+              className="pb-4 cursor-pointer select-none"
+              onClick={() => setGraphOpen((o) => !o)}
+              role="button"
+              aria-expanded={graphOpen}
+            >
+              <div className="flex items-center justify-between gap-2">
+                <CardTitle className="flex items-center gap-2">
                   <TrendingUp className="h-5 w-5 text-primary" />
                   График рейтинга
                 </CardTitle>
-                <span className="text-muted-foreground">{graphOpen ? "−" : "+"}</span>
-              </Button>
+                <ChevronDown className={cn("h-4 w-4 text-muted-foreground transition-transform", !graphOpen && "-rotate-90")} />
+              </div>
             </CardHeader>
-            {graphOpen && (
-              <CardContent>
-                <RatingGraph points={ratingHistory} />
-              </CardContent>
-            )}
+            <CardContent className={cn(!graphOpen && "hidden")}>
+              <RatingGraph points={ratingHistory} />
+            </CardContent>
           </Card>
         )}
 
