@@ -82,9 +82,17 @@ data class PrepareCancellationRequest(
 )
 
 @JsonIgnoreProperties(ignoreUnknown = true)
+data class CancellationOriginalPost(
+    val tgChatId: Long,
+    val messageId: Long,
+    val pinnedMessageId: Long?
+)
+
+@JsonIgnoreProperties(ignoreUnknown = true)
 data class CancellationPlan(
     val title: String,
-    val targetTgChatIds: List<Long>
+    val targetTgChatIds: List<Long>,
+    val originalPosts: List<CancellationOriginalPost> = emptyList()
 )
 
 @JsonIgnoreProperties(ignoreUnknown = true)

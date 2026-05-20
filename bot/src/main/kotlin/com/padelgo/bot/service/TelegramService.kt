@@ -80,7 +80,17 @@ data class FinishTopPlayer(
 
 data class TelegramCancellationPlan(
     val title: String,
-    val targetTgChatIds: List<Long>
+    val targetTgChatIds: List<Long>,
+    /** Исходные CREATED-посты (chat_id + message_id + pinned_message_id). Снимаем пин,
+     *  редактируем сообщение в «отменено», чтобы исходный закреплённый анонс
+     *  не оставался жить в чате без статуса. */
+    val originalPosts: List<TelegramCancellationOriginalPost> = emptyList()
+)
+
+data class TelegramCancellationOriginalPost(
+    val tgChatId: Long,
+    val messageId: Long,
+    val pinnedMessageId: Long?
 )
 
 @Service
@@ -446,23 +456,57 @@ class TelegramService(
     @Transactional
     fun prepareCancellation(eventId: UUID, ownerUserId: UUID, title: String): TelegramCancellationPlan {
         if (!isReadyToSend(ownerUserId)) return TelegramCancellationPlan(title, emptyList())
+        // Собираем посты ДО удаления — event_telegram_post каскадно удалится с events,
+        // и потом мы не сможем узнать какие сообщения были закреплены / какие надо открепить.
+        val posts = postRepo.findAllByEventId(eventId)
+        val chatById = chatRepo.findAllByUserIdOrderByLinkedAtAsc(ownerUserId).associateBy { it.id!! }
+        val originalPosts = posts.mapNotNull { p ->
+            val chat = chatById[p.telegramChatId] ?: return@mapNotNull null
+            TelegramCancellationOriginalPost(
+                tgChatId = chat.chatId,
+                messageId = p.messageId,
+                pinnedMessageId = p.pinnedMessageId
+            )
+        }
         val targets = targetChatsForEvent(eventId, ownerUserId) { it.notifyUpdated }
-        return TelegramCancellationPlan(title, targets.map { it.chatId })
+        return TelegramCancellationPlan(title, targets.map { it.chatId }, originalPosts)
     }
 
     fun sendCancellation(plan: TelegramCancellationPlan): Int {
-        if (plan.targetTgChatIds.isEmpty()) return 0
-        val text = renderEventCancelled(plan.title)
-        var posted = 0
-        for (chatId in plan.targetTgChatIds) {
+        var actions = 0
+        // 1) Открепляем и редактируем исходные CREATED-сообщения (включая закреплённое),
+        // чтобы они не висели в чате со статус-баром «1/8» как будто игра ещё идёт.
+        val cancelledHeader = renderEventCancelledOriginal(plan.title)
+        for (orig in plan.originalPosts) {
+            if (orig.pinnedMessageId != null) {
+                try {
+                    client.unpinChatMessage(orig.tgChatId, orig.pinnedMessageId)
+                } catch (e: Exception) {
+                    log.warn("Unpin {} in chat {} on cancellation failed: {}", orig.pinnedMessageId, orig.tgChatId, e.message)
+                }
+            }
             try {
-                client.sendMessage(chatId, text)
-                posted++
+                // Убираем inline-кнопку «Зарегистрироваться» — игры больше нет.
+                client.editMessageText(orig.tgChatId, orig.messageId, cancelledHeader, replyMarkup = null)
+                actions++
             } catch (e: Exception) {
-                log.warn("Failed to send cancellation to {}: {}", chatId, e.message)
+                log.warn("Edit cancelled message {} in chat {} failed: {}", orig.messageId, orig.tgChatId, e.message)
             }
         }
-        return posted
+
+        // 2) Шлём отдельное уведомление «❌ Игра X отменена» в каждый целевой чат.
+        if (plan.targetTgChatIds.isNotEmpty()) {
+            val text = renderEventCancelled(plan.title)
+            for (chatId in plan.targetTgChatIds) {
+                try {
+                    client.sendMessage(chatId, text)
+                    actions++
+                } catch (e: Exception) {
+                    log.warn("Failed to send cancellation to {}: {}", chatId, e.message)
+                }
+            }
+        }
+        return actions
     }
 
     @Transactional
@@ -763,6 +807,14 @@ class TelegramService(
 
     private fun renderEventCancelled(title: String): String =
         "❌ Игра <b>${escapeHtml(title)}</b> отменена."
+
+    /**
+     * Текст для editMessageText на исходном CREATED-посте при отмене игры:
+     * заменяет шапку со статус-баром на короткое «отменено», чтобы старое сообщение
+     * не оставалось висеть в чате с «1/8» как будто игра ещё открыта.
+     */
+    private fun renderEventCancelledOriginal(title: String): String =
+        "❌ <b>${escapeHtml(title)}</b>\n\nИгра отменена."
 
     private fun renderRosterFilled(event: BotEvent, capacity: Int): String =
         "✅ <b>${escapeHtml(event.title)}</b> — комплект собран!\n" +

@@ -3,6 +3,7 @@ package com.padelgo.bot.api
 import com.padelgo.bot.domain.BotEvent
 import com.padelgo.bot.domain.EventStatus
 import com.padelgo.bot.service.FinishTopPlayer
+import com.padelgo.bot.service.TelegramCancellationOriginalPost
 import com.padelgo.bot.service.TelegramCancellationPlan
 import com.padelgo.bot.service.TelegramService
 import com.padelgo.bot.domain.TelegramChatType
@@ -51,15 +52,37 @@ data class PrepareCancellationRequest(
     val title: String
 )
 
-data class CancellationPlanResponse(
-    val title: String,
-    val targetTgChatIds: List<Long>
+data class CancellationOriginalPostDto(
+    val tgChatId: Long,
+    val messageId: Long,
+    val pinnedMessageId: Long?
 ) {
     companion object {
-        fun from(p: TelegramCancellationPlan) = CancellationPlanResponse(p.title, p.targetTgChatIds)
+        fun from(p: TelegramCancellationOriginalPost) =
+            CancellationOriginalPostDto(p.tgChatId, p.messageId, p.pinnedMessageId)
     }
 
-    fun toPlan() = TelegramCancellationPlan(title, targetTgChatIds)
+    fun toModel() = TelegramCancellationOriginalPost(tgChatId, messageId, pinnedMessageId)
+}
+
+data class CancellationPlanResponse(
+    val title: String,
+    val targetTgChatIds: List<Long>,
+    val originalPosts: List<CancellationOriginalPostDto> = emptyList()
+) {
+    companion object {
+        fun from(p: TelegramCancellationPlan) = CancellationPlanResponse(
+            p.title,
+            p.targetTgChatIds,
+            p.originalPosts.map { CancellationOriginalPostDto.from(it) }
+        )
+    }
+
+    fun toPlan() = TelegramCancellationPlan(
+        title = title,
+        targetTgChatIds = targetTgChatIds,
+        originalPosts = originalPosts.map { it.toModel() }
+    )
 }
 
 data class FinishTopPlayerDto(val name: String, val delta: Int)
