@@ -806,6 +806,9 @@ class EventService(
         // Delete registrations and rating changes linked to event
         regRepo.deleteAllByEventId(eventId)
         ratingChangeRepo.deleteAllByEventId(eventId)
+        // event_invites: FK без CASCADE — без явного удаления Postgres падает с FK violation
+        // и api возвращает 500 (фронт может неудачно интерпретировать как logout).
+        inviteRepo.deleteAllByEventId(eventId)
 
         eventRepo.delete(event)
 

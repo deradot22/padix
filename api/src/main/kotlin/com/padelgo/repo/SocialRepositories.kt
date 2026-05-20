@@ -24,4 +24,5 @@ interface EventInviteRepository : JpaRepository<EventInvite, UUID> {
     fun findAllByToUserIdAndStatus(userId: UUID, status: InviteStatus): List<EventInvite>
     fun findByEventIdAndToUserIdAndStatus(eventId: UUID, toUserId: UUID, status: InviteStatus): EventInvite?
     fun findAllByEventIdAndFromUserId(eventId: UUID, fromUserId: UUID): List<EventInvite>
+    fun deleteAllByEventId(eventId: UUID)
 }
