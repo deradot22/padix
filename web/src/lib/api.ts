@@ -54,6 +54,8 @@ export type EventSeries = {
   visibility: EventVisibility;
   materializeHoursBefore: number;
   materializeAtTime: string;   // "HH:mm" — час локального времени автора, когда летит анонс
+  /** Режим: HOURS_BEFORE (за N часов до игры) или WEEKLY_SUNDAY ("в конце недели" = воскресенье). */
+  materializeMode: "HOURS_BEFORE" | "WEEKLY_SUNDAY";
   active: boolean;
   lastMaterializedFor?: string | null;
 };
@@ -224,6 +226,8 @@ export type TelegramSettings = {
   quietHoursStart: string | null;  // "HH:mm" или null
   quietHoursEnd: string | null;
   timezone: string;
+  /** Закреплять анонс новой игры в группах (с silent notification). */
+  pinAnnouncement: boolean;
 };
 
 export type TelegramLinkToken = {
@@ -437,6 +441,7 @@ export const api = {
     visibility?: EventVisibility;
     materializeHoursBefore?: number;
     materializeAtTime?: string;
+    materializeMode?: "HOURS_BEFORE" | "WEEKLY_SUNDAY";
   }) =>
     request<EventSeries>("/api/event-series", {
       method: "POST",
@@ -469,6 +474,7 @@ export const api = {
     quietHoursEnd?: string | null;
     quietHoursDisabled?: boolean;
     timezone?: string;
+    pinAnnouncement?: boolean;
   }) =>
     request<TelegramSettings>("/api/telegram/settings", {
       method: "PATCH",

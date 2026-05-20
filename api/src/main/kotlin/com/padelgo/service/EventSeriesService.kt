@@ -28,7 +28,8 @@ class EventSeriesService(
 
     @Transactional
     fun create(userId: UUID, req: CreateEventSeriesRequest): EventSeries {
-        validate(req.title, req.daysOfWeek, req.startTime, req.endTime, req.timezone, req.materializeHoursBefore)
+        validate(req.title, req.daysOfWeek, req.startTime, req.endTime, req.timezone,
+            req.materializeHoursBefore, req.materializeMode)
         val series = EventSeries(
             title = req.title.trim(),
             createdByUserId = userId,
@@ -48,6 +49,7 @@ class EventSeriesService(
             visibility = req.visibility,
             materializeHoursBefore = req.materializeHoursBefore,
             materializeAtTime = req.materializeAtTime,
+            materializeMode = req.materializeMode,
             active = true
         )
         return repo.save(series)
@@ -82,7 +84,9 @@ class EventSeriesService(
         req.visibility?.let { s.visibility = it }
         req.materializeHoursBefore?.let { s.materializeHoursBefore = it }
         req.materializeAtTime?.let { s.materializeAtTime = it }
-        validate(s.title, s.daysOfWeek, s.startTime, s.endTime, s.timezone, s.materializeHoursBefore)
+        req.materializeMode?.let { s.materializeMode = it }
+        validate(s.title, s.daysOfWeek, s.startTime, s.endTime, s.timezone,
+            s.materializeHoursBefore, s.materializeMode)
         return repo.save(s)
     }
 
@@ -105,14 +109,21 @@ class EventSeriesService(
         startTime: LocalTime,
         endTime: LocalTime,
         timezone: String,
-        materializeHoursBefore: Int
+        materializeHoursBefore: Int,
+        materializeMode: String
     ) {
         if (title.isBlank()) throw ApiException(HttpStatus.BAD_REQUEST, "title is required")
         parseDays(daysOfWeek)  // выбросит 400 если невалидно
         try { ZoneId.of(timezone) } catch (e: Exception) {
             throw ApiException(HttpStatus.BAD_REQUEST, "Unknown timezone: $timezone")
         }
-        if (materializeHoursBefore !in 1..720) {
+        if (materializeMode !in ALLOWED_MATERIALIZE_MODES) {
+            throw ApiException(HttpStatus.BAD_REQUEST,
+                "materializeMode must be one of: ${ALLOWED_MATERIALIZE_MODES.joinToString()}")
+        }
+        // Поле materializeHoursBefore валидируем только для режима HOURS_BEFORE — в WEEKLY_SUNDAY
+        // оно не используется (но хранится: пользователь может переключиться обратно).
+        if (materializeMode == "HOURS_BEFORE" && materializeHoursBefore !in 1..720) {
             throw ApiException(HttpStatus.BAD_REQUEST, "materializeHoursBefore must be 1..720")
         }
         if (!endTime.isAfter(startTime)) {
@@ -127,6 +138,8 @@ class EventSeriesService(
     }
 
     companion object {
+        val ALLOWED_MATERIALIZE_MODES = setOf("HOURS_BEFORE", "WEEKLY_SUNDAY")
+
         private val DAY_MAP = mapOf(
             "MON" to DayOfWeek.MONDAY,
             "TUE" to DayOfWeek.TUESDAY,
@@ -166,7 +179,8 @@ data class CreateEventSeriesRequest(
     val tiebreakEnabled: Boolean = true,
     val visibility: EventVisibility = EventVisibility.PRIVATE,
     val materializeHoursBefore: Int = 168,   // за неделю до игры по умолчанию
-    val materializeAtTime: LocalTime = LocalTime.of(9, 0) // в 09:00 локального времени автора
+    val materializeAtTime: LocalTime = LocalTime.of(9, 0), // в 09:00 локального времени автора
+    val materializeMode: String = "HOURS_BEFORE"           // или "WEEKLY_SUNDAY" — "в конце недели"
 )
 
 data class UpdateEventSeriesRequest(
@@ -181,5 +195,6 @@ data class UpdateEventSeriesRequest(
     val pointsPerPlayerPerMatch: Int? = null,
     val visibility: EventVisibility? = null,
     val materializeHoursBefore: Int? = null,
-    val materializeAtTime: LocalTime? = null
+    val materializeAtTime: LocalTime? = null,
+    val materializeMode: String? = null
 )

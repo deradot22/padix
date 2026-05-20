@@ -87,6 +87,10 @@ class TelegramUserSettings(
     @Column(name = "timezone", nullable = false, length = 64)
     var timezone: String = "UTC",
 
+    /** Закреплять анонс новой игры в группах (с silent notification). */
+    @Column(name = "pin_announcement", nullable = false)
+    var pinAnnouncement: Boolean = false,
+
     @CreationTimestamp
     @Column(name = "created_at", nullable = false, updatable = false)
     var createdAt: Instant? = null,
@@ -112,6 +116,10 @@ class EventTelegramPost(
 
     @Column(name = "message_id", nullable = false)
     var messageId: Long = 0L,
+
+    /** Если сообщение было закреплено — TG message id (= messageId), иначе null. */
+    @Column(name = "pinned_message_id")
+    var pinnedMessageId: Long? = null,
 
     @CreationTimestamp
     @Column(name = "posted_at", nullable = false)

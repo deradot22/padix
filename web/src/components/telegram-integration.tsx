@@ -6,7 +6,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } f
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useConfirm } from "@/components/ui/confirm-dialog";
 import { cn } from "@/lib/utils";
-import { Send, X, ChevronDown, Copy, Check, ExternalLink, MessageCircle, Users as UsersIcon, Bell, Moon } from "lucide-react";
+import { Send, X, ChevronDown, Copy, Check, ExternalLink, MessageCircle, Users as UsersIcon, Bell, Moon, Pin } from "lucide-react";
 
 type LinkTab = "private" | "group";
 
@@ -271,6 +271,23 @@ export function TelegramIntegrationCard() {
                 </div>
               )}
             </div>
+
+            <label className="flex items-start gap-3 cursor-pointer">
+              <Pin className="h-4 w-4 text-muted-foreground shrink-0 mt-0.5" />
+              <div className="text-sm flex-1 leading-snug">
+                Закреплять анонс новой игры в групповых чатах
+                <div className="text-xs text-muted-foreground mt-0.5">
+                  При следующем анонсе предыдущий открепляется автоматически.
+                </div>
+              </div>
+              <input
+                type="checkbox"
+                className="h-4 w-4 accent-sky-500 mt-0.5"
+                checked={settings.pinAnnouncement === true}
+                disabled={saving}
+                onChange={(e) => patchSettings({ pinAnnouncement: e.target.checked })}
+              />
+            </label>
           </div>
         )}
 

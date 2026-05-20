@@ -53,7 +53,8 @@ data class TelegramUserSettingsInfo(
     val reminderHours: Int,
     val quietHoursStart: LocalTime?,
     val quietHoursEnd: LocalTime?,
-    val timezone: String
+    val timezone: String,
+    val pinAnnouncement: Boolean
 )
 
 data class UpdateTelegramSettingsRequest(
@@ -62,7 +63,8 @@ data class UpdateTelegramSettingsRequest(
     val quietHoursStart: LocalTime? = null,
     val quietHoursEnd: LocalTime? = null,
     val quietHoursDisabled: Boolean? = null,
-    val timezone: String? = null
+    val timezone: String? = null,
+    val pinAnnouncement: Boolean? = null
 )
 
 data class UpdateTelegramChatPreferencesRequest(
@@ -157,7 +159,8 @@ class TelegramService(
             reminderHours = s.reminderHours,
             quietHoursStart = s.quietHoursStart,
             quietHoursEnd = s.quietHoursEnd,
-            timezone = s.timezone
+            timezone = s.timezone,
+            pinAnnouncement = s.pinAnnouncement
         )
     }
 
@@ -182,13 +185,15 @@ class TelegramService(
             }
             s.timezone = it
         }
+        req.pinAnnouncement?.let { s.pinAnnouncement = it }
         settingsRepo.save(s)
         return TelegramUserSettingsInfo(
             enabled = s.enabled,
             reminderHours = s.reminderHours,
             quietHoursStart = s.quietHoursStart,
             quietHoursEnd = s.quietHoursEnd,
-            timezone = s.timezone
+            timezone = s.timezone,
+            pinAnnouncement = s.pinAnnouncement
         )
     }
 
@@ -374,7 +379,10 @@ class TelegramService(
 
         val cta = cta(eventId, "📝 Зарегистрироваться")
         val text = renderEventCreated(event, registeredCount) + cta.textSuffix
-        return sendAndRecord(chats, text, eventId, cta.replyMarkup)
+        // Закрепляем анонс только если пользователь включил это в настройках. Перед pin
+        // снимаем предыдущий pin в каждом чате (если был от прошлой игры этого организатора).
+        val shouldPin = getOrCreateSettings(ownerUserId).pinAnnouncement
+        return sendAndRecord(chats, text, eventId, cta.replyMarkup, pinAfterSend = shouldPin)
     }
 
     @Transactional
@@ -561,18 +569,33 @@ class TelegramService(
         chats: List<TelegramChat>,
         text: String,
         recordForEventId: UUID?,
-        replyMarkup: Map<String, Any>? = null
+        replyMarkup: Map<String, Any>? = null,
+        pinAfterSend: Boolean = false
     ): Int {
         var posted = 0
         for (chat in chats) {
             try {
                 val sent = client.sendMessage(chat.chatId, text, replyMarkup = replyMarkup)
+                var pinnedMsgId: Long? = null
+                if (pinAfterSend) {
+                    val chatInternalId = chat.id
+                    if (chatInternalId != null) {
+                        unpinPreviousAnnouncementsInChat(chat.chatId, chatInternalId)
+                    }
+                    try {
+                        client.pinChatMessage(chat.chatId, sent.messageId, disableNotification = true)
+                        pinnedMsgId = sent.messageId
+                    } catch (e: Exception) {
+                        log.warn("Pin failed for chat {} msg {}: {}", chat.chatId, sent.messageId, e.message)
+                    }
+                }
                 if (recordForEventId != null) {
                     postRepo.save(
                         EventTelegramPost(
                             eventId = recordForEventId,
                             telegramChatId = chat.id,
-                            messageId = sent.messageId
+                            messageId = sent.messageId,
+                            pinnedMessageId = pinnedMsgId
                         )
                     )
                 }
@@ -582,6 +605,21 @@ class TelegramService(
             }
         }
         return posted
+    }
+
+    /** Снимает все ранее закреплённые анонсы Padix в этом чате и обнуляет pinned_message_id. */
+    private fun unpinPreviousAnnouncementsInChat(telegramChatId: Long, internalChatId: UUID) {
+        val previous = postRepo.findAllByTelegramChatIdAndPinnedMessageIdIsNotNull(internalChatId)
+        for (prev in previous) {
+            val prevMsgId = prev.pinnedMessageId ?: continue
+            try {
+                client.unpinChatMessage(telegramChatId, prevMsgId)
+            } catch (e: Exception) {
+                log.warn("Unpin previous {} in chat {} failed: {}", prevMsgId, telegramChatId, e.message)
+            }
+            prev.pinnedMessageId = null
+            postRepo.save(prev)
+        }
     }
 
     /**

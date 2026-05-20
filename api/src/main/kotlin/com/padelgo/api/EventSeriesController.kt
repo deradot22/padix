@@ -5,6 +5,7 @@ import com.padelgo.domain.EventVisibility
 import com.padelgo.domain.PairingMode
 import com.padelgo.domain.ScoringMode
 import com.padelgo.service.CreateEventSeriesRequest
+import com.padelgo.service.EventSeriesMaterializer
 import com.padelgo.service.EventSeriesService
 import com.padelgo.service.UpdateEventSeriesRequest
 import io.swagger.v3.oas.annotations.Operation
@@ -21,7 +22,8 @@ import java.util.UUID
 @RestController
 @RequestMapping("/api/event-series")
 class EventSeriesController(
-    private val service: EventSeriesService
+    private val service: EventSeriesService,
+    private val materializer: EventSeriesMaterializer
 ) {
     @Operation(summary = "Создать серию")
     @PostMapping
@@ -45,9 +47,16 @@ class EventSeriesController(
                 tiebreakEnabled = req.tiebreakEnabled ?: true,
                 visibility = req.visibility ?: EventVisibility.PRIVATE,
                 materializeHoursBefore = req.materializeHoursBefore ?: 168,
-                materializeAtTime = req.materializeAtTime ?: LocalTime.of(9, 0)
+                materializeAtTime = req.materializeAtTime ?: LocalTime.of(9, 0),
+                materializeMode = req.materializeMode ?: "HOURS_BEFORE"
             )
         )
+        // Initial phase: запускаем материализатор сразу, не ждём следующий cron. Это нужно
+        // для срочных случаев (например, серия создана в среду — игра завтра, а следующий
+        // cron только через час).
+        try { materializer.tick() } catch (e: Exception) {
+            // Не критично — если что-то упало здесь, следующий cron всё равно подберёт.
+        }
         return EventSeriesResponse.from(saved)
     }
 
@@ -78,7 +87,8 @@ class EventSeriesController(
                 pointsPerPlayerPerMatch = req.pointsPerPlayerPerMatch,
                 visibility = req.visibility,
                 materializeHoursBefore = req.materializeHoursBefore,
-                materializeAtTime = req.materializeAtTime
+                materializeAtTime = req.materializeAtTime,
+                materializeMode = req.materializeMode
             )
         )
         return EventSeriesResponse.from(updated)
@@ -125,7 +135,8 @@ data class CreateEventSeriesBody(
     val tiebreakEnabled: Boolean? = null,
     val visibility: EventVisibility? = null,
     val materializeHoursBefore: Int? = null,
-    val materializeAtTime: LocalTime? = null
+    val materializeAtTime: LocalTime? = null,
+    val materializeMode: String? = null
 )
 
 data class UpdateEventSeriesBody(
@@ -140,7 +151,8 @@ data class UpdateEventSeriesBody(
     val pointsPerPlayerPerMatch: Int? = null,
     val visibility: EventVisibility? = null,
     val materializeHoursBefore: Int? = null,
-    val materializeAtTime: LocalTime? = null
+    val materializeAtTime: LocalTime? = null,
+    val materializeMode: String? = null
 )
 
 data class EventSeriesResponse(
@@ -157,6 +169,7 @@ data class EventSeriesResponse(
     val visibility: EventVisibility,
     val materializeHoursBefore: Int,
     val materializeAtTime: LocalTime,
+    val materializeMode: String,
     val active: Boolean,
     val lastMaterializedFor: java.time.LocalDate?
 ) {
@@ -175,6 +188,7 @@ data class EventSeriesResponse(
             visibility = s.visibility,
             materializeHoursBefore = s.materializeHoursBefore,
             materializeAtTime = s.materializeAtTime,
+            materializeMode = s.materializeMode,
             active = s.active,
             lastMaterializedFor = s.lastMaterializedFor
         )

@@ -194,6 +194,50 @@ class TelegramClient(
         }
         return resp.result
     }
+
+    /**
+     * Закрепить сообщение в чате.
+     * disableNotification = true — pin без шумного уведомления.
+     */
+    fun pinChatMessage(chatId: Long, messageId: Long, disableNotification: Boolean = true) {
+        val resp = restClient.post()
+            .uri("${baseUrl()}/pinChatMessage")
+            .contentType(MediaType.APPLICATION_JSON)
+            .body(mapOf(
+                "chat_id" to chatId,
+                "message_id" to messageId,
+                "disable_notification" to disableNotification
+            ))
+            .retrieve()
+            .body<TgResponse<Any>>()
+            ?: throw TelegramApiException("pinChatMessage: empty response")
+        if (!resp.ok) {
+            throw TelegramApiException("pinChatMessage chat=$chatId msg=$messageId failed: ${resp.description}", resp.errorCode)
+        }
+    }
+
+    /**
+     * Открепить конкретное сообщение. Если messageId не передан — открепляется последнее
+     * закрепленное в чате (Telegram-семантика).
+     */
+    fun unpinChatMessage(chatId: Long, messageId: Long?) {
+        val body = mutableMapOf<String, Any>("chat_id" to chatId)
+        if (messageId != null) body["message_id"] = messageId
+        val resp = restClient.post()
+            .uri("${baseUrl()}/unpinChatMessage")
+            .contentType(MediaType.APPLICATION_JSON)
+            .body(body)
+            .retrieve()
+            .body<TgResponse<Any>>()
+            ?: throw TelegramApiException("unpinChatMessage: empty response")
+        if (!resp.ok) {
+            // "message to unpin not found" — бывает если уже откреплено вручную; не критично.
+            val desc = resp.description.orEmpty()
+            if (desc.contains("not found", ignoreCase = true) ||
+                desc.contains("message to unpin", ignoreCase = true)) return
+            throw TelegramApiException("unpinChatMessage chat=$chatId msg=$messageId failed: $desc", resp.errorCode)
+        }
+    }
 }
 
 /** Билдеры для Bot API inline keyboard. */

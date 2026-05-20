@@ -51,6 +51,22 @@ class EventSeriesMaterializer(
         if (days.isEmpty()) return
 
         val nowLocal = nowUtcInstant.atZone(tz).toLocalDateTime()
+
+        when (s.materializeMode) {
+            "WEEKLY_SUNDAY" -> materializeWeeklySunday(s, ownerId, days, nowUtcInstant, nowLocal, tz)
+            else -> materializeHoursBefore(s, ownerId, days, nowUtcInstant, nowLocal, tz)
+        }
+    }
+
+    /** Старое поведение: материализуем за `materializeHoursBefore` часов до игры. */
+    private fun materializeHoursBefore(
+        s: EventSeries,
+        ownerId: java.util.UUID,
+        days: Set<java.time.DayOfWeek>,
+        nowUtcInstant: java.time.Instant,
+        nowLocal: LocalDateTime,
+        tz: ZoneId,
+    ) {
         // Окно материализации: текущий час должен быть >= materializeAtTime, иначе ждём.
         // Без этого ограничения cron создал бы анонсы в случайное время суток (в т.ч. ночью).
         // Cron бежит раз в час — фактическая материализация произойдёт в первый тик после
@@ -77,6 +93,80 @@ class EventSeriesMaterializer(
                 } else {
                     materialize(s, probe, ownerId)
                     lastMaterialized = probe
+                }
+            }
+            probe = probe.plusDays(1)
+        }
+
+        if (lastMaterialized != null) {
+            s.lastMaterializedFor = lastMaterialized
+            seriesRepo.save(s)
+        }
+    }
+
+    /**
+     * Режим "в конце недели": материализовать в воскресенье в `materializeAtTime` для всех игр
+     * следующей недели (Понедельник..Воскресенье).
+     *
+     * Initial phase: если серия только что создана (`lastMaterializedFor == null`), а ближайшая
+     * игра наступает ДО следующего воскресенья — материализуем её сразу. Иначе уведомление
+     * молча сгорело бы (например, серия "по четвергам" создана в среду — игра завтра, а
+     * следующее воскресенье уже после игры).
+     */
+    private fun materializeWeeklySunday(
+        s: EventSeries,
+        ownerId: java.util.UUID,
+        days: Set<java.time.DayOfWeek>,
+        nowUtcInstant: java.time.Instant,
+        nowLocal: LocalDateTime,
+        tz: ZoneId,
+    ) {
+        val today = nowLocal.toLocalDate()
+        val nowTime = nowLocal.toLocalTime()
+        val isInitial = s.lastMaterializedFor == null
+
+        // Ближайшее воскресенье включительно (если сегодня воскресенье — это сегодня).
+        val daysUntilSunday = (7 - today.dayOfWeek.value) % 7   // Sun(7)→0, Mon(1)→6, Sat(6)→1
+        val upcomingSunday = today.plusDays(daysUntilSunday.toLong())
+
+        // Это "регулярный тик в воскресенье после materializeAtTime"?
+        val isSundayTrigger = today.dayOfWeek == java.time.DayOfWeek.SUNDAY &&
+            !nowTime.isBefore(s.materializeAtTime)
+
+        // Если не initial и не воскресный тик — нечего делать.
+        if (!isInitial && !isSundayTrigger) return
+
+        // Стартовая дата перебора.
+        val startFromDate = (s.lastMaterializedFor?.plusDays(1)) ?: today
+        // Горизонт: следующее воскресенье + 7 дней (т.е. вся следующая неделя).
+        val horizonDate = upcomingSunday.plusDays(7)
+
+        var probe: LocalDate = startFromDate
+        var lastMaterialized: LocalDate? = null
+
+        while (!probe.isAfter(horizonDate)) {
+            val dow = probe.dayOfWeek
+            if (dow in days) {
+                val startInstant = LocalDateTime.of(probe, s.startTime).atZone(tz).toInstant()
+                if (startInstant.isBefore(nowUtcInstant)) {
+                    // Уже прошла.
+                } else {
+                    val shouldMaterialize = if (isInitial && !isSundayTrigger) {
+                        // Initial-фаза среди недели: материализуем только до ближайшего
+                        // воскресенья включительно (срочные игры). Игры после воскресенья
+                        // обработаются обычным воскресным тиком.
+                        !probe.isAfter(upcomingSunday)
+                    } else {
+                        // Воскресный тик: материализуем всю следующую неделю.
+                        // Если воскресенье ещё не наступило для какой-то игры этой недели —
+                        // тоже включаем (на случай если series создана в субботу и
+                        // ближайшее "сегодня воскресенье" — это и есть isSundayTrigger).
+                        true
+                    }
+                    if (shouldMaterialize) {
+                        materialize(s, probe, ownerId)
+                        lastMaterialized = probe
+                    }
                 }
             }
             probe = probe.plusDays(1)

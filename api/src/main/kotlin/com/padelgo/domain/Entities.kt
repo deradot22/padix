@@ -188,6 +188,14 @@ class EventSeries(
     @Column(name = "materialize_at_time", nullable = false)
     var materializeAtTime: LocalTime = LocalTime.of(9, 0),
 
+    /**
+     * Режим материализации:
+     *  - HOURS_BEFORE   — за `materializeHoursBefore` часов до игры (старое поведение).
+     *  - WEEKLY_SUNDAY  — в воскресенье в `materializeAtTime` для игр следующей недели.
+     */
+    @Column(name = "materialize_mode", nullable = false, length = 32)
+    var materializeMode: String = "HOURS_BEFORE",
+
     @Column(name = "active", nullable = false)
     var active: Boolean = true,
 

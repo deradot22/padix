@@ -27,6 +27,9 @@ interface TelegramChatRepository : JpaRepository<TelegramChat, UUID> {
 
 interface EventTelegramPostRepository : JpaRepository<EventTelegramPost, UUID> {
     fun findAllByEventId(eventId: UUID): List<EventTelegramPost>
+
+    /** Все ранее закреплённые посты в этом telegram-чате (для unpin при новом анонсе). */
+    fun findAllByTelegramChatIdAndPinnedMessageIdIsNotNull(telegramChatId: UUID): List<EventTelegramPost>
 }
 
 interface TelegramPollingStateRepository : JpaRepository<TelegramPollingState, Short>

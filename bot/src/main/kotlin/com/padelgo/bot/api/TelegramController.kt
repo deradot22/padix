@@ -68,11 +68,12 @@ data class TelegramSettingsResponse(
     val reminderHours: Int,
     val quietHoursStart: LocalTime?,
     val quietHoursEnd: LocalTime?,
-    val timezone: String
+    val timezone: String,
+    val pinAnnouncement: Boolean
 ) {
     companion object {
         fun from(s: TelegramUserSettingsInfo) = TelegramSettingsResponse(
-            s.enabled, s.reminderHours, s.quietHoursStart, s.quietHoursEnd, s.timezone
+            s.enabled, s.reminderHours, s.quietHoursStart, s.quietHoursEnd, s.timezone, s.pinAnnouncement
         )
     }
 }
@@ -83,7 +84,8 @@ data class UpdateSettingsRequest(
     val quietHoursStart: LocalTime? = null,
     val quietHoursEnd: LocalTime? = null,
     val quietHoursDisabled: Boolean? = null,
-    val timezone: String? = null
+    val timezone: String? = null,
+    val pinAnnouncement: Boolean? = null
 )
 
 data class UpdateChatPreferencesRequest(
@@ -135,7 +137,8 @@ class TelegramController(
                 quietHoursStart = req.quietHoursStart,
                 quietHoursEnd = req.quietHoursEnd,
                 quietHoursDisabled = req.quietHoursDisabled,
-                timezone = req.timezone
+                timezone = req.timezone,
+                pinAnnouncement = req.pinAnnouncement
             )
         )
         return TelegramSettingsResponse.from(updated)

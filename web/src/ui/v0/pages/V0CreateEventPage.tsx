@@ -29,6 +29,7 @@ export function V0CreateEventPage(props: {
   const [daysOfWeek, setDaysOfWeek] = useState<Set<string>>(new Set());
   const [materializeHoursBefore, setMaterializeHoursBefore] = useState(168);
   const [materializeAtHour, setMaterializeAtHour] = useState(9);
+  const [materializeMode, setMaterializeMode] = useState<"HOURS_BEFORE" | "WEEKLY_SUNDAY">("HOURS_BEFORE");
   const [title, setTitle] = useState("Американка");
   const [date, setDate] = useState(todayIso());
   const [startHour, setStartHour] = useState("19");
@@ -95,6 +96,7 @@ export function V0CreateEventPage(props: {
         setMaterializeHoursBefore(s.materializeHoursBefore);
         const matH = parseInt(s.materializeAtTime?.slice(0, 2) ?? "9", 10);
         if (!Number.isNaN(matH)) setMaterializeAtHour(matH);
+        setMaterializeMode(s.materializeMode ?? "HOURS_BEFORE");
         setGameMode(s.pairingMode === "BALANCED" ? "balanced" : "round_robin");
       } catch (e: any) {
         setError(e?.message ?? "Не удалось загрузить подписку");
@@ -167,6 +169,7 @@ export function V0CreateEventPage(props: {
             pointsPerPlayerPerMatch: pointsPerPlayer,
             visibility,
             materializeHoursBefore,
+            materializeMode,
           } as any);
           nav(`/settings?tab=subscriptions&highlight=${editSeriesId}`);
           return;
@@ -184,6 +187,7 @@ export function V0CreateEventPage(props: {
           visibility,
           materializeHoursBefore,
           materializeAtTime: `${String(materializeAtHour).padStart(2, "0")}:00`,
+          materializeMode,
         });
         nav(`/settings?tab=subscriptions&highlight=${created.id}`);
         return;
@@ -323,8 +327,15 @@ export function V0CreateEventPage(props: {
                     <div className="space-y-2">
                       <Label className="font-medium">Открывать регистрацию</Label>
                       <Select
-                        value={materializeHoursBefore.toString()}
-                        onValueChange={(v) => setMaterializeHoursBefore(Number(v))}
+                        value={materializeMode === "WEEKLY_SUNDAY" ? "weekly_sunday" : materializeHoursBefore.toString()}
+                        onValueChange={(v) => {
+                          if (v === "weekly_sunday") {
+                            setMaterializeMode("WEEKLY_SUNDAY");
+                          } else {
+                            setMaterializeMode("HOURS_BEFORE");
+                            setMaterializeHoursBefore(Number(v));
+                          }
+                        }}
                       >
                         <SelectTrigger className="bg-secondary border-border h-11">
                           <SelectValue />
@@ -334,6 +345,7 @@ export function V0CreateEventPage(props: {
                           <SelectItem value="72">за 3 дня до игры</SelectItem>
                           <SelectItem value="168">за неделю до игры</SelectItem>
                           <SelectItem value="336">за 2 недели до игры</SelectItem>
+                          <SelectItem value="weekly_sunday">в конце недели</SelectItem>
                         </SelectContent>
                       </Select>
                     </div>
