@@ -50,6 +50,8 @@ class EventSeriesService(
             materializeHoursBefore = req.materializeHoursBefore,
             materializeAtTime = req.materializeAtTime,
             materializeMode = req.materializeMode,
+            reminderHours = req.reminderHours,
+            pinAnnouncement = req.pinAnnouncement,
             active = true
         )
         return repo.save(series)
@@ -85,6 +87,14 @@ class EventSeriesService(
         req.materializeHoursBefore?.let { s.materializeHoursBefore = it }
         req.materializeAtTime?.let { s.materializeAtTime = it }
         req.materializeMode?.let { s.materializeMode = it }
+        // Per-series override уведомлений.
+        if (req.clearPinAnnouncement == true) s.pinAnnouncement = null
+        else req.pinAnnouncement?.let { s.pinAnnouncement = it }
+        if (req.clearReminderHours == true) s.reminderHours = null
+        else req.reminderHours?.let {
+            if (it < 0 || it > 168) throw ApiException(HttpStatus.BAD_REQUEST, "reminderHours must be 0..168")
+            s.reminderHours = it
+        }
         validate(s.title, s.daysOfWeek, s.startTime, s.endTime, s.timezone,
             s.materializeHoursBefore, s.materializeMode)
         return repo.save(s)
@@ -180,7 +190,10 @@ data class CreateEventSeriesRequest(
     val visibility: EventVisibility = EventVisibility.PRIVATE,
     val materializeHoursBefore: Int = 168,   // за неделю до игры по умолчанию
     val materializeAtTime: LocalTime = LocalTime.of(9, 0), // в 09:00 локального времени автора
-    val materializeMode: String = "HOURS_BEFORE"           // или "WEEKLY_SUNDAY" — "в конце недели"
+    val materializeMode: String = "HOURS_BEFORE",          // или "WEEKLY_SUNDAY" — "в конце недели"
+    // Per-series override уведомлений; null → использовать глобальные telegram_user_settings.
+    val reminderHours: Int? = null,
+    val pinAnnouncement: Boolean? = null
 )
 
 data class UpdateEventSeriesRequest(
@@ -196,5 +209,17 @@ data class UpdateEventSeriesRequest(
     val visibility: EventVisibility? = null,
     val materializeHoursBefore: Int? = null,
     val materializeAtTime: LocalTime? = null,
-    val materializeMode: String? = null
+    val materializeMode: String? = null,
+    // Для override: явный sentinel = передать null чтобы "сбросить", иначе not-in-request.
+    // Используем Optional-style: ключ есть → применить. Здесь Kotlin nullable значит ровно
+    // это (если поле не пришло в JSON — Jackson оставит null и мы пропустим), а если
+    // пользователь хочет "сбросить" — он отправит -1 / clear-флаг. Для простоты сейчас:
+    // null = не менять; если нужно "вернуть в глобал" — фронт шлёт "global" → парсим как
+    // null (см. логику ниже).
+    val reminderHours: Int? = null,
+    val pinAnnouncement: Boolean? = null,
+    /** Если true — pinAnnouncement сбрасывается в null (использовать глобальное). */
+    val clearPinAnnouncement: Boolean? = null,
+    /** Если true — reminderHours сбрасывается в null (использовать глобальное). */
+    val clearReminderHours: Boolean? = null
 )

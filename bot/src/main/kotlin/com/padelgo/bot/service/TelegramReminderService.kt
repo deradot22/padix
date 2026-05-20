@@ -20,7 +20,8 @@ class TelegramReminderService(
     private val regRepo: BotRegistrationRepository,
     private val playerRepo: BotPlayerRepository,
     private val postRepo: EventTelegramPostRepository,
-    private val telegramService: TelegramService
+    private val telegramService: TelegramService,
+    private val seriesRepo: com.padelgo.bot.repo.BotEventSeriesRepository
 ) {
     private val log = LoggerFactory.getLogger(TelegramReminderService::class.java)
 
@@ -41,11 +42,19 @@ class TelegramReminderService(
 
                 val settings = telegramService.getOrCreateSettings(ownerId)
                 if (!settings.enabled) continue
-                if (settings.reminderHours <= 0) continue
+
+                // Per-series override (если игра из серии и там указан reminder_hours) →
+                // используется он. Иначе — глобальный telegram_user_settings.reminder_hours.
+                val seriesId = event.seriesId
+                val seriesReminder = if (seriesId != null) {
+                    seriesRepo.findById(seriesId).orElse(null)?.reminderHours
+                } else null
+                val reminderHours = seriesReminder ?: settings.reminderHours
+                if (reminderHours <= 0) continue
 
                 val tz = try { ZoneId.of(settings.timezone) } catch (_: Exception) { ZoneId.of("UTC") }
                 val startInstant = LocalDateTime.of(event.date, event.startTime).atZone(tz).toInstant()
-                val reminderInstant = startInstant.minus(Duration.ofHours(settings.reminderHours.toLong()))
+                val reminderInstant = startInstant.minus(Duration.ofHours(reminderHours.toLong()))
 
                 if (now.isBefore(reminderInstant)) continue
                 if (!now.isBefore(startInstant)) continue
@@ -59,7 +68,7 @@ class TelegramReminderService(
                 // а не в групповые чаты, куда был отправлен анонс.
                 val sent = telegramService.postEventReminderToParticipants(
                     event = event,
-                    hoursBeforeStart = settings.reminderHours,
+                    hoursBeforeStart = reminderHours,
                     participants = participants
                 )
                 if (sent > 0) {

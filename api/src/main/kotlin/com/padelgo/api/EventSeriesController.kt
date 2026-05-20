@@ -48,7 +48,9 @@ class EventSeriesController(
                 visibility = req.visibility ?: EventVisibility.PRIVATE,
                 materializeHoursBefore = req.materializeHoursBefore ?: 168,
                 materializeAtTime = req.materializeAtTime ?: LocalTime.of(9, 0),
-                materializeMode = req.materializeMode ?: "HOURS_BEFORE"
+                materializeMode = req.materializeMode ?: "HOURS_BEFORE",
+                reminderHours = req.reminderHours,
+                pinAnnouncement = req.pinAnnouncement
             )
         )
         // Initial phase: запускаем материализатор сразу, не ждём следующий cron. Это нужно
@@ -88,7 +90,11 @@ class EventSeriesController(
                 visibility = req.visibility,
                 materializeHoursBefore = req.materializeHoursBefore,
                 materializeAtTime = req.materializeAtTime,
-                materializeMode = req.materializeMode
+                materializeMode = req.materializeMode,
+                reminderHours = req.reminderHours,
+                pinAnnouncement = req.pinAnnouncement,
+                clearPinAnnouncement = req.clearPinAnnouncement,
+                clearReminderHours = req.clearReminderHours
             )
         )
         return EventSeriesResponse.from(updated)
@@ -136,7 +142,10 @@ data class CreateEventSeriesBody(
     val visibility: EventVisibility? = null,
     val materializeHoursBefore: Int? = null,
     val materializeAtTime: LocalTime? = null,
-    val materializeMode: String? = null
+    val materializeMode: String? = null,
+    // Per-series notifications (null → using global telegram_user_settings).
+    val reminderHours: Int? = null,
+    val pinAnnouncement: Boolean? = null
 )
 
 data class UpdateEventSeriesBody(
@@ -152,7 +161,13 @@ data class UpdateEventSeriesBody(
     val visibility: EventVisibility? = null,
     val materializeHoursBefore: Int? = null,
     val materializeAtTime: LocalTime? = null,
-    val materializeMode: String? = null
+    val materializeMode: String? = null,
+    val reminderHours: Int? = null,
+    val pinAnnouncement: Boolean? = null,
+    /** Если true — сбросить per-series pin override и использовать глобальное. */
+    val clearPinAnnouncement: Boolean? = null,
+    /** Если true — сбросить per-series reminder override и использовать глобальное. */
+    val clearReminderHours: Boolean? = null
 )
 
 data class EventSeriesResponse(
@@ -170,6 +185,10 @@ data class EventSeriesResponse(
     val materializeHoursBefore: Int,
     val materializeAtTime: LocalTime,
     val materializeMode: String,
+    /** Per-series override напоминания (null → используется глобальное). */
+    val reminderHours: Int?,
+    /** Per-series override закрепления анонса (null → используется глобальное). */
+    val pinAnnouncement: Boolean?,
     val active: Boolean,
     val lastMaterializedFor: java.time.LocalDate?
 ) {
@@ -189,6 +208,8 @@ data class EventSeriesResponse(
             materializeHoursBefore = s.materializeHoursBefore,
             materializeAtTime = s.materializeAtTime,
             materializeMode = s.materializeMode,
+            reminderHours = s.reminderHours,
+            pinAnnouncement = s.pinAnnouncement,
             active = s.active,
             lastMaterializedFor = s.lastMaterializedFor
         )

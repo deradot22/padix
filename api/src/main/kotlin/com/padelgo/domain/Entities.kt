@@ -196,6 +196,18 @@ class EventSeries(
     @Column(name = "materialize_mode", nullable = false, length = 32)
     var materializeMode: String = "HOURS_BEFORE",
 
+    /**
+     * Per-series override для напоминания участникам. NULL → используются глобальные
+     * `telegram_user_settings.reminder_hours`. Иначе — это значение применяется к
+     * events из этой серии.
+     */
+    @Column(name = "reminder_hours")
+    var reminderHours: Int? = null,
+
+    /** Per-series override для закрепления анонса в группах. NULL → глобальный default. */
+    @Column(name = "pin_announcement")
+    var pinAnnouncement: Boolean? = null,
+
     @Column(name = "active", nullable = false)
     var active: Boolean = true,
 

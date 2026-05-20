@@ -207,6 +207,10 @@ export function TelegramIntegrationCard() {
             <div className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
               Когда уведомлять
             </div>
+            <p className="text-xs text-muted-foreground -mt-1">
+              Для обычных одноразовых игр. У серий настройки задаются отдельно при создании
+              серии.
+            </p>
 
             <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-3">
               <div className="flex items-center gap-2 sm:flex-1">

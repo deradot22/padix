@@ -32,6 +32,8 @@ interface EventTelegramPostRepository : JpaRepository<EventTelegramPost, UUID> {
     fun findAllByTelegramChatIdAndPinnedMessageIdIsNotNull(telegramChatId: UUID): List<EventTelegramPost>
 }
 
+interface BotEventSeriesRepository : org.springframework.data.jpa.repository.JpaRepository<com.padelgo.bot.domain.BotEventSeries, UUID>
+
 interface TelegramPollingStateRepository : JpaRepository<TelegramPollingState, Short>
 
 interface TelegramUserSettingsRepository : JpaRepository<TelegramUserSettings, UUID>

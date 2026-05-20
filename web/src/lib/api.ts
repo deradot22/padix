@@ -56,6 +56,10 @@ export type EventSeries = {
   materializeAtTime: string;   // "HH:mm" — час локального времени автора, когда летит анонс
   /** Режим: HOURS_BEFORE (за N часов до игры) или WEEKLY_SUNDAY ("в конце недели" = воскресенье). */
   materializeMode: "HOURS_BEFORE" | "WEEKLY_SUNDAY";
+  /** Per-series override напоминания. null → берём из глобальных Telegram-настроек. */
+  reminderHours?: number | null;
+  /** Per-series override закрепления анонса. null → берём из глобальных Telegram-настроек. */
+  pinAnnouncement?: boolean | null;
   active: boolean;
   lastMaterializedFor?: string | null;
 };
@@ -442,12 +446,22 @@ export const api = {
     materializeHoursBefore?: number;
     materializeAtTime?: string;
     materializeMode?: "HOURS_BEFORE" | "WEEKLY_SUNDAY";
+    reminderHours?: number | null;
+    pinAnnouncement?: boolean | null;
   }) =>
     request<EventSeries>("/api/event-series", {
       method: "POST",
       body: JSON.stringify(payload),
     }),
-  updateEventSeries: (id: string, payload: Partial<EventSeries>) =>
+  updateEventSeries: (
+    id: string,
+    payload: Partial<EventSeries> & {
+      /** Сбросить per-series pin override (использовать глобальное). */
+      clearPinAnnouncement?: boolean;
+      /** Сбросить per-series reminderHours override (использовать глобальное). */
+      clearReminderHours?: boolean;
+    }
+  ) =>
     request<EventSeries>(`/api/event-series/${id}`, {
       method: "PATCH",
       body: JSON.stringify(payload),

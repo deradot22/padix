@@ -51,8 +51,32 @@ class BotEvent(
     @Column(name = "created_by_user_id")
     var createdByUserId: UUID? = null,
 
+    /** FK на event_series.id, если ивент материализован из серии. */
+    @Column(name = "series_id")
+    var seriesId: UUID? = null,
+
     @Column(name = "reminder_sent_at")
     var reminderSentAt: Instant? = null
+)
+
+/**
+ * Read-only слепок event_series — нужен боту, чтобы найти per-series override
+ * настроек уведомлений (pin_announcement, reminder_hours). Bot НЕ обновляет эту
+ * таблицу — управление через api.
+ */
+@Entity
+@Table(name = "event_series")
+class BotEventSeries(
+    @Id
+    @Column(name = "id", nullable = false)
+    var id: UUID? = null,
+
+    /** Per-series override. null → использовать глобальный telegram_user_settings. */
+    @Column(name = "reminder_hours")
+    var reminderHours: Int? = null,
+
+    @Column(name = "pin_announcement")
+    var pinAnnouncement: Boolean? = null
 )
 
 @Entity

@@ -91,7 +91,8 @@ class TelegramService(
     private val chatRepo: TelegramChatRepository,
     private val postRepo: EventTelegramPostRepository,
     private val settingsRepo: TelegramUserSettingsRepository,
-    private val userRepo: BotUserRepository
+    private val userRepo: BotUserRepository,
+    private val seriesRepo: com.padelgo.bot.repo.BotEventSeriesRepository
 ) {
     private val log = LoggerFactory.getLogger(TelegramService::class.java)
     private val random = SecureRandom()
@@ -379,10 +380,25 @@ class TelegramService(
 
         val cta = cta(eventId, "📝 Зарегистрироваться")
         val text = renderEventCreated(event, registeredCount) + cta.textSuffix
-        // Закрепляем анонс только если пользователь включил это в настройках. Перед pin
-        // снимаем предыдущий pin в каждом чате (если был от прошлой игры этого организатора).
-        val shouldPin = getOrCreateSettings(ownerUserId).pinAnnouncement
+        // Закрепляем анонс только если включено. Приоритет: per-series override → глобальный.
+        // Перед pin снимаем предыдущий pin Padix в каждом чате.
+        val shouldPin = resolvePinAnnouncement(event, ownerUserId)
         return sendAndRecord(chats, text, eventId, cta.replyMarkup, pinAfterSend = shouldPin)
+    }
+
+    /**
+     * Определяет, надо ли закреплять анонс этого события.
+     * Если событие из серии и у серии задан override `pin_announcement` — используем его.
+     * Иначе — глобальная настройка владельца.
+     */
+    private fun resolvePinAnnouncement(event: BotEvent, ownerUserId: UUID): Boolean {
+        val seriesId = event.seriesId
+        if (seriesId != null) {
+            val series = seriesRepo.findById(seriesId).orElse(null)
+            val override = series?.pinAnnouncement
+            if (override != null) return override
+        }
+        return getOrCreateSettings(ownerUserId).pinAnnouncement
     }
 
     @Transactional
@@ -668,9 +684,26 @@ class TelegramService(
         sb.append("📅 ").append(dateStr)
             .append(", ").append(formatTime(event.startTime, timeFmt))
             .append("–").append(formatTime(event.endTime, timeFmt)).append("\n")
-        sb.append("📍 Кортов: ").append(event.courtsCount)
-            .append(" · Мест: ").append(registeredCount).append("/").append(capacity)
+        sb.append("📍 Кортов: ").append(event.courtsCount).append("\n\n")
+        // Мест: отдельная строка с прогресс-баром из эмодзи — на мобильном
+        // эмодзи отображаются крупнее обычного текста, число тоже жирное.
+        sb.append(progressBar(registeredCount, capacity))
+            .append(" <b>").append(registeredCount).append("/").append(capacity).append("</b>")
         return sb.toString()
+    }
+
+    /**
+     * Прогресс-бар из эмодзи фиксированной длины 8 сегментов — на мобильном
+     * не переносится на новую строку даже при capacity > 8. Округление —
+     * к ближайшему целому, чтобы не зависало в "0 из N" при первой регистрации.
+     */
+    private fun progressBar(filled: Int, total: Int): String {
+        if (total <= 0) return ""
+        val segments = 8
+        val safeFilled = filled.coerceIn(0, total)
+        val full = if (safeFilled == 0) 0
+            else ((safeFilled * segments * 2 + total) / (total * 2)).coerceIn(0, segments)
+        return "🟩".repeat(full) + "⬜".repeat(segments - full)
     }
 
     private fun renderEventUpdated(event: BotEvent, changes: List<String>): String {

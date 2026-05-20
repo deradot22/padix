@@ -30,6 +30,10 @@ export function V0CreateEventPage(props: {
   const [materializeHoursBefore, setMaterializeHoursBefore] = useState(168);
   const [materializeAtHour, setMaterializeAtHour] = useState(9);
   const [materializeMode, setMaterializeMode] = useState<"HOURS_BEFORE" | "WEEKLY_SUNDAY">("HOURS_BEFORE");
+  // Per-series уведомления (override глобальных Telegram-настроек).
+  // null = использовать глобальные. Конкретное значение = переопределить для этой серии.
+  const [seriesReminderHours, setSeriesReminderHours] = useState<number | null>(null);
+  const [seriesPinAnnouncement, setSeriesPinAnnouncement] = useState<boolean | null>(null);
   const [title, setTitle] = useState("Американка");
   const [date, setDate] = useState(todayIso());
   const [startHour, setStartHour] = useState("19");
@@ -97,6 +101,8 @@ export function V0CreateEventPage(props: {
         const matH = parseInt(s.materializeAtTime?.slice(0, 2) ?? "9", 10);
         if (!Number.isNaN(matH)) setMaterializeAtHour(matH);
         setMaterializeMode(s.materializeMode ?? "HOURS_BEFORE");
+        setSeriesReminderHours(s.reminderHours ?? null);
+        setSeriesPinAnnouncement(s.pinAnnouncement ?? null);
         setGameMode(s.pairingMode === "BALANCED" ? "balanced" : "round_robin");
       } catch (e: any) {
         setError(e?.message ?? "Не удалось загрузить подписку");
@@ -170,7 +176,14 @@ export function V0CreateEventPage(props: {
             visibility,
             materializeHoursBefore,
             materializeMode,
-          } as any);
+            // Per-series override уведомлений. null = сбросить (использовать глобальные).
+            ...(seriesReminderHours === null
+              ? { clearReminderHours: true }
+              : { reminderHours: seriesReminderHours }),
+            ...(seriesPinAnnouncement === null
+              ? { clearPinAnnouncement: true }
+              : { pinAnnouncement: seriesPinAnnouncement }),
+          });
           nav(`/settings?tab=subscriptions&highlight=${editSeriesId}`);
           return;
         }
@@ -188,6 +201,9 @@ export function V0CreateEventPage(props: {
           materializeHoursBefore,
           materializeAtTime: `${String(materializeAtHour).padStart(2, "0")}:00`,
           materializeMode,
+          // Per-series override уведомлений (null → бэк сохранит null → использует глобальные).
+          reminderHours: seriesReminderHours,
+          pinAnnouncement: seriesPinAnnouncement,
         });
         nav(`/settings?tab=subscriptions&highlight=${created.id}`);
         return;
@@ -433,6 +449,67 @@ export function V0CreateEventPage(props: {
                   <p className="text-xs text-muted-foreground">
                     Игра автоматически создаётся для каждой выбранной даты, регистрация открывается в заданный момент.
                   </p>
+                </div>
+              )}
+
+              {recurring && (
+                <div className="rounded-lg border border-border bg-secondary/20 p-4 space-y-3">
+                  <div className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                    Уведомления этой серии
+                  </div>
+                  <p className="text-xs text-muted-foreground -mt-1">
+                    Переопределяют глобальные настройки Telegram только для игр из этой серии.
+                  </p>
+
+                  <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-3">
+                    <div className="text-sm sm:flex-1">Напоминание участникам</div>
+                    <Select
+                      value={seriesReminderHours === null ? "global" : String(seriesReminderHours)}
+                      onValueChange={(v) =>
+                        setSeriesReminderHours(v === "global" ? null : Number(v))
+                      }
+                    >
+                      <SelectTrigger className="w-full sm:w-[200px] h-9">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="global">Как в общих настройках</SelectItem>
+                        <SelectItem value="0">Не отправлять</SelectItem>
+                        <SelectItem value="1">За 1 час</SelectItem>
+                        <SelectItem value="2">За 2 часа</SelectItem>
+                        <SelectItem value="6">За 6 часов</SelectItem>
+                        <SelectItem value="24">За сутки</SelectItem>
+                        <SelectItem value="48">За двое суток</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-3">
+                    <div className="text-sm sm:flex-1">Закреплять анонс в группах</div>
+                    <Select
+                      value={
+                        seriesPinAnnouncement === null
+                          ? "global"
+                          : seriesPinAnnouncement
+                            ? "yes"
+                            : "no"
+                      }
+                      onValueChange={(v) =>
+                        setSeriesPinAnnouncement(
+                          v === "global" ? null : v === "yes" ? true : false,
+                        )
+                      }
+                    >
+                      <SelectTrigger className="w-full sm:w-[200px] h-9">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="global">Как в общих настройках</SelectItem>
+                        <SelectItem value="yes">Закреплять</SelectItem>
+                        <SelectItem value="no">Не закреплять</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
                 </div>
               )}
 
