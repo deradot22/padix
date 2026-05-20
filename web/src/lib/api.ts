@@ -16,6 +16,8 @@ export type Player = {
   avatarUrl?: string | null;
 };
 
+export type EventVisibility = "PRIVATE" | "PUBLIC";
+
 export type Event = {
   id: string;
   title: string;
@@ -33,6 +35,27 @@ export type Event = {
   setsPerMatch: number;
   gamesPerSet: number;
   tiebreakEnabled: boolean;
+  visibility: EventVisibility;
+  seriesId?: string | null;
+  seriesTitle?: string | null;
+};
+
+export type EventSeries = {
+  id: string;
+  title: string;
+  daysOfWeek: string;
+  startTime: string;
+  endTime: string;
+  timezone: string;
+  courtsCount: number;
+  pairingMode: PairingMode;
+  scoringMode: ScoringMode;
+  pointsPerPlayerPerMatch: number;
+  visibility: EventVisibility;
+  materializeHoursBefore: number;
+  materializeAtTime: string;   // "HH:mm" — час локального времени автора, когда летит анонс
+  active: boolean;
+  lastMaterializedFor?: string | null;
 };
 
 export type PointsScore = { teamAPoints: number; teamBPoints: number };
@@ -391,11 +414,45 @@ export const api = {
     scoringMode: "POINTS" | "SETS";
     pointsPerPlayerPerMatch?: number;
     telegramChatIds?: string[];
+    visibility?: EventVisibility;
   }) =>
     request<Event>("/api/events", {
       method: "POST",
       body: JSON.stringify(payload),
     }),
+
+  // ---------- Event series ----------
+  listEventSeries: () => request<EventSeries[]>("/api/event-series"),
+  getEventSeries: (id: string) => request<EventSeries>(`/api/event-series/${id}`),
+  createEventSeries: (payload: {
+    title: string;
+    daysOfWeek: string;            // "MON,WED,FRI"
+    startTime: string;
+    endTime: string;
+    timezone?: string;
+    courtsCount?: number;
+    pairingMode?: PairingMode;
+    scoringMode?: "POINTS" | "SETS";
+    pointsPerPlayerPerMatch?: number;
+    visibility?: EventVisibility;
+    materializeHoursBefore?: number;
+    materializeAtTime?: string;
+  }) =>
+    request<EventSeries>("/api/event-series", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
+  updateEventSeries: (id: string, payload: Partial<EventSeries>) =>
+    request<EventSeries>(`/api/event-series/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify(payload),
+    }),
+  pauseEventSeries: (id: string) =>
+    request<EventSeries>(`/api/event-series/${id}/pause`, { method: "POST" }),
+  resumeEventSeries: (id: string) =>
+    request<EventSeries>(`/api/event-series/${id}/resume`, { method: "POST" }),
+  deleteEventSeries: (id: string) =>
+    request(`/api/event-series/${id}`, { method: "DELETE" }),
 
   // ---------- Telegram integration ----------
   getTelegramStatus: () => request<TelegramStatus>("/api/telegram/status"),

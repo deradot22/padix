@@ -123,7 +123,7 @@ export function App() {
 
   if (!meLoaded) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-background">
+      <div className="flex min-h-dvh items-center justify-center bg-background">
         <div className="text-muted-foreground text-sm">Загрузка…</div>
       </div>
     );

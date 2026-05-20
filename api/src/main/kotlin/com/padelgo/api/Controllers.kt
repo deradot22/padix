@@ -88,7 +88,8 @@ class EventController(
                 pointsPerPlayerPerMatch = req.pointsPerPlayerPerMatch,
                 setsPerMatch = req.setsPerMatch,
                 gamesPerSet = req.gamesPerSet,
-                tiebreakEnabled = req.tiebreakEnabled
+                tiebreakEnabled = req.tiebreakEnabled,
+                visibility = req.visibility
             ),
             userId,
             req.courtNames
@@ -118,14 +119,17 @@ class EventController(
 
     @Operation(summary = "Игры на сегодня")
     @GetMapping("/today")
-    fun today(): List<EventResponse> =
-        service.getToday(LocalDate.now()).map { e ->
-            EventResponse.from(e, service.getRegisteredCount(e.id!!))
-        }
+    fun today(): List<EventResponse> {
+        val events = service.getToday(LocalDate.now())
+            .let { service.filterVisibleFor(it, currentUserIdOrNull()) }
+        val titles = service.seriesTitles(events)
+        return events.map { e -> EventResponse.from(e, service.getRegisteredCount(e.id!!), titles[e.seriesId]) }
+    }
 
     @Operation(
         summary = "Предстоящие игры",
-        description = "По умолчанию: от сегодня до +14 дней. Параметры from/to задают диапазон дат (YYYY-MM-DD)."
+        description = "По умолчанию: от сегодня до +14 дней. Параметры from/to задают диапазон дат (YYYY-MM-DD). " +
+            "PRIVATE-игры показываются только их участникам/приглашённым/автору; PUBLIC — всем."
     )
     @GetMapping("/upcoming")
     fun upcoming(
@@ -136,9 +140,15 @@ class EventController(
     ): List<EventResponse> {
         val start = from?.let { LocalDate.parse(it) } ?: LocalDate.now()
         val end = to?.let { LocalDate.parse(it) } ?: start.plusDays(14)
-        return service.getUpcoming(start, end).map { e ->
-            EventResponse.from(e, service.getRegisteredCount(e.id!!))
-        }
+        val events = service.getUpcoming(start, end)
+            .let { service.filterVisibleFor(it, currentUserIdOrNull()) }
+        val titles = service.seriesTitles(events)
+        return events.map { e -> EventResponse.from(e, service.getRegisteredCount(e.id!!), titles[e.seriesId]) }
+    }
+
+    private fun currentUserIdOrNull(): UUID? {
+        val p = org.springframework.security.core.context.SecurityContextHolder.getContext().authentication?.principal
+        return if (p is com.padelgo.auth.JwtPrincipal) p.userId else null
     }
 
     @Operation(summary = "Обновить параметры игры (только организатор)")
@@ -348,8 +358,9 @@ class EventController(
         val isAuthor = service.isAuthor(eventId, principalUserId())
         val authorName = service.getAuthorName(eventId) ?: if (isAuthor) "Вы" else "Не указан"
         val registeredCount = service.getRegisteredCount(eventId)
+        val seriesTitle = service.seriesTitles(listOf(event))[event.seriesId]
         return EventDetailsResponse(
-            EventResponse.from(event, registeredCount),
+            EventResponse.from(event, registeredCount, seriesTitle),
             roundDtos,
             regs.map { p ->
                 val calibration = usersByPlayerId[p.id]?.calibrationMatchesRemaining

@@ -424,6 +424,17 @@ export function Header(props: {
                   type="button"
                   onClick={() => {
                     setSettingsOpen(false);
+                    nav("/settings");
+                  }}
+                  className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm font-medium text-muted-foreground hover:bg-secondary/50 hover:text-foreground transition-colors"
+                >
+                  <Settings className="h-4 w-4" />
+                  Настройки
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSettingsOpen(false);
                     props.onLogout?.();
                   }}
                   className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm font-medium text-muted-foreground hover:bg-secondary/50 hover:text-foreground transition-colors"

@@ -37,8 +37,15 @@ enum class FriendRequestStatus {
     PENDING,
     ACCEPTED,
     DECLINED
-}enum class InviteStatus {
+}
+
+enum class InviteStatus {
     PENDING,
     ACCEPTED,
     DECLINED
+}
+
+enum class EventVisibility {
+    PRIVATE,
+    PUBLIC
 }

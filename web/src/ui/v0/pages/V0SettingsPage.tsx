@@ -1,23 +1,26 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
-import { api, MeResponse, TelegramChat, TelegramSettings, TelegramStatus } from "../../../lib/api";
+import { api, EventSeries, MeResponse, TelegramChat, TelegramSettings, TelegramStatus } from "../../../lib/api";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { useConfirm } from "@/components/ui/confirm-dialog";
 import { TelegramIntegrationCard } from "@/components/telegram-integration";
-import { User, Bell, ShieldCheck, Upload, Check, Send, ChevronLeft, ChevronRight, BellOff, BellRing } from "lucide-react";
+import { User, Bell, ShieldCheck, Upload, Check, Send, ChevronLeft, ChevronRight, BellOff, BellRing, Repeat, Pause, Play, Trash2, Plus, Pencil } from "lucide-react";
 
-type SectionId = "profile" | "notifications" | "security";
+type SectionId = "profile" | "notifications" | "subscriptions" | "security";
 
 const SECTIONS: { id: SectionId; label: string; icon: typeof User }[] = [
   { id: "profile", label: "Профиль", icon: User },
   { id: "notifications", label: "Уведомления", icon: Bell },
+  { id: "subscriptions", label: "Подписки", icon: Repeat },
   { id: "security", label: "Безопасность", icon: ShieldCheck },
 ];
 
 function isSectionId(v: string | null): v is SectionId {
-  return v === "profile" || v === "notifications" || v === "security";
+  return v === "profile" || v === "notifications" || v === "subscriptions" || v === "security";
 }
 
 export function V0SettingsPage(props: {
@@ -54,8 +57,8 @@ export function V0SettingsPage(props: {
       <div className="grid gap-6 md:grid-cols-[220px_1fr]">
         {/* Mobile: pill-tabs в общем контейнере. Десктоп: вертикальный sidebar. */}
         <nav className="md:sticky md:top-20 self-start">
-          <div className="md:hidden flex gap-1 rounded-lg bg-secondary/40 p-1">
-            {SECTIONS.map(({ id, label, icon: Icon }) => {
+          <div className="md:hidden grid grid-cols-4 gap-1 rounded-lg bg-secondary/40 p-1">
+            {SECTIONS.map(({ id, label }) => {
               const active = section === id;
               return (
                 <button
@@ -63,13 +66,12 @@ export function V0SettingsPage(props: {
                   type="button"
                   onClick={() => setSection(id)}
                   className={cn(
-                    "flex-1 flex items-center justify-center gap-1.5 rounded-md px-2 py-2 text-xs sm:text-sm transition-colors whitespace-nowrap",
+                    "min-w-0 rounded-md px-1 py-2 text-xs transition-colors text-center truncate",
                     active
                       ? "bg-background text-foreground font-medium shadow-sm"
                       : "text-muted-foreground"
                   )}
                 >
-                  <Icon className="h-4 w-4 shrink-0" />
                   {label}
                 </button>
               );
@@ -104,6 +106,7 @@ export function V0SettingsPage(props: {
             <ProfileSection me={props.me} onMeUpdate={props.onMeUpdate} />
           )}
           {section === "notifications" && <NotificationsSection />}
+          {section === "subscriptions" && <SubscriptionsSection />}
           {section === "security" && <SecuritySection />}
         </div>
       </div>
@@ -319,15 +322,16 @@ function ProfileSection(props: {
           </div>
           <div className="space-y-2">
             <label className="text-sm font-medium">Пол</label>
-            <select
-              className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-              value={gender ?? ""}
-              onChange={(e) => setGender(e.target.value)}
-            >
-              <option value="">Не указан</option>
-              <option value="M">М</option>
-              <option value="F">Ж</option>
-            </select>
+            <Select value={gender || "_unset"} onValueChange={(v) => setGender(v === "_unset" ? "" : v)}>
+              <SelectTrigger className="h-10">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="_unset">Не указан</SelectItem>
+                <SelectItem value="M">М</SelectItem>
+                <SelectItem value="F">Ж</SelectItem>
+              </SelectContent>
+            </Select>
           </div>
 
           {error && (
@@ -566,6 +570,207 @@ function ChannelButton(props: {
       </div>
       <ChevronRight className="h-4 w-4 text-muted-foreground shrink-0" />
     </button>
+  );
+}
+
+// ---------- Subscriptions section ----------
+
+const DAY_LABELS: Record<string, string> = {
+  MON: "Пн", TUE: "Вт", WED: "Ср", THU: "Чт", FRI: "Пт", SAT: "Сб", SUN: "Вс",
+};
+
+function formatDays(csv: string): string {
+  return csv
+    .split(",")
+    .map((d) => d.trim().toUpperCase())
+    .filter(Boolean)
+    .map((d) => DAY_LABELS[d] ?? d)
+    .join(" · ");
+}
+
+function formatTime(t: string): string {
+  return t.slice(0, 5);
+}
+
+function hoursLabel(h: number): string {
+  if (h === 24) return "за 1 день";
+  if (h === 72) return "за 3 дня";
+  if (h === 168) return "за неделю";
+  if (h === 336) return "за 2 недели";
+  return `за ${h} ч`;
+}
+
+function SubscriptionsSection() {
+  const nav = useNavigate();
+  const [items, setItems] = useState<EventSeries[] | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [busyId, setBusyId] = useState<string | null>(null);
+  const confirm = useConfirm();
+
+  const reload = async () => {
+    try {
+      const list = await api.listEventSeries();
+      setItems(list);
+    } catch (e: any) {
+      setError(e?.message ?? "Не удалось загрузить подписки");
+    }
+  };
+
+  useEffect(() => {
+    reload();
+  }, []);
+
+  const togglePause = async (s: EventSeries) => {
+    setBusyId(s.id);
+    try {
+      const updated = s.active ? await api.pauseEventSeries(s.id) : await api.resumeEventSeries(s.id);
+      setItems((prev) => (prev ?? []).map((x) => (x.id === s.id ? updated : x)));
+    } catch (e: any) {
+      setError(e?.message ?? "Не удалось обновить");
+    } finally {
+      setBusyId(null);
+    }
+  };
+
+  const remove = async (s: EventSeries) => {
+    const ok = await confirm({
+      title: "Удалить подписку?",
+      description: (
+        <>
+          Подписка <b>{s.title}</b> будет удалена. Уже созданные ею игры останутся —
+          их можно удалить вручную через страницу игры.
+        </>
+      ),
+      confirmLabel: "Удалить",
+      confirmVariant: "destructive",
+    });
+    if (!ok) return;
+    setBusyId(s.id);
+    try {
+      await api.deleteEventSeries(s.id);
+      setItems((prev) => (prev ?? []).filter((x) => x.id !== s.id));
+    } catch (e: any) {
+      setError(e?.message ?? "Не удалось удалить");
+    } finally {
+      setBusyId(null);
+    }
+  };
+
+  return (
+    <Card className="border-border/50">
+      <CardHeader>
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <CardTitle>Подписки на регулярные игры</CardTitle>
+            <CardDescription>
+              Шаблоны, по которым система автоматически создаёт игры в выбранные дни недели.
+            </CardDescription>
+          </div>
+          <Button size="sm" onClick={() => nav("/create?recurring=1")} className="shrink-0">
+            <Plus className="h-4 w-4 mr-1" />
+            <span className="hidden sm:inline">Создать</span>
+          </Button>
+        </div>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        {error && (
+          <div className="rounded-lg border border-destructive/30 bg-destructive/10 p-3 text-sm">{error}</div>
+        )}
+
+        {items === null ? (
+          <div className="text-sm text-muted-foreground">Загрузка…</div>
+        ) : items.length === 0 ? (
+          <div className="rounded-lg border border-dashed border-border p-6 text-center text-sm text-muted-foreground">
+            У вас пока нет подписок.
+            <div className="mt-3">
+              <Button variant="outline" className="bg-transparent" onClick={() => nav("/create?recurring=1")}>
+                <Plus className="h-4 w-4 mr-1" /> Создать первую
+              </Button>
+            </div>
+          </div>
+        ) : (
+          <div className="space-y-2">
+            {items.map((s) => {
+              const dimmed = !s.active;
+              return (
+                <div
+                  key={s.id}
+                  className={cn(
+                    "rounded-lg bg-secondary/50 p-3 space-y-2 border border-border",
+                    dimmed && "opacity-60"
+                  )}
+                >
+                  <div className="flex items-start gap-3">
+                    <Repeat className="h-4 w-4 text-primary shrink-0 mt-1" />
+                    <div className="min-w-0 flex-1">
+                      <div className="text-sm font-medium truncate">{s.title}</div>
+                      <div className="text-xs text-muted-foreground mt-0.5">
+                        {formatDays(s.daysOfWeek)} · {formatTime(s.startTime)}–{formatTime(s.endTime)}
+                      </div>
+                      <div className="flex flex-wrap items-center gap-2 mt-1.5 text-xs text-muted-foreground">
+                        <span>Кортов: {s.courtsCount}</span>
+                        <span>·</span>
+                        <span>Анонс {hoursLabel(s.materializeHoursBefore)} в {formatTime(s.materializeAtTime)}</span>
+                        <span>·</span>
+                        <span className="inline-flex items-center gap-1">
+                          {s.visibility === "PUBLIC" ? (<><Bell className="h-3 w-3" /> Открытая</>) : (<><ShieldCheck className="h-3 w-3" /> Приватная</>)}
+                        </span>
+                        {!s.active && (
+                          <>
+                            <span>·</span>
+                            <span className="text-amber-300">На паузе</span>
+                          </>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                  <div className="flex flex-wrap gap-2 pl-7">
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="bg-transparent h-8"
+                      onClick={() => nav(`/create?recurring=1&editSeries=${s.id}`)}
+                    >
+                      <Pencil className="h-3.5 w-3.5 mr-1" />
+                      Изменить
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="bg-transparent h-8"
+                      disabled={busyId === s.id}
+                      onClick={() => togglePause(s)}
+                    >
+                      {s.active ? (
+                        <>
+                          <Pause className="h-3.5 w-3.5 mr-1" />
+                          Пауза
+                        </>
+                      ) : (
+                        <>
+                          <Play className="h-3.5 w-3.5 mr-1" />
+                          Возобновить
+                        </>
+                      )}
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      className="h-8 text-muted-foreground hover:bg-destructive/10 hover:text-destructive dark:hover:bg-destructive/10"
+                      disabled={busyId === s.id}
+                      onClick={() => remove(s)}
+                    >
+                      <Trash2 className="h-3.5 w-3.5 mr-1" />
+                      Удалить
+                    </Button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </CardContent>
+    </Card>
   );
 }
 

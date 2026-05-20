@@ -21,6 +21,12 @@ interface PlayerRepository : JpaRepository<Player, UUID> {
 interface EventRepository : JpaRepository<Event, UUID> {
     fun findAllByDateOrderByStartTimeAsc(date: LocalDate): List<Event>
     fun findAllByDateBetweenOrderByDateAscStartTimeAsc(from: LocalDate, to: LocalDate): List<Event>
+    fun findAllBySeriesId(seriesId: UUID): List<Event>
+}
+
+interface EventSeriesRepository : JpaRepository<com.padelgo.domain.EventSeries, UUID> {
+    fun findAllByCreatedByUserIdOrderByCreatedAtDesc(userId: UUID): List<com.padelgo.domain.EventSeries>
+    fun findAllByActiveTrue(): List<com.padelgo.domain.EventSeries>
 }
 
 interface RegistrationRepository : JpaRepository<Registration, UUID> {

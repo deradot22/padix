@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useParams, useLocation } from "react-router-dom";
-import { AlertTriangle, ArrowLeft, Check, ChevronDown, Clock, MapPin, Pencil, Scale, Share2, Target, Trash2, Trophy, UserPlus, Users, Zap, X } from "lucide-react";
+import { AlertTriangle, ArrowLeft, Check, ChevronDown, Clock, MapPin, Pencil, Repeat, Scale, Share2, Target, Trash2, Trophy, UserPlus, Users, Zap, X } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { api, BalancePreview, EventDetails, FriendItem, FriendsSnapshot, Match } from "../../../lib/api";
 import { PlayerTooltip } from "@/components/player-tooltip";
@@ -657,6 +657,22 @@ export function V0EventPage(props: { me: any; meLoaded?: boolean }) {
                       Автор: {data.authorName}
                     </span>
                   )}
+                  {e.seriesId ? (
+                    isAuthor ? (
+                      <Link
+                        to="/settings?tab=subscriptions"
+                        className="inline-flex items-center gap-1 rounded-md border border-sky-500/40 bg-sky-500/10 px-3 py-1 text-sm font-medium text-sky-300 hover:bg-sky-500/20 transition-colors"
+                      >
+                        <Repeat className="h-3.5 w-3.5" />
+                        По подписке{e.seriesTitle ? `: ${e.seriesTitle}` : ""}
+                      </Link>
+                    ) : (
+                      <span className="inline-flex items-center gap-1 rounded-md border border-sky-500/30 bg-sky-500/5 px-3 py-1 text-sm font-medium text-sky-300/80">
+                        <Repeat className="h-3.5 w-3.5" />
+                        Регулярная{e.seriesTitle ? `: ${e.seriesTitle}` : ""}
+                      </span>
+                    )
+                  ) : null}
                 </div>
 
                 <div>
@@ -1087,18 +1103,18 @@ export function V0EventPage(props: { me: any; meLoaded?: boolean }) {
                 (friends?.friends ?? []).map((friend: FriendItem) => (
                   <div
                     key={friend.userId}
-                    className="flex items-center justify-between p-3 rounded-xl bg-secondary/50 hover:bg-secondary transition-colors"
+                    className="flex flex-col gap-2 p-3 rounded-xl bg-secondary/50 hover:bg-secondary transition-colors sm:flex-row sm:items-center sm:justify-between"
                   >
-                    <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 rounded-full bg-gradient-to-br from-primary/30 to-primary/10 flex items-center justify-center text-primary font-semibold">
+                    <div className="flex items-center gap-3 min-w-0">
+                      <div className="w-10 h-10 shrink-0 rounded-full bg-gradient-to-br from-primary/30 to-primary/10 flex items-center justify-center text-primary font-semibold">
                         {friend.name?.[0]?.toUpperCase?.() ?? "?"}
                       </div>
-                      <div>
-                        <p className="font-medium">{friend.name}</p>
+                      <div className="min-w-0">
+                        <p className="font-medium truncate">{friend.name}</p>
                         <p className="text-sm text-muted-foreground">Рейтинг: {friend.rating}</p>
                       </div>
                     </div>
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2 sm:shrink-0">
                       {(() => {
                         const isInEvent = (data?.registeredPlayers ?? []).some(
                           (p) => p.publicId === friend.publicId
@@ -1109,6 +1125,7 @@ export function V0EventPage(props: { me: any; meLoaded?: boolean }) {
                             <Button
                               size="sm"
                               variant="default"
+                              className="flex-1 sm:flex-none sm:w-[110px]"
                               disabled={!eventId || invitingId === friend.publicId || isInEvent}
                               title="Добавить в игру сразу, без согласия друга"
                               onClick={async () => {
@@ -1138,6 +1155,7 @@ export function V0EventPage(props: { me: any; meLoaded?: boolean }) {
                             <Button
                               size="sm"
                               variant="outline"
+                              className="flex-1 sm:flex-none sm:w-[110px]"
                               disabled={!eventId || invitingId === friend.publicId || isInEvent || sentInvite}
                               title="Отправить приглашение — друг сам решит присоединиться"
                               onClick={async () => {
@@ -2259,7 +2277,7 @@ function EditGameScoresDialog(props: {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-6" onClick={props.onClose}>
       <ModalScrollArea
-        className="w-full max-w-2xl max-h-[90vh] overflow-y-auto rounded-xl border border-border bg-card p-6"
+        className="w-full max-w-2xl max-h-[90dvh] overflow-y-auto rounded-xl border border-border bg-card p-6"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center justify-between mb-6">

@@ -113,7 +113,94 @@ class Event(
     var createdAt: Instant? = null,
 
     @Column(name = "reminder_sent_at")
-    var reminderSentAt: Instant? = null
+    var reminderSentAt: Instant? = null,
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "visibility", nullable = false)
+    var visibility: EventVisibility = EventVisibility.PRIVATE,
+
+    @Column(name = "series_id")
+    var seriesId: UUID? = null
+)
+
+@Entity
+@Table(name = "event_series")
+class EventSeries(
+    @Id
+    @UuidGenerator
+    @Column(name = "id", nullable = false)
+    var id: UUID? = null,
+
+    @Column(name = "title", nullable = false)
+    var title: String = "",
+
+    @Column(name = "created_by_user_id")
+    var createdByUserId: UUID? = null,
+
+    @Column(name = "days_of_week", nullable = false, length = 64)
+    var daysOfWeek: String = "",  // CSV: "MON,WED,FRI" в ISO-формате
+
+    @Column(name = "start_time", nullable = false)
+    var startTime: LocalTime = LocalTime.of(19, 0),
+
+    @Column(name = "end_time", nullable = false)
+    var endTime: LocalTime = LocalTime.of(21, 0),
+
+    @Column(name = "timezone", nullable = false, length = 64)
+    var timezone: String = "Europe/Moscow",
+
+    @Column(name = "courts_count", nullable = false)
+    var courtsCount: Int = 2,
+
+    @Column(name = "rounds_planned", nullable = false)
+    var roundsPlanned: Int = 6,
+
+    @Column(name = "auto_rounds", nullable = false)
+    var autoRounds: Boolean = true,
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "pairing_mode", nullable = false)
+    var pairingMode: PairingMode = PairingMode.ROUND_ROBIN,
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "scoring_mode", nullable = false)
+    var scoringMode: ScoringMode = ScoringMode.POINTS,
+
+    @Column(name = "points_per_player_per_match", nullable = false)
+    var pointsPerPlayerPerMatch: Int = 6,
+
+    @Column(name = "sets_per_match", nullable = false)
+    var setsPerMatch: Int = 1,
+
+    @Column(name = "games_per_set", nullable = false)
+    var gamesPerSet: Int = 6,
+
+    @Column(name = "tiebreak_enabled", nullable = false)
+    var tiebreakEnabled: Boolean = true,
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "visibility", nullable = false)
+    var visibility: EventVisibility = EventVisibility.PRIVATE,
+
+    @Column(name = "materialize_hours_before", nullable = false)
+    var materializeHoursBefore: Int = 168,
+
+    @Column(name = "materialize_at_time", nullable = false)
+    var materializeAtTime: LocalTime = LocalTime.of(9, 0),
+
+    @Column(name = "active", nullable = false)
+    var active: Boolean = true,
+
+    @Column(name = "last_materialized_for")
+    var lastMaterializedFor: LocalDate? = null,
+
+    @CreationTimestamp
+    @Column(name = "created_at", nullable = false, updatable = false)
+    var createdAt: Instant? = null,
+
+    @org.hibernate.annotations.UpdateTimestamp
+    @Column(name = "updated_at", nullable = false)
+    var updatedAt: Instant? = null
 )
 
 @Entity

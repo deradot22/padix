@@ -198,4 +198,20 @@ class BotClient(
             0
         }
     }
+
+    /** Возвращает chat UUIDы всех групп/каналов, привязанных к юзеру. Пустой список если не настроено. */
+    fun getOwnerGroupChats(userId: UUID): List<UUID> {
+        if (!isConfigured()) return emptyList()
+        return try {
+            val res = botRestClient.get()
+                .uri("$baseUrl/api/internal/telegram/owner-group-chats/$userId")
+                .header("X-Internal-Secret", secret)
+                .retrieve()
+                .body<List<UUID>>()
+            res ?: emptyList()
+        } catch (e: Exception) {
+            log.warn("bot owner-group-chats for {} failed: {}", userId, e.message)
+            emptyList()
+        }
+    }
 }

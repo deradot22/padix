@@ -353,14 +353,6 @@ export function V0ProfilePage(props: { me: any; meLoaded?: boolean; onMeUpdate?:
                   </p>
                 </div>
               </div>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => nav("/settings")}
-              >
-                <Pencil className="h-4 w-4 mr-1" />
-                Настройки
-              </Button>
             </div>
 
             <div className="mt-6 flex flex-wrap items-center gap-3">
@@ -749,7 +741,7 @@ export function V0ProfilePage(props: { me: any; meLoaded?: boolean; onMeUpdate?:
 
         {details ? (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-6" onClick={() => { setDetails(null); setDetailsStatsOpen(false); }}>
-            <ModalScrollArea className="w-full max-w-5xl max-h-[90vh] overflow-y-auto rounded-xl border border-border bg-card p-6" onClick={(e) => e.stopPropagation()}>
+            <ModalScrollArea className="w-full max-w-5xl max-h-[90dvh] overflow-y-auto rounded-xl border border-border bg-card p-6" onClick={(e) => e.stopPropagation()}>
               <div className="flex items-start justify-between gap-3">
                 <div>
                   <div className="text-lg font-semibold">{detailsTitle}</div>
@@ -1073,7 +1065,7 @@ function EditGameScoresDialog(props: {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-6" onClick={props.onClose}>
       <ModalScrollArea
-        className="w-full max-w-2xl max-h-[90vh] overflow-y-auto rounded-xl border border-border bg-card p-6"
+        className="w-full max-w-2xl max-h-[90dvh] overflow-y-auto rounded-xl border border-border bg-card p-6"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center justify-between mb-6">

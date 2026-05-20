@@ -9,7 +9,7 @@ export function MainLayout(props: {
   onLogout: () => void;
 }) {
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-dvh bg-background">
       <Header
         authed={props.authed}
         notificationCount={props.notificationCount}

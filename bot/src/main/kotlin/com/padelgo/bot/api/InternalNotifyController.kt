@@ -5,6 +5,10 @@ import com.padelgo.bot.domain.EventStatus
 import com.padelgo.bot.service.FinishTopPlayer
 import com.padelgo.bot.service.TelegramCancellationPlan
 import com.padelgo.bot.service.TelegramService
+import com.padelgo.bot.domain.TelegramChatType
+import com.padelgo.bot.repo.TelegramChatRepository
+import org.springframework.web.bind.annotation.GetMapping
+import org.springframework.web.bind.annotation.PathVariable
 import org.springframework.web.bind.annotation.PostMapping
 import org.springframework.web.bind.annotation.RequestBody
 import org.springframework.web.bind.annotation.RequestMapping
@@ -90,8 +94,15 @@ data class NotifyResult(val sent: Int)
 @RestController
 @RequestMapping("/api/internal/telegram")
 class InternalNotifyController(
-    private val service: TelegramService
+    private val service: TelegramService,
+    private val chatRepo: TelegramChatRepository
 ) {
+    @GetMapping("/owner-group-chats/{ownerUserId}")
+    fun ownerGroupChats(@PathVariable ownerUserId: UUID): List<UUID> =
+        chatRepo.findAllByUserIdOrderByLinkedAtAsc(ownerUserId)
+            .filter { it.chatType != TelegramChatType.PRIVATE.name }
+            .mapNotNull { it.id }
+
     @PostMapping("/notify/event-created")
     fun eventCreated(@RequestBody req: EventCreatedRequest): NotifyResult {
         val ev = req.toEvent()

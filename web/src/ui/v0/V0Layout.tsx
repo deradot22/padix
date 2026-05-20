@@ -10,7 +10,7 @@ export function V0Layout(props: {
   onLogout?: () => void;
 }) {
   return (
-    <div className={cn("v0 min-h-screen bg-background text-foreground", props.theme === "dark" && "dark")}>
+    <div className={cn("v0 min-h-dvh bg-background text-foreground", props.theme === "dark" && "dark")}>
       <V0Header
         authed={props.authed}
         theme={props.theme}

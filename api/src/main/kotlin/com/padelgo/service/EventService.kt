@@ -45,7 +45,8 @@ class EventService(
     private val inviteRepo: com.padelgo.repo.EventInviteRepository,
     private val courtRepo: EventCourtRepository,
     private val ratingNotificationRepo: com.padelgo.repo.UserRatingNotificationRepository,
-    private val botClient: BotClient
+    private val botClient: BotClient,
+    private val seriesRepo: com.padelgo.repo.EventSeriesRepository
 ) {
     private val log = LoggerFactory.getLogger(EventService::class.java)
 
@@ -63,8 +64,50 @@ class EventService(
     fun getToday(date: LocalDate = LocalDate.now()): List<Event> =
         eventRepo.findAllByDateOrderByStartTimeAsc(date)
 
+    /**
+     * Возвращает title серии по seriesId одним запросом для группы событий.
+     * Используется при формировании EventResponse в листингах.
+     */
+    fun seriesTitles(events: List<Event>): Map<UUID, String> {
+        val ids = events.mapNotNull { it.seriesId }.toSet()
+        if (ids.isEmpty()) return emptyMap()
+        return seriesRepo.findAllById(ids).associate { it.id!! to it.title }
+    }
+
     fun getUpcoming(from: LocalDate, to: LocalDate): List<Event> =
         eventRepo.findAllByDateBetweenOrderByDateAscStartTimeAsc(from, to)
+
+    /**
+     * Фильтрует список игр по доступности для пользователя:
+     * - PUBLIC видны всем (включая анонимных)
+     * - PRIVATE видны только автору, зарегистрированным игрокам и приглашённым
+     */
+    fun filterVisibleFor(events: List<Event>, userId: UUID?): List<Event> {
+        if (events.isEmpty()) return events
+        val publicEvents = events.filter { it.visibility == com.padelgo.domain.EventVisibility.PUBLIC }
+        val privateEvents = events.filter { it.visibility == com.padelgo.domain.EventVisibility.PRIVATE }
+        if (privateEvents.isEmpty()) return publicEvents
+        if (userId == null) return publicEvents
+
+        val user = userRepo.findById(userId).orElse(null) ?: return publicEvents
+        val playerId = user.playerId
+
+        val accessiblePrivate = privateEvents.filter { ev ->
+            val evId = ev.id ?: return@filter false
+            if (ev.createdByUserId == userId) return@filter true
+            if (playerId != null) {
+                val reg = regRepo.findByEventIdAndPlayerId(evId, playerId)
+                if (reg?.status == com.padelgo.domain.RegistrationStatus.REGISTERED) return@filter true
+            }
+            val pendingInvite = inviteRepo.findByEventIdAndToUserIdAndStatus(evId, userId, com.padelgo.domain.InviteStatus.PENDING)
+            if (pendingInvite != null) return@filter true
+            val acceptedInvite = inviteRepo.findByEventIdAndToUserIdAndStatus(evId, userId, com.padelgo.domain.InviteStatus.ACCEPTED)
+            acceptedInvite != null
+        }
+        // Сохраняем порядок исходного списка (он отсортирован репозиторием по дате/времени).
+        val accessibleIds = (publicEvents + accessiblePrivate).mapNotNull { it.id }.toSet()
+        return events.filter { it.id in accessibleIds }
+    }
 
     @Transactional
     fun createPlayer(name: String): Player {

@@ -118,7 +118,10 @@ data class CreateEventRequest(
     val tiebreakEnabled: Boolean = true,
 
     @Schema(description = "ID привязанных Telegram-чатов, в которые нужно отправить анонс игры сразу после создания. Чаты, не принадлежащие текущему пользователю, игнорируются.")
-    val telegramChatIds: List<UUID>? = null
+    val telegramChatIds: List<UUID>? = null,
+
+    @Schema(description = "Видимость: PRIVATE (по умолчанию, видна только участникам/приглашённым/автору) или PUBLIC (видна всем в /games)")
+    val visibility: com.padelgo.domain.EventVisibility = com.padelgo.domain.EventVisibility.PRIVATE
 )
 
 @Schema(description = "Запрос на обновление игры")
@@ -206,10 +209,19 @@ data class EventResponse(
     val gamesPerSet: Int,
 
     @Schema(description = "Тайбрейк включён")
-    val tiebreakEnabled: Boolean
+    val tiebreakEnabled: Boolean,
+
+    @Schema(description = "Видимость: PRIVATE или PUBLIC")
+    val visibility: com.padelgo.domain.EventVisibility,
+
+    @Schema(description = "UUID серии, если эта игра создана автоматически из EventSeries; иначе null")
+    val seriesId: UUID? = null,
+
+    @Schema(description = "Название серии (подписки), которой принадлежит игра; null если игра разовая")
+    val seriesTitle: String? = null
 ) {
     companion object {
-        fun from(e: Event, registeredCount: Int = 0) = EventResponse(
+        fun from(e: Event, registeredCount: Int = 0, seriesTitle: String? = null) = EventResponse(
             id = e.id!!,
             title = e.title,
             date = e.date,
@@ -226,7 +238,10 @@ data class EventResponse(
             pointsPerPlayerPerMatch = e.pointsPerPlayerPerMatch,
             setsPerMatch = e.setsPerMatch,
             gamesPerSet = e.gamesPerSet,
-            tiebreakEnabled = e.tiebreakEnabled
+            tiebreakEnabled = e.tiebreakEnabled,
+            visibility = e.visibility,
+            seriesId = e.seriesId,
+            seriesTitle = seriesTitle
         )
     }
 }
