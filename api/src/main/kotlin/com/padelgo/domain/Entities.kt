@@ -208,6 +208,13 @@ class EventSeries(
     @Column(name = "pin_announcement")
     var pinAnnouncement: Boolean? = null,
 
+    /**
+     * CSV UUID'ов telegram_chat. Пустая строка → анонс летит во все группы автора
+     * (старое поведение, для обратной совместимости). Не-пустая строка → только в указанные.
+     */
+    @Column(name = "target_chat_ids", nullable = false)
+    var targetChatIds: String = "",
+
     @Column(name = "active", nullable = false)
     var active: Boolean = true,
 

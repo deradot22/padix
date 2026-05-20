@@ -103,6 +103,9 @@ export function V0CreateEventPage(props: {
         setMaterializeMode(s.materializeMode ?? "HOURS_BEFORE");
         setSeriesReminderHours(s.reminderHours ?? null);
         setSeriesPinAnnouncement(s.pinAnnouncement ?? null);
+        if (s.targetChatIds && s.targetChatIds.length > 0) {
+          setSelectedTgChatIds(new Set(s.targetChatIds));
+        }
         setGameMode(s.pairingMode === "BALANCED" ? "balanced" : "round_robin");
       } catch (e: any) {
         setError(e?.message ?? "Не удалось загрузить подписку");
@@ -183,6 +186,7 @@ export function V0CreateEventPage(props: {
             ...(seriesPinAnnouncement === null
               ? { clearPinAnnouncement: true }
               : { pinAnnouncement: seriesPinAnnouncement }),
+            targetChatIds: Array.from(selectedTgChatIds),
           });
           nav(`/settings?tab=subscriptions&highlight=${editSeriesId}`);
           return;
@@ -204,6 +208,7 @@ export function V0CreateEventPage(props: {
           // Per-series override уведомлений (null → бэк сохранит null → использует глобальные).
           reminderHours: seriesReminderHours,
           pinAnnouncement: seriesPinAnnouncement,
+          targetChatIds: Array.from(selectedTgChatIds),
         });
         nav(`/settings?tab=subscriptions&highlight=${created.id}`);
         return;
@@ -797,7 +802,7 @@ export function V0CreateEventPage(props: {
                 </div>
               </div>
 
-              {!recurring && telegramChats.length > 0 && (
+              {telegramChats.length > 0 && (
                 <div className="rounded-lg border border-border bg-secondary/30 p-4 space-y-3">
                   <div className="flex items-center gap-2">
                     <Send className="h-4 w-4 text-sky-400" />

@@ -50,7 +50,8 @@ class EventSeriesController(
                 materializeAtTime = req.materializeAtTime ?: LocalTime.of(9, 0),
                 materializeMode = req.materializeMode ?: "HOURS_BEFORE",
                 reminderHours = req.reminderHours,
-                pinAnnouncement = req.pinAnnouncement
+                pinAnnouncement = req.pinAnnouncement,
+                targetChatIds = req.targetChatIds ?: emptyList()
             )
         )
         // Initial phase: запускаем материализатор сразу, не ждём следующий cron. Это нужно
@@ -94,7 +95,8 @@ class EventSeriesController(
                 reminderHours = req.reminderHours,
                 pinAnnouncement = req.pinAnnouncement,
                 clearPinAnnouncement = req.clearPinAnnouncement,
-                clearReminderHours = req.clearReminderHours
+                clearReminderHours = req.clearReminderHours,
+                targetChatIds = req.targetChatIds
             )
         )
         return EventSeriesResponse.from(updated)
@@ -145,7 +147,9 @@ data class CreateEventSeriesBody(
     val materializeMode: String? = null,
     // Per-series notifications (null → using global telegram_user_settings).
     val reminderHours: Int? = null,
-    val pinAnnouncement: Boolean? = null
+    val pinAnnouncement: Boolean? = null,
+    /** UUID telegram_chat для анонсов. Пустой → во все группы автора. */
+    val targetChatIds: List<UUID>? = null
 )
 
 data class UpdateEventSeriesBody(
@@ -167,7 +171,9 @@ data class UpdateEventSeriesBody(
     /** Если true — сбросить per-series pin override и использовать глобальное. */
     val clearPinAnnouncement: Boolean? = null,
     /** Если true — сбросить per-series reminder override и использовать глобальное. */
-    val clearReminderHours: Boolean? = null
+    val clearReminderHours: Boolean? = null,
+    /** null → не менять; список → перезаписать; пустой список → fallback на все группы. */
+    val targetChatIds: List<UUID>? = null
 )
 
 data class EventSeriesResponse(
@@ -189,6 +195,8 @@ data class EventSeriesResponse(
     val reminderHours: Int?,
     /** Per-series override закрепления анонса (null → используется глобальное). */
     val pinAnnouncement: Boolean?,
+    /** Список UUID telegram_chat'ов, в которые шлёт анонс (пустой → все группы автора). */
+    val targetChatIds: List<UUID>,
     val active: Boolean,
     val lastMaterializedFor: java.time.LocalDate?
 ) {
@@ -210,6 +218,9 @@ data class EventSeriesResponse(
             materializeMode = s.materializeMode,
             reminderHours = s.reminderHours,
             pinAnnouncement = s.pinAnnouncement,
+            targetChatIds = s.targetChatIds.split(",").mapNotNull {
+                it.trim().takeIf { t -> t.isNotBlank() }?.let { t -> runCatching { UUID.fromString(t) }.getOrNull() }
+            },
             active = s.active,
             lastMaterializedFor = s.lastMaterializedFor
         )

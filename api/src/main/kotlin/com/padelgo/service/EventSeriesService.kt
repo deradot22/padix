@@ -52,6 +52,7 @@ class EventSeriesService(
             materializeMode = req.materializeMode,
             reminderHours = req.reminderHours,
             pinAnnouncement = req.pinAnnouncement,
+            targetChatIds = req.targetChatIds.joinToString(",") { it.toString() },
             active = true
         )
         return repo.save(series)
@@ -95,6 +96,7 @@ class EventSeriesService(
             if (it < 0 || it > 168) throw ApiException(HttpStatus.BAD_REQUEST, "reminderHours must be 0..168")
             s.reminderHours = it
         }
+        req.targetChatIds?.let { s.targetChatIds = it.joinToString(",") { id -> id.toString() } }
         validate(s.title, s.daysOfWeek, s.startTime, s.endTime, s.timezone,
             s.materializeHoursBefore, s.materializeMode)
         return repo.save(s)
@@ -193,7 +195,9 @@ data class CreateEventSeriesRequest(
     val materializeMode: String = "HOURS_BEFORE",          // или "WEEKLY_SUNDAY" — "в конце недели"
     // Per-series override уведомлений; null → использовать глобальные telegram_user_settings.
     val reminderHours: Int? = null,
-    val pinAnnouncement: Boolean? = null
+    val pinAnnouncement: Boolean? = null,
+    // Список UUID telegram_chat для анонса. Пустой → fallback на все группы автора.
+    val targetChatIds: List<UUID> = emptyList()
 )
 
 data class UpdateEventSeriesRequest(
@@ -221,5 +225,7 @@ data class UpdateEventSeriesRequest(
     /** Если true — pinAnnouncement сбрасывается в null (использовать глобальное). */
     val clearPinAnnouncement: Boolean? = null,
     /** Если true — reminderHours сбрасывается в null (использовать глобальное). */
-    val clearReminderHours: Boolean? = null
+    val clearReminderHours: Boolean? = null,
+    /** null → не менять; пустой список → fallback на «все группы автора»; иначе перезаписать. */
+    val targetChatIds: List<UUID>? = null
 )

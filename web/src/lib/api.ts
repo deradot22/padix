@@ -60,6 +60,8 @@ export type EventSeries = {
   reminderHours?: number | null;
   /** Per-series override закрепления анонса. null → берём из глобальных Telegram-настроек. */
   pinAnnouncement?: boolean | null;
+  /** Список UUID telegram_chat для анонсов. Пустой → анонс летит во все группы автора. */
+  targetChatIds: string[];
   active: boolean;
   lastMaterializedFor?: string | null;
 };
@@ -448,6 +450,7 @@ export const api = {
     materializeMode?: "HOURS_BEFORE" | "WEEKLY_SUNDAY";
     reminderHours?: number | null;
     pinAnnouncement?: boolean | null;
+    targetChatIds?: string[];
   }) =>
     request<EventSeries>("/api/event-series", {
       method: "POST",

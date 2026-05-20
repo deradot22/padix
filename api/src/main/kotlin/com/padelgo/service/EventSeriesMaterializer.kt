@@ -206,10 +206,16 @@ class EventSeriesMaterializer(
         // Анонс в Telegram: посылаем во все привязанные к юзеру групповые чаты, чтобы
         // подписчики увидели открывшуюся регистрацию. Личные чаты автора не трогаем —
         // он сам создал серию и про материализацию знать необязательно.
-        val groupChatIds = try { botClient.getOwnerGroupChats(ownerId) } catch (e: Exception) {
-            log.warn("getOwnerGroupChats failed for {}: {}", ownerId, e.message)
-            emptyList()
-        }
+        // Если у серии указаны конкретные целевые чаты — используем их. Иначе fallback на
+        // «все группы автора» (старое поведение для существующих подписок).
+        val explicitTargets = s.targetChatIds
+            .split(",")
+            .mapNotNull { it.trim().takeIf { t -> t.isNotBlank() }?.let { runCatching { java.util.UUID.fromString(it) }.getOrNull() } }
+        val groupChatIds = if (explicitTargets.isNotEmpty()) explicitTargets
+            else try { botClient.getOwnerGroupChats(ownerId) } catch (e: Exception) {
+                log.warn("getOwnerGroupChats failed for {}: {}", ownerId, e.message)
+                emptyList()
+            }
         if (groupChatIds.isNotEmpty()) {
             try {
                 botClient.notifyEventCreated(
