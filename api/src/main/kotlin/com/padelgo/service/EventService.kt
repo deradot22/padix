@@ -1370,16 +1370,25 @@ class EventService(
             val oppIds = if (isTeamA) teamBIds else teamAIds
             val teamPlayerInfos = myIds.mapNotNull { id -> playersById[id]?.let { MatchPlayerInfo(it.name, it.avatarUrl) } }
             val opponentPlayerInfos = oppIds.mapNotNull { id -> playersById[id]?.let { MatchPlayerInfo(it.name, it.avatarUrl) } }
+            // Для POINTS-режима счёт может лежать либо в финальном MatchSetScore (после submitScore),
+            // либо в драфте (до submitScore). После submitScore драфт удаляется (см. submitScore line ~998),
+            // поэтому читаем MatchSetScore первым, иначе исторические матчи показывают «—».
+            val pointsTeamA: Int? = if (e.scoringMode == com.padelgo.domain.ScoringMode.POINTS) {
+                s.firstOrNull()?.teamAGames ?: ds.firstOrNull()?.teamAPoints
+            } else null
+            val pointsTeamB: Int? = if (e.scoringMode == com.padelgo.domain.ScoringMode.POINTS) {
+                s.firstOrNull()?.teamBGames ?: ds.firstOrNull()?.teamBPoints
+            } else null
             val scoreText = if (e.scoringMode == com.padelgo.domain.ScoringMode.POINTS) {
-                if (ds.isEmpty()) null else scoreToTextPoints(ds)
+                if (pointsTeamA == null || pointsTeamB == null) null else "$pointsTeamA:$pointsTeamB"
             } else {
                 if (s.isEmpty()) null else scoreToText(e.scoringMode, s)
             }
             val result = when {
                 scoreText == null -> "—"
                 e.scoringMode == com.padelgo.domain.ScoringMode.POINTS -> {
-                    val myPoints = if (isTeamA) ds.firstOrNull()?.teamAPoints ?: 0 else ds.firstOrNull()?.teamBPoints ?: 0
-                    val oppPoints = if (isTeamA) ds.firstOrNull()?.teamBPoints ?: 0 else ds.firstOrNull()?.teamAPoints ?: 0
+                    val myPoints = if (isTeamA) pointsTeamA!! else pointsTeamB!!
+                    val oppPoints = if (isTeamA) pointsTeamB!! else pointsTeamA!!
                     when {
                         myPoints > oppPoints -> "Победа"
                         myPoints < oppPoints -> "Поражение"
@@ -1454,12 +1463,20 @@ class EventService(
                 val e = events[eventId] ?: return@mapNotNull null
                 val totalPoints = if (e.scoringMode == ScoringMode.POINTS) {
                     items.sumOf { item ->
+                        // Сначала пытаемся прочитать финальный счёт (MatchSetScore), потом fallback на драфт —
+                        // иначе после submitScore (драфт удалён) totalPoints не считается.
+                        val finalScores = scoresByMatch[item.matchId].orEmpty()
                         val draftScores = draftScoresByMatch[item.matchId].orEmpty()
-                        draftScores.firstOrNull()?.let { ds ->
-                            val match = matchRepo.findById(item.matchId).orElse(null) ?: return@let 0
-                            val isTeamA = match.teamAPlayer1Id == playerId || match.teamAPlayer2Id == playerId
-                            if (isTeamA) ds.teamAPoints else ds.teamBPoints
-                        } ?: 0
+                        val match = matchRepo.findById(item.matchId).orElse(null) ?: return@sumOf 0
+                        val isTeamA = match.teamAPlayer1Id == playerId || match.teamAPlayer2Id == playerId
+                        val finalScore = finalScores.firstOrNull()
+                        if (finalScore != null) {
+                            if (isTeamA) finalScore.teamAGames else finalScore.teamBGames
+                        } else {
+                            draftScores.firstOrNull()?.let { ds ->
+                                if (isTeamA) ds.teamAPoints else ds.teamBPoints
+                            } ?: 0
+                        }
                     }
                 } else {
                     null

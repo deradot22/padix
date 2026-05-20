@@ -117,8 +117,10 @@ export function V0RatingPage(props: { authed: boolean; me?: { playerId?: string 
   const topPlayers = filteredPlayers.slice(0, topCount);
   const showMyRowSeparately = !isSearchActive && meId && myRank !== null && myRank > topCount;
   const myPlayer = showMyRowSeparately ? basePlayers.find((p) => p.id === meId) : null;
+  // Игроки прямо над «Вы здесь». Пропускаем тех, кто уже показан в топ-N,
+  // иначе при myRank = topCount + 1..topCount + 2 строки 9/10 дублировались.
   const playersAboveMe = showMyRowSeparately && myRank != null && myRank > 2
-    ? basePlayers.slice(Math.max(0, myRank - 3), myRank - 1)
+    ? basePlayers.slice(Math.max(topCount, myRank - 3), myRank - 1)
     : [];
   const playersBelowMe = showMyRowSeparately && myRank != null && myRank < basePlayers.length
     ? basePlayers.slice(myRank, Math.min(basePlayers.length, myRank + 2))

@@ -48,6 +48,10 @@ class BotEvent(
     @Column(name = "courts_count", nullable = false)
     var courtsCount: Int = 2,
 
+    /** Read-only, нужен для рендера строки «🎯 Каждый с каждым / Равный бой» в анонсе. */
+    @Column(name = "pairing_mode", nullable = false)
+    var pairingMode: String = "ROUND_ROBIN",
+
     @Column(name = "created_by_user_id")
     var createdByUserId: UUID? = null,
 

@@ -1000,13 +1000,27 @@ function EditGameScoresDialog(props: {
   const [scores, setScores] = useState<Record<string, { teamAPoints: number; teamBPoints: number }>>({});
   const originalScoresRef = useRef<Record<string, { teamAPoints: number; teamBPoints: number }>>({});
 
+  // Сплющиваем раунды → матчи, протаскивая номер раунда и корт.
+  // Сортировка по раунду возрастающая, внутри раунда — по корту, чтобы порядок в модалке
+  // совпадал с тем, как игры проходили (раунд 1 сверху).
+  const flattenMatches = (data: any): any[] =>
+    (data?.rounds ?? [])
+      .slice()
+      .sort((a: any, b: any) => (a.roundNumber ?? 0) - (b.roundNumber ?? 0))
+      .flatMap((r: any) =>
+        (r.matches ?? [])
+          .slice()
+          .sort((m1: any, m2: any) => (m1.courtNumber ?? 0) - (m2.courtNumber ?? 0))
+          .map((m: any) => ({ ...m, roundNumber: r.roundNumber })),
+      );
+
   useEffect(() => {
     const load = async () => {
       try {
         const data = await api.getEventDetails(props.eventId);
         setEventData(data);
         const initialScores: Record<string, { teamAPoints: number; teamBPoints: number }> = {};
-        data.rounds.flatMap((r: any) => r.matches).forEach((m: any) => {
+        flattenMatches(data).forEach((m: any) => {
           const score = m.score?.points;
           initialScores[m.id] = {
             teamAPoints: score?.teamAPoints ?? 0,
@@ -1028,7 +1042,7 @@ function EditGameScoresDialog(props: {
     try {
       setSaving(true);
       setError(null);
-      const matches = eventData.rounds.flatMap((r: any) => r.matches);
+      const matches = flattenMatches(eventData);
       for (const match of matches) {
         const newScore = scores[match.id];
         const originalScore = originalScoresRef.current[match.id];
@@ -1060,7 +1074,7 @@ function EditGameScoresDialog(props: {
     );
   }
 
-  const matches = eventData?.rounds.flatMap((r: any) => r.matches) ?? [];
+  const matches = flattenMatches(eventData);
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-6" onClick={props.onClose}>
@@ -1086,6 +1100,15 @@ function EditGameScoresDialog(props: {
             <div className="space-y-4">
               {matches.map((match: any) => (
                 <div key={match.id} className="border border-border rounded-lg p-4 space-y-3">
+                  <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-primary">
+                    <span>Раунд {match.roundNumber ?? "—"}</span>
+                    {match.courtNumber != null && (
+                      <>
+                        <span className="text-border">·</span>
+                        <span>Корт {match.courtNumber}</span>
+                      </>
+                    )}
+                  </div>
                   <div className="grid grid-cols-2 gap-4">
                     <div>
                       <div className="text-sm font-medium mb-1">Команда A</div>

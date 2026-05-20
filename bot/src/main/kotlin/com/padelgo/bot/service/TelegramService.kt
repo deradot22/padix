@@ -680,22 +680,21 @@ class TelegramService(
         val timeFmt = DateTimeFormatter.ofPattern("HH:mm")
         val dateStr = formatDate(event.date)
         val sb = StringBuilder()
-        sb.append("🎾 <b>").append(escapeHtml(event.title)).append("</b>\n")
-        sb.append("📅 ").append(dateStr)
-            .append(", ").append(formatTime(event.startTime, timeFmt))
+        sb.append("🎾 <b>").append(escapeHtml(event.title)).append("</b>\n\n")
+        sb.append("🗓  ").append(dateStr)
+            .append(" · ").append(formatTime(event.startTime, timeFmt))
             .append("–").append(formatTime(event.endTime, timeFmt)).append("\n")
-        sb.append("📍 Кортов: ").append(event.courtsCount).append("\n\n")
-        // Мест: отдельная строка с прогресс-баром из эмодзи — на мобильном
-        // эмодзи отображаются крупнее обычного текста, число тоже жирное.
+        sb.append("🏟  ").append(event.courtsCount).append(" ").append(courtsPlural(event.courtsCount)).append("\n")
+        sb.append("🎯  ").append(pairingModeLabel(event.pairingMode)).append("\n\n")
+        // Тонкая полоска заполнения: filled/empty rectangles. Жирное N/M справа.
         sb.append(progressBar(registeredCount, capacity))
-            .append(" <b>").append(registeredCount).append("/").append(capacity).append("</b>")
+            .append("  <b>").append(registeredCount).append("/").append(capacity).append("</b>")
         return sb.toString()
     }
 
     /**
-     * Прогресс-бар из эмодзи фиксированной длины 8 сегментов — на мобильном
-     * не переносится на новую строку даже при capacity > 8. Округление —
-     * к ближайшему целому, чтобы не зависало в "0 из N" при первой регистрации.
+     * Прогресс-бар из символов ▰ (заполнено) и ▱ (пусто) — тонкая полоса,
+     * читается на мобильном лучше эмодзи-квадратов. Фиксированная длина 8 сегментов.
      */
     private fun progressBar(filled: Int, total: Int): String {
         if (total <= 0) return ""
@@ -703,7 +702,22 @@ class TelegramService(
         val safeFilled = filled.coerceIn(0, total)
         val full = if (safeFilled == 0) 0
             else ((safeFilled * segments * 2 + total) / (total * 2)).coerceIn(0, segments)
-        return "🟩".repeat(full) + "⬜".repeat(segments - full)
+        return "▰".repeat(full) + "▱".repeat(segments - full)
+    }
+
+    private fun courtsPlural(n: Int): String {
+        val mod10 = n % 10
+        val mod100 = n % 100
+        return when {
+            mod10 == 1 && mod100 != 11 -> "корт"
+            mod10 in 2..4 && mod100 !in 12..14 -> "корта"
+            else -> "кортов"
+        }
+    }
+
+    private fun pairingModeLabel(mode: String): String = when (mode.uppercase()) {
+        "BALANCED" -> "Равный бой"
+        else -> "Каждый с каждым"
     }
 
     private fun renderEventUpdated(event: BotEvent, changes: List<String>): String {
