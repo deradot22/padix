@@ -53,4 +53,9 @@ interface BotRegistrationRepository : JpaRepository<BotRegistration, UUID> {
         eventId: UUID,
         status: RegistrationStatus = RegistrationStatus.REGISTERED
     ): List<BotRegistration>
+
+    fun countByEventIdAndStatus(
+        eventId: UUID,
+        status: RegistrationStatus = RegistrationStatus.REGISTERED
+    ): Long
 }

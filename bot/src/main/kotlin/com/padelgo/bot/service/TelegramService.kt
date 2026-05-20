@@ -92,7 +92,9 @@ class TelegramService(
     private val postRepo: EventTelegramPostRepository,
     private val settingsRepo: TelegramUserSettingsRepository,
     private val userRepo: BotUserRepository,
-    private val seriesRepo: com.padelgo.bot.repo.BotEventSeriesRepository
+    private val seriesRepo: com.padelgo.bot.repo.BotEventSeriesRepository,
+    private val eventRepo: com.padelgo.bot.repo.BotEventRepository,
+    private val regRepo: com.padelgo.bot.repo.BotRegistrationRepository
 ) {
     private val log = LoggerFactory.getLogger(TelegramService::class.java)
     private val random = SecureRandom()
@@ -408,8 +410,37 @@ class TelegramService(
         if (!isReadyToSend(ownerUserId)) return 0
         val targets = targetChatsForEvent(eventId, ownerUserId) { it.notifyUpdated }
         if (targets.isEmpty()) return 0
-        val cta = cta(eventId, "🔍 Открыть игру")
-        return sendAndRecord(targets, renderEventUpdated(event, changes) + cta.textSuffix, eventId, cta.replyMarkup)
+
+        var actions = 0
+
+        // 1) Редактируем исходные CREATED-сообщения (включая закреплённое) — чтобы шапка
+        // со статус-баром, временем, названием отражала актуальное состояние. Подгружаем
+        // живой BotEvent из БД, чтобы получить настоящий pairingMode и т.п. (в payload
+        // от api приходит обрезанная версия без pairingMode).
+        val fullEvent = eventRepo.findById(eventId).orElse(null) ?: event
+        val capacity = fullEvent.courtsCount * 4
+        val registered = regRepo.countByEventIdAndStatus(eventId).toInt().coerceAtMost(capacity)
+        val posts = postRepo.findAllByEventId(eventId)
+        if (posts.isNotEmpty()) {
+            val chatById = chatRepo.findAllByUserIdOrderByLinkedAtAsc(ownerUserId).associateBy { it.id!! }
+            val ctaCreated = cta(eventId, "📝 Зарегистрироваться")
+            val text = renderEventCreated(fullEvent, registered) + ctaCreated.textSuffix
+            for (post in posts) {
+                val chat = chatById[post.telegramChatId] ?: continue
+                try {
+                    client.editMessageText(chat.chatId, post.messageId, text, replyMarkup = ctaCreated.replyMarkup)
+                    actions++
+                } catch (e: Exception) {
+                    log.warn("Edit original CREATED message {} in chat {} on update failed: {}", post.messageId, chat.chatId, e.message)
+                }
+            }
+        }
+
+        // 2) Дополнительно — отдельное сообщение со списком изменений, чтобы подписчики
+        // увидели уведомление в ленте, а не только редакцию закреплённого поста.
+        val ctaInfo = cta(eventId, "🔍 Открыть игру")
+        actions += sendAndRecord(targets, renderEventUpdated(fullEvent, changes) + ctaInfo.textSuffix, null, ctaInfo.replyMarkup)
+        return actions
     }
 
     @Transactional
