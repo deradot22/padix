@@ -10,9 +10,9 @@ alter table telegram_user_settings
 alter table event_telegram_post
     add column pinned_message_id bigint;
 
--- Индекс по chat_id + pinned_message_id для быстрого поиска предыдущих закрепленных.
+-- Индекс по telegram_chat_id + pinned_message_id для быстрого поиска предыдущих закрепленных.
 create index if not exists ix_event_telegram_post_pinned
-    on event_telegram_post (chat_id)
+    on event_telegram_post (telegram_chat_id)
     where pinned_message_id is not null;
 
 -- 3) Режим материализации серии:
