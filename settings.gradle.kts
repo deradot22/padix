@@ -1,2 +1,3 @@
-rootProject.name = "padix-backend"
+rootProject.name = "padix"
 
+include("api", "bot")

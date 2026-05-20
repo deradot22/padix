@@ -83,6 +83,52 @@
   body {
     @apply bg-background text-foreground;
   }
+
+  /* Стилизованные тонкие скроллбары в тему сайта — везде где есть overflow.
+     На Firefox через scrollbar-color, на Webkit (Chrome/Safari) — через pseudo. */
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: color-mix(in oklch, var(--primary) 40%, transparent) transparent;
+  }
+  *::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+    background: transparent;
+  }
+  *::-webkit-scrollbar-track,
+  *::-webkit-scrollbar-track-piece {
+    background: transparent;
+    box-shadow: none;
+    border: none;
+  }
+  *::-webkit-scrollbar-thumb {
+    background: color-mix(in oklch, var(--primary) 40%, transparent);
+    border-radius: 999px;
+    min-height: 24px;
+  }
+  *::-webkit-scrollbar-thumb:hover {
+    background: color-mix(in oklch, var(--primary) 65%, transparent);
+  }
+  *::-webkit-scrollbar-corner {
+    background: transparent;
+  }
+  /* Стрелочки сверху/снизу скроллбара (single, double, start, end) — убрать
+     полностью. Без явного перечисления увеличений/уменьшений часть webkit
+     рендерит маленькие треугольники возле thumb. */
+  *::-webkit-scrollbar-button,
+  *::-webkit-scrollbar-button:vertical:start:decrement,
+  *::-webkit-scrollbar-button:vertical:start:increment,
+  *::-webkit-scrollbar-button:vertical:end:decrement,
+  *::-webkit-scrollbar-button:vertical:end:increment,
+  *::-webkit-scrollbar-button:horizontal:start:decrement,
+  *::-webkit-scrollbar-button:horizontal:start:increment,
+  *::-webkit-scrollbar-button:horizontal:end:decrement,
+  *::-webkit-scrollbar-button:horizontal:end:increment {
+    display: none !important;
+    height: 0 !important;
+    width: 0 !important;
+    background: transparent !important;
+  }
 }
 
 .rounds-scroll-container::-webkit-scrollbar {

@@ -69,14 +69,6 @@ export function V0ProfilePage(props: { me: any; meLoaded?: boolean; onMeUpdate?:
   const [acceptedInvites, setAcceptedInvites] = useState<Record<string, boolean>>({});
   const [inviteActionId, setInviteActionId] = useState<string | null>(null);
   const [avatar, setAvatar] = useState<string | null>(null);
-  const [avatarOpen, setAvatarOpen] = useState(false);
-  const [editOpen, setEditOpen] = useState(false);
-  const [editName, setEditName] = useState("");
-  const [editEmail, setEditEmail] = useState("");
-  const [editPassword, setEditPassword] = useState("");
-  const [editGender, setEditGender] = useState("");
-  const [editLoading, setEditLoading] = useState(false);
-  const [editError, setEditError] = useState<string | null>(null);
   const [info, setInfo] = useState<string | null>(null);
   const [idCopied, setIdCopied] = useState(false);
   const [friendsExpanded, setFriendsExpanded] = useState(false);
@@ -87,72 +79,6 @@ export function V0ProfilePage(props: { me: any; meLoaded?: boolean; onMeUpdate?:
   const [graphOpen, setGraphOpen] = useState(false);
   const [editGameOpen, setEditGameOpen] = useState(false);
   const [editGameEventId, setEditGameEventId] = useState<string | null>(null);
-
-  const persistAvatar = async (next: string | null) => {
-    setAvatar(next);
-    try {
-      const updated = await api.updateAvatar(next);
-      setMeLive(updated);
-      if (updated.avatarUrl) setAvatar(updated.avatarUrl);
-      else if (!next) setAvatar(null);
-    } catch (e: any) {
-      setInfo(e?.message ?? "Ошибка обновления аватара");
-    }
-  };
-
-  const compressAvatar = (file: File, maxSize = 256, quality = 0.8): Promise<string> =>
-    new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onerror = () => reject(new Error("Не удалось прочитать файл"));
-      reader.onload = () => {
-        const src = reader.result as string;
-        const img = new Image();
-        img.onerror = () => reject(new Error("Не удалось загрузить изображение"));
-        img.onload = () => {
-          const scale = Math.min(1, maxSize / Math.max(img.width, img.height));
-          const width = Math.max(1, Math.round(img.width * scale));
-          const height = Math.max(1, Math.round(img.height * scale));
-          const canvas = document.createElement("canvas");
-          canvas.width = width;
-          canvas.height = height;
-          const ctx = canvas.getContext("2d");
-          if (!ctx) {
-            reject(new Error("Нет контекста canvas"));
-            return;
-          }
-          ctx.drawImage(img, 0, 0, width, height);
-          try {
-            resolve(canvas.toDataURL("image/jpeg", quality));
-          } catch (e) {
-            reject(e);
-          }
-        };
-        img.src = src;
-      };
-      reader.readAsDataURL(file);
-    });
-
-  const boyAvatars = useMemo(
-    () => [
-      "https://api.dicebear.com/8.x/avataaars/png?seed=boy1",
-      "https://api.dicebear.com/8.x/avataaars/png?seed=boy2",
-      "https://api.dicebear.com/8.x/avataaars/png?seed=boy3",
-      "https://api.dicebear.com/8.x/avataaars/png?seed=boy4",
-      "https://api.dicebear.com/8.x/avataaars/png?seed=boy5",
-    ],
-    [],
-  );
-
-  const girlAvatars = useMemo(
-    () => [
-      "https://api.dicebear.com/8.x/avataaars/png?seed=girl1",
-      "https://api.dicebear.com/8.x/avataaars/png?seed=girl2",
-      "https://api.dicebear.com/8.x/avataaars/png?seed=girl3",
-      "https://api.dicebear.com/8.x/avataaars/png?seed=girl4",
-      "https://api.dicebear.com/8.x/avataaars/png?seed=girl5",
-    ],
-    [],
-  );
 
   useEffect(() => {
     if (!props.meLoaded) return;
@@ -412,24 +338,12 @@ export function V0ProfilePage(props: { me: any; meLoaded?: boolean; onMeUpdate?:
           <CardContent className="-mt-16 pb-8">
             <div className="flex flex-col gap-6 sm:flex-row sm:items-end sm:justify-between">
               <div className="flex items-end gap-4">
-                <div className="flex h-24 w-24 items-center justify-center rounded-2xl border-4 border-background bg-gradient-to-br from-primary/20 to-primary/5 shadow-xl">
-                  <button
-                    type="button"
-                    className="group relative h-full w-full rounded-2xl overflow-hidden"
-                    onClick={() => setAvatarOpen(true)}
-                    aria-label="Изменить аватар"
-                  >
-                    {avatar ? (
-                      <img src={avatar} alt="Avatar" className="h-full w-full object-cover" />
-                    ) : (
-                      <div className="flex h-full w-full items-center justify-center">
-                        <User className="h-12 w-12 text-primary" />
-                      </div>
-                    )}
-                    <div className="absolute inset-0 flex items-center justify-center bg-black/50 text-xs font-medium text-white opacity-0 transition-opacity group-hover:opacity-100">
-                      Изменить
-                    </div>
-                  </button>
+                <div className="flex h-24 w-24 items-center justify-center rounded-2xl border-4 border-background bg-gradient-to-br from-primary/20 to-primary/5 shadow-xl overflow-hidden">
+                  {avatar ? (
+                    <img src={avatar} alt="Avatar" className="h-full w-full object-cover" />
+                  ) : (
+                    <User className="h-12 w-12 text-primary" />
+                  )}
                 </div>
                 <div>
                   <h2 className="text-3xl font-bold">{viewMe.name}</h2>
@@ -439,21 +353,6 @@ export function V0ProfilePage(props: { me: any; meLoaded?: boolean; onMeUpdate?:
                   </p>
                 </div>
               </div>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => {
-                  setEditName(viewMe.name ?? "");
-                  setEditEmail(viewMe.email ?? "");
-                  setEditPassword("");
-                  setEditGender(viewMe.gender ?? "");
-                  setEditError(null);
-                  setEditOpen(true);
-                }}
-              >
-                <Pencil className="h-4 w-4 mr-1" />
-                Редактировать профиль
-              </Button>
             </div>
 
             <div className="mt-6 flex flex-wrap items-center gap-3">
@@ -526,161 +425,6 @@ export function V0ProfilePage(props: { me: any; meLoaded?: boolean; onMeUpdate?:
               </div>
             ) : null}
 
-            <Dialog open={avatarOpen} onOpenChange={setAvatarOpen}>
-              <DialogContent className="sm:max-w-lg">
-                <DialogHeader>
-                  <DialogTitle>Выбор аватара</DialogTitle>
-                </DialogHeader>
-
-                <div className="flex items-center justify-between gap-3">
-                  <div className="text-sm text-muted-foreground">Загрузить своё фото или выбрать готовый аватар</div>
-                  <label className="inline-flex cursor-pointer items-center gap-2 rounded-md border border-border bg-background px-3 py-2 text-xs font-medium hover:bg-secondary transition-colors">
-                    <Upload className="h-3.5 w-3.5" />
-                    Загрузить фото
-                    <input
-                      type="file"
-                      accept="image/*"
-                      className="hidden"
-                      onChange={(e) => {
-                        const file = e.target.files?.[0];
-                        if (!file) return;
-                        compressAvatar(file)
-                          .then((result) => persistAvatar(result))
-                          .catch((err: any) => {
-                            setInfo(err?.message ?? "Не удалось обработать изображение");
-                          });
-                      }}
-                    />
-                  </label>
-                </div>
-
-                <div className="mt-4 grid gap-4">
-                  <div>
-                    <div className="grid grid-cols-5 gap-2">
-                      {boyAvatars.map((src, idx) => (
-                        <button
-                          key={`boy-${idx}`}
-                          type="button"
-                          className={`h-12 w-12 rounded-full border ${
-                            avatar === src ? "border-primary ring-2 ring-primary/40" : "border-border"
-                          }`}
-                          onClick={() => {
-                            persistAvatar(src);
-                          }}
-                        >
-                          <img src={src} alt="" className="h-full w-full rounded-full object-cover" />
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-
-                  <div>
-                    <div className="grid grid-cols-5 gap-2">
-                      {girlAvatars.map((src, idx) => (
-                        <button
-                          key={`girl-${idx}`}
-                          type="button"
-                          className={`h-12 w-12 rounded-full border ${
-                            avatar === src ? "border-primary ring-2 ring-primary/40" : "border-border"
-                          }`}
-                          onClick={() => {
-                            persistAvatar(src);
-                          }}
-                        >
-                          <img src={src} alt="" className="h-full w-full rounded-full object-cover" />
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                </div>
-              </DialogContent>
-            </Dialog>
-
-            <Dialog open={editOpen} onOpenChange={setEditOpen}>
-              <DialogContent className="sm:max-w-md">
-                <DialogHeader>
-                  <DialogTitle>Редактировать профиль</DialogTitle>
-                </DialogHeader>
-                <form
-                  className="space-y-4"
-                  onSubmit={async (e) => {
-                    e.preventDefault();
-                    setEditLoading(true);
-                    setEditError(null);
-                    try {
-                      const payload: { name?: string; email?: string; password?: string; gender?: string } = {};
-                      if (editName.trim()) payload.name = editName.trim();
-                      if (editEmail.trim()) payload.email = editEmail.trim();
-                      if (editPassword) payload.password = editPassword;
-                      if (editGender) payload.gender = editGender;
-                      const updated = await api.updateProfile(payload);
-                      setMeLive(updated);
-                      props.onMeUpdate?.(updated);
-                      setEditOpen(false);
-                    } catch (err: any) {
-                      setEditError(err?.message ?? "Ошибка");
-                    } finally {
-                      setEditLoading(false);
-                    }
-                  }}
-                >
-                  <div className="space-y-2">
-                    <label className="text-sm font-medium">Имя</label>
-                    <Input
-                      value={editName}
-                      onChange={(e) => setEditName(e.target.value)}
-                      placeholder="Имя"
-                      autoComplete="name"
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <label className="text-sm font-medium">Email</label>
-                    <Input
-                      type="email"
-                      value={editEmail}
-                      onChange={(e) => setEditEmail(e.target.value)}
-                      placeholder="email@example.com"
-                      autoComplete="email"
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <label className="text-sm font-medium">Новый пароль (оставьте пустым, чтобы не менять)</label>
-                    <Input
-                      type="password"
-                      value={editPassword}
-                      onChange={(e) => setEditPassword(e.target.value)}
-                      placeholder="••••••••"
-                      autoComplete="new-password"
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <label className="text-sm font-medium">Пол</label>
-                    <select
-                      className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                      value={editGender}
-                      onChange={(e) => setEditGender(e.target.value)}
-                    >
-                      <option value="">Не указан</option>
-                      <option value="M">М</option>
-                      <option value="F">Ж</option>
-                    </select>
-                  </div>
-                  {editError ? (
-                    <div className="rounded-lg border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive">
-                      {editError}
-                    </div>
-                  ) : null}
-                  <div className="flex gap-2">
-                    <Button type="submit" disabled={editLoading}>
-                      {editLoading ? "Сохранение…" : "Сохранить"}
-                    </Button>
-                    <Button type="button" variant="outline" onClick={() => setEditOpen(false)}>
-                      Отмена
-                    </Button>
-                  </div>
-                </form>
-              </DialogContent>
-            </Dialog>
           </CardContent>
         </Card>
 
@@ -997,7 +741,7 @@ export function V0ProfilePage(props: { me: any; meLoaded?: boolean; onMeUpdate?:
 
         {details ? (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-6" onClick={() => { setDetails(null); setDetailsStatsOpen(false); }}>
-            <ModalScrollArea className="w-full max-w-5xl max-h-[90vh] overflow-y-auto rounded-xl border border-border bg-card p-6" onClick={(e) => e.stopPropagation()}>
+            <ModalScrollArea className="w-full max-w-5xl max-h-[90dvh] overflow-y-auto rounded-xl border border-border bg-card p-6" onClick={(e) => e.stopPropagation()}>
               <div className="flex items-start justify-between gap-3">
                 <div>
                   <div className="text-lg font-semibold">{detailsTitle}</div>
@@ -1321,7 +1065,7 @@ function EditGameScoresDialog(props: {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-6" onClick={props.onClose}>
       <ModalScrollArea
-        className="w-full max-w-2xl max-h-[90vh] overflow-y-auto rounded-xl border border-border bg-card p-6"
+        className="w-full max-w-2xl max-h-[90dvh] overflow-y-auto rounded-xl border border-border bg-card p-6"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center justify-between mb-6">

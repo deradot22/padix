@@ -16,7 +16,9 @@ services:
       retries: 5
 
   api:
-    build: .
+    build:
+      context: .
+      dockerfile: api/Dockerfile
     depends_on:
       db:
         condition: service_healthy
@@ -24,8 +26,31 @@ services:
       SPRING_DATASOURCE_URL: jdbc:postgresql://db:5432/padix
       SPRING_DATASOURCE_USERNAME: padix
       SPRING_DATASOURCE_PASSWORD: padix
+      APP_BOT_BASE_URL: http://bot:8081
+      APP_INTERNAL_SECRET: ${APP_INTERNAL_SECRET:-dev-internal-secret-change-me}
     ports:
       - "8080:8080"
+
+  bot:
+    build:
+      context: .
+      dockerfile: bot/Dockerfile
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://db:5432/padix
+      SPRING_DATASOURCE_USERNAME: padix
+      SPRING_DATASOURCE_PASSWORD: padix
+      APP_TELEGRAM_ENABLED: ${APP_TELEGRAM_ENABLED:-true}
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
+      APP_TELEGRAM_BOT_USERNAME: ${APP_TELEGRAM_BOT_USERNAME:-padix_dev_bot}
+      APP_PUBLIC_BASE_URL: ${APP_PUBLIC_BASE_URL:-http://localhost:8083}
+      APP_INTERNAL_SECRET: ${APP_INTERNAL_SECRET:-dev-internal-secret-change-me}
+    ports:
+      # 8081 на хосте занят локальным Expo; используем 8084 для дебага.
+      # api ↔ bot внутри docker network всё равно идёт по http://bot:8081.
+      - "8084:8081"
 
   web:
     image: docker.io/library/node:20-alpine

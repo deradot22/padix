@@ -16,6 +16,8 @@ export type Player = {
   avatarUrl?: string | null;
 };
 
+export type EventVisibility = "PRIVATE" | "PUBLIC";
+
 export type Event = {
   id: string;
   title: string;
@@ -33,6 +35,27 @@ export type Event = {
   setsPerMatch: number;
   gamesPerSet: number;
   tiebreakEnabled: boolean;
+  visibility: EventVisibility;
+  seriesId?: string | null;
+  seriesTitle?: string | null;
+};
+
+export type EventSeries = {
+  id: string;
+  title: string;
+  daysOfWeek: string;
+  startTime: string;
+  endTime: string;
+  timezone: string;
+  courtsCount: number;
+  pairingMode: PairingMode;
+  scoringMode: ScoringMode;
+  pointsPerPlayerPerMatch: number;
+  visibility: EventVisibility;
+  materializeHoursBefore: number;
+  materializeAtTime: string;   // "HH:mm" — час локального времени автора, когда летит анонс
+  active: boolean;
+  lastMaterializedFor?: string | null;
 };
 
 export type PointsScore = { teamAPoints: number; teamBPoints: number };
@@ -65,6 +88,19 @@ export type EventDetails = {
   pendingCancelRequests: Player[];
   isAuthor: boolean;
   authorName: string;
+};
+
+export type BalanceSeverity = "NONE" | "SMALL" | "MEDIUM" | "LARGE";
+
+export type BalancePreview = {
+  playerCount: number;
+  capacity: number;
+  ratingSpread: number;
+  severity: BalanceSeverity;
+  maxGoodRounds: number;
+  requestedRounds: number | null;
+  currentPairingMode: PairingMode;
+  shouldWarn: boolean;
 };
 
 export type MeResponse = {
@@ -169,6 +205,39 @@ export type EventInviteItem = {
 };
 
 export type InviteStatus = "PENDING" | "ACCEPTED" | "DECLINED";
+
+export type TelegramChatType = "PRIVATE" | "GROUP" | "SUPERGROUP" | "CHANNEL";
+
+export type TelegramChat = {
+  id: string;
+  chatType: TelegramChatType;
+  title: string;
+  linkedAt?: string | null;
+  notifyUpdated: boolean;
+  notifyFinished: boolean;
+  notifyReminder: boolean;
+};
+
+export type TelegramSettings = {
+  enabled: boolean;
+  reminderHours: number;
+  quietHoursStart: string | null;  // "HH:mm" или null
+  quietHoursEnd: string | null;
+  timezone: string;
+};
+
+export type TelegramLinkToken = {
+  token: string;
+  botUsername: string;
+  deeplink: string;
+  linkCommand: string;
+  expiresAt: string;
+};
+
+export type TelegramStatus = {
+  enabled: boolean;
+  botUsername: string;
+};
 
 export type EventInviteStatusItem = {
   publicId: string;
@@ -280,6 +349,13 @@ export const api = {
     }),
   closeRegistration: (eventId: string) =>
     request(`/api/events/${eventId}/close-registration`, { method: "POST" }),
+  getBalancePreview: (eventId: string) =>
+    request<BalancePreview>(`/api/events/${eventId}/balance-preview`),
+  updatePairingMode: (eventId: string, pairingMode: PairingMode) =>
+    request<Event>(`/api/events/${eventId}/pairing-mode`, {
+      method: "PATCH",
+      body: JSON.stringify({ pairingMode }),
+    }),
   startEvent: (eventId: string) =>
     request(`/api/events/${eventId}/start`, { method: "POST" }),
   cancelRegistration: (eventId: string) =>
@@ -337,9 +413,73 @@ export const api = {
     roundsPlanned?: number;
     scoringMode: "POINTS" | "SETS";
     pointsPerPlayerPerMatch?: number;
+    telegramChatIds?: string[];
+    visibility?: EventVisibility;
   }) =>
     request<Event>("/api/events", {
       method: "POST",
+      body: JSON.stringify(payload),
+    }),
+
+  // ---------- Event series ----------
+  listEventSeries: () => request<EventSeries[]>("/api/event-series"),
+  getEventSeries: (id: string) => request<EventSeries>(`/api/event-series/${id}`),
+  createEventSeries: (payload: {
+    title: string;
+    daysOfWeek: string;            // "MON,WED,FRI"
+    startTime: string;
+    endTime: string;
+    timezone?: string;
+    courtsCount?: number;
+    pairingMode?: PairingMode;
+    scoringMode?: "POINTS" | "SETS";
+    pointsPerPlayerPerMatch?: number;
+    visibility?: EventVisibility;
+    materializeHoursBefore?: number;
+    materializeAtTime?: string;
+  }) =>
+    request<EventSeries>("/api/event-series", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
+  updateEventSeries: (id: string, payload: Partial<EventSeries>) =>
+    request<EventSeries>(`/api/event-series/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify(payload),
+    }),
+  pauseEventSeries: (id: string) =>
+    request<EventSeries>(`/api/event-series/${id}/pause`, { method: "POST" }),
+  resumeEventSeries: (id: string) =>
+    request<EventSeries>(`/api/event-series/${id}/resume`, { method: "POST" }),
+  deleteEventSeries: (id: string) =>
+    request(`/api/event-series/${id}`, { method: "DELETE" }),
+
+  // ---------- Telegram integration ----------
+  getTelegramStatus: () => request<TelegramStatus>("/api/telegram/status"),
+  getTelegramChats: () => request<TelegramChat[]>("/api/telegram/chats"),
+  createTelegramLinkToken: () =>
+    request<TelegramLinkToken>("/api/telegram/link-token", { method: "POST" }),
+  unlinkTelegramChat: (chatId: string) =>
+    request(`/api/telegram/chats/${chatId}`, { method: "DELETE" }),
+  getTelegramSettings: () => request<TelegramSettings>("/api/telegram/settings"),
+  updateTelegramSettings: (payload: {
+    enabled?: boolean;
+    reminderHours?: number;
+    quietHoursStart?: string | null;
+    quietHoursEnd?: string | null;
+    quietHoursDisabled?: boolean;
+    timezone?: string;
+  }) =>
+    request<TelegramSettings>("/api/telegram/settings", {
+      method: "PATCH",
+      body: JSON.stringify(payload),
+    }),
+  updateTelegramChatPreferences: (
+    chatId: string,
+    payload: { notifyUpdated?: boolean; notifyFinished?: boolean; notifyReminder?: boolean }
+  ) =>
+    request<TelegramChat>(`/api/telegram/chats/${chatId}/preferences`, {
+      method: "PATCH",
       body: JSON.stringify(payload),
     }),
 

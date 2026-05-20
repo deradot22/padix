@@ -1,14 +1,14 @@
 import { FormEvent, useEffect, useMemo, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Gamepad2, Users, Clock, Calendar, Lightbulb, Users2, MapPin, Zap } from "lucide-react";
+import { Gamepad2, Users, Clock, Calendar, Lightbulb, Users2, MapPin, Zap, Send, MessageCircle, Users as UsersIcon, Lock, Globe, Repeat } from "lucide-react";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
-import { api, PairingMode } from "../../../lib/api";
+import { api, EventVisibility, PairingMode, TelegramChat } from "../../../lib/api";
 
 function todayIso(): string {
   const d = new Date();
@@ -22,6 +22,13 @@ export function V0CreateEventPage(props: {
   meLoaded?: boolean;
 }) {
   const nav = useNavigate();
+  const [searchParams] = useSearchParams();
+  const editSeriesId = searchParams.get("editSeries");
+  const isEditing = !!editSeriesId;
+  const [recurring, setRecurring] = useState(searchParams.get("recurring") === "1" || isEditing);
+  const [daysOfWeek, setDaysOfWeek] = useState<Set<string>>(new Set());
+  const [materializeHoursBefore, setMaterializeHoursBefore] = useState(168);
+  const [materializeAtHour, setMaterializeAtHour] = useState(9);
   const [title, setTitle] = useState("Американка");
   const [date, setDate] = useState(todayIso());
   const [startHour, setStartHour] = useState("19");
@@ -34,18 +41,67 @@ export function V0CreateEventPage(props: {
   const [autoRounds, setAutoRounds] = useState(true);
   const [rounds, setRounds] = useState(6);
   const [pointsPerPlayer, setPointsPerPlayer] = useState(6);
+  const [visibility, setVisibility] = useState<EventVisibility>("PRIVATE");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const [gameMode, setGameMode] = useState<"round_robin" | "balanced">("round_robin");
   const [roundsMode, setRoundsMode] = useState<"auto" | "manual">("auto");
   const [step] = useState(1);
+  const [telegramChats, setTelegramChats] = useState<TelegramChat[]>([]);
+  const [selectedTgChatIds, setSelectedTgChatIds] = useState<Set<string>>(new Set());
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const status = await api.getTelegramStatus();
+        if (!status.enabled) return;
+        const list = await api.getTelegramChats();
+        // Личный чат автора в анонсе не нужен — он сам создаёт игру и про неё знает.
+        // Личные напоминания о собственных играх (если автор зарегистрирован участником)
+        // придут отдельно по reminder-cron.
+        const groupOnly = list.filter((c) => c.chatType !== "PRIVATE");
+        setTelegramChats(groupOnly);
+        setSelectedTgChatIds(new Set(groupOnly.map((c) => c.id)));
+      } catch {
+        // тихо — фича опциональная
+      }
+    })();
+  }, []);
 
   useEffect(() => {
     if (!props.meLoaded) return;
     if (!props.me) nav("/login");
     else if (!props.me.surveyCompleted) nav("/survey");
   }, [props.me, props.meLoaded, nav]);
+
+  // Edit-режим: подгружаем серию и заполняем форму её данными.
+  useEffect(() => {
+    if (!editSeriesId) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const s = await api.getEventSeries(editSeriesId);
+        if (cancelled) return;
+        setTitle(s.title);
+        setDaysOfWeek(new Set(s.daysOfWeek.split(",").map((d) => d.trim()).filter(Boolean)));
+        const [sh, sm] = s.startTime.slice(0, 5).split(":");
+        const [eh, em] = s.endTime.slice(0, 5).split(":");
+        setStartHour(sh); setStartMinute(sm);
+        setEndHour(eh); setEndMinute(em);
+        setCourts(s.courtsCount);
+        setPointsPerPlayer(s.pointsPerPlayerPerMatch);
+        setVisibility(s.visibility);
+        setMaterializeHoursBefore(s.materializeHoursBefore);
+        const matH = parseInt(s.materializeAtTime?.slice(0, 2) ?? "9", 10);
+        if (!Number.isNaN(matH)) setMaterializeAtHour(matH);
+        setGameMode(s.pairingMode === "BALANCED" ? "balanced" : "round_robin");
+      } catch (e: any) {
+        setError(e?.message ?? "Не удалось загрузить подписку");
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [editSeriesId]);
 
   useEffect(() => {
     setPairingMode(gameMode === "balanced" ? "BALANCED" : "ROUND_ROBIN");
@@ -89,6 +145,50 @@ export function V0CreateEventPage(props: {
     try {
       const startTime = `${startHour}:${startMinute}`;
       const endTime = `${endHour}:${endMinute}`;
+
+      // Регулярная игра (подписка): создаём или обновляем EventSeries.
+      if (recurring) {
+        if (daysOfWeek.size === 0) {
+          throw new Error("Выберите хотя бы один день недели");
+        }
+        const tz = (() => {
+          try { return Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC"; } catch { return "UTC"; }
+        })();
+        if (editSeriesId) {
+          await api.updateEventSeries(editSeriesId, {
+            title,
+            daysOfWeek: Array.from(daysOfWeek).join(","),
+            startTime,
+            endTime,
+            timezone: tz,
+            courtsCount: courts,
+            pairingMode,
+            scoringMode: "POINTS",
+            pointsPerPlayerPerMatch: pointsPerPlayer,
+            visibility,
+            materializeHoursBefore,
+          } as any);
+          nav(`/settings?tab=subscriptions&highlight=${editSeriesId}`);
+          return;
+        }
+        const created = await api.createEventSeries({
+          title,
+          daysOfWeek: Array.from(daysOfWeek).join(","),
+          startTime,
+          endTime,
+          timezone: tz,
+          courtsCount: courts,
+          pairingMode,
+          scoringMode: "POINTS",
+          pointsPerPlayerPerMatch: pointsPerPlayer,
+          visibility,
+          materializeHoursBefore,
+          materializeAtTime: `${String(materializeAtHour).padStart(2, "0")}:00`,
+        });
+        nav(`/settings?tab=subscriptions&highlight=${created.id}`);
+        return;
+      }
+
       const startDt = new Date(`${date}T${startTime}`);
       let endDt = new Date(`${date}T${endTime}`);
       // Если окончание раньше начала — значит игра переходит за полночь
@@ -112,6 +212,8 @@ export function V0CreateEventPage(props: {
         roundsPlanned: autoRounds ? undefined : rounds,
         scoringMode: "POINTS",
         pointsPerPlayerPerMatch: pointsPerPlayer,
+        visibility,
+        telegramChatIds: selectedTgChatIds.size > 0 ? Array.from(selectedTgChatIds) : undefined,
       });
       nav(`/events/${created.id}`);
     } catch (err: any) {
@@ -124,22 +226,74 @@ export function V0CreateEventPage(props: {
   return (
     <TooltipProvider>
       <form onSubmit={onSubmit} className="mx-auto max-w-3xl space-y-8">
-        <div className="space-y-4">
-          <div className="inline-flex items-center gap-2 rounded-full border border-primary/20 bg-primary/5 px-4 py-2">
-            <Lightbulb className="h-4 w-4 text-primary" />
-            <span className="text-sm font-medium text-primary">Создание новой игры</span>
+        {isEditing ? (
+          <div className="space-y-2">
+            <button
+              type="button"
+              onClick={() => nav("/settings?tab=subscriptions")}
+              className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground transition-colors"
+            >
+              ← К подпискам
+            </button>
+            <h1 className="text-3xl font-bold tracking-tight">Редактирование подписки</h1>
+            <p className="text-sm text-muted-foreground">
+              Изменения применятся к следующим автоматически созданным играм. Уже созданные игры останутся без изменений.
+            </p>
           </div>
-          <h1 className="text-4xl font-bold tracking-tight">Организуйте игру в падел</h1>
-          <p className="text-lg text-muted-foreground max-w-2xl">
-            Выберите время, место и параметры игры. Система автоматически подберёт оптимальные раунды и режим.
-          </p>
-        </div>
+        ) : (
+          <>
+            <div className="space-y-4">
+              <div className="inline-flex items-center gap-2 rounded-full border border-primary/20 bg-primary/5 px-4 py-2">
+                <Lightbulb className="h-4 w-4 text-primary" />
+                <span className="text-sm font-medium text-primary">Создание новой игры</span>
+              </div>
+              <h1 className="text-4xl font-bold tracking-tight">Организуйте игру в падел</h1>
+              <p className="text-lg text-muted-foreground max-w-2xl">
+                Выберите время, место и параметры игры. Система автоматически подберёт оптимальные раунды и режим.
+              </p>
+            </div>
 
-        <div className="flex gap-2">
-          {[1, 2, 3].map((s) => (
-            <div key={s} className={cn("h-1.5 flex-1 rounded-full transition-all", s <= step ? "bg-primary" : "bg-secondary")} />
-          ))}
-        </div>
+            <div className="flex gap-2">
+              {[1, 2, 3].map((s) => (
+                <div key={s} className={cn("h-1.5 flex-1 rounded-full transition-all", s <= step ? "bg-primary" : "bg-secondary")} />
+              ))}
+            </div>
+
+            {/* Тип: разовая или регулярная (подписка). От этого зависит, выбираем
+                ли мы конкретную дату или дни недели + горизонт материализации. */}
+            <div className="grid gap-3 sm:grid-cols-2">
+              {[
+                { id: false, icon: Calendar, title: "Разовая", desc: "Игра на конкретную дату." },
+                { id: true, icon: Repeat, title: "Регулярная", desc: "Подписка: повторяется в выбранные дни недели." },
+              ].map((opt) => {
+                const Icon = opt.icon;
+                const active = recurring === opt.id;
+                return (
+                  <button
+                    key={String(opt.id)}
+                    type="button"
+                    onClick={() => setRecurring(opt.id)}
+                    className={cn(
+                      "relative rounded-lg border-2 p-4 text-left transition-all",
+                      active ? "border-primary bg-primary/5" : "border-border bg-secondary/50 hover:border-border/80",
+                    )}
+                  >
+                    <div className="flex items-center gap-2">
+                      <Icon className={cn("h-5 w-5", active ? "text-primary" : "text-muted-foreground")} />
+                      <div className="font-semibold">{opt.title}</div>
+                    </div>
+                    <div className="text-sm text-muted-foreground mt-2">{opt.desc}</div>
+                    {active ? (
+                      <div className="absolute top-3 right-3 flex h-5 w-5 items-center justify-center rounded-full bg-primary">
+                        <div className="h-2 w-2 rounded-full bg-primary-foreground" />
+                      </div>
+                    ) : null}
+                  </button>
+                );
+              })}
+            </div>
+          </>
+        )}
 
         <div className="space-y-6">
           <div className="space-y-6">
@@ -164,28 +318,111 @@ export function V0CreateEventPage(props: {
                   />
                 </div>
 
-                <div className="space-y-2">
-                  <Label htmlFor="date" className="font-medium">
-                    Дата проведения
-                  </Label>
-                  <div
-                    className="relative flex items-center gap-2 rounded-md border border-border bg-secondary px-3 h-11 cursor-pointer"
-                    onClick={() => (document.getElementById("date-hidden") as HTMLInputElement)?.showPicker?.()}
-                  >
-                    <Calendar className="h-4 w-4 text-muted-foreground shrink-0" />
-                    <span className="text-sm flex-1">
-                      {new Date(date + "T00:00:00").toLocaleDateString("ru-RU", { day: "2-digit", month: "2-digit", year: "numeric" })}
-                    </span>
-                    <input
-                      id="date-hidden"
-                      type="date"
-                      value={date}
-                      onChange={(e) => { if (e.target.value) setDate(e.target.value); }}
-                      className="absolute inset-0 opacity-0 cursor-pointer"
-                    />
+                {recurring ? (
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    <div className="space-y-2">
+                      <Label className="font-medium">Открывать регистрацию</Label>
+                      <Select
+                        value={materializeHoursBefore.toString()}
+                        onValueChange={(v) => setMaterializeHoursBefore(Number(v))}
+                      >
+                        <SelectTrigger className="bg-secondary border-border h-11">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="24">за 1 день до игры</SelectItem>
+                          <SelectItem value="72">за 3 дня до игры</SelectItem>
+                          <SelectItem value="168">за неделю до игры</SelectItem>
+                          <SelectItem value="336">за 2 недели до игры</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-2">
+                      <Label className="font-medium">Время анонса</Label>
+                      <Select
+                        value={materializeAtHour.toString()}
+                        onValueChange={(v) => setMaterializeAtHour(Number(v))}
+                      >
+                        <SelectTrigger className="bg-secondary border-border h-11">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {Array.from({ length: 18 }, (_, i) => i + 6).map((h) => (
+                            <SelectItem key={h} value={h.toString()}>
+                              {h.toString().padStart(2, "0")}:00
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
                   </div>
-                </div>
+                ) : (
+                  <div className="space-y-2">
+                    <Label htmlFor="date" className="font-medium">
+                      Дата проведения
+                    </Label>
+                    <div
+                      className="relative flex items-center gap-2 rounded-md border border-border bg-secondary px-3 h-11 cursor-pointer"
+                      onClick={() => (document.getElementById("date-hidden") as HTMLInputElement)?.showPicker?.()}
+                    >
+                      <Calendar className="h-4 w-4 text-muted-foreground shrink-0" />
+                      <span className="text-sm flex-1">
+                        {new Date(date + "T00:00:00").toLocaleDateString("ru-RU", { day: "2-digit", month: "2-digit", year: "numeric" })}
+                      </span>
+                      <input
+                        id="date-hidden"
+                        type="date"
+                        value={date}
+                        onChange={(e) => { if (e.target.value) setDate(e.target.value); }}
+                        className="absolute inset-0 opacity-0 cursor-pointer"
+                      />
+                    </div>
+                  </div>
+                )}
               </div>
+
+              {recurring && (
+                <div className="space-y-2">
+                  <Label className="font-medium">Дни недели</Label>
+                  <div className="grid grid-cols-7 gap-1.5 sm:gap-2">
+                    {[
+                      { id: "MON", label: "Пн" },
+                      { id: "TUE", label: "Вт" },
+                      { id: "WED", label: "Ср" },
+                      { id: "THU", label: "Чт" },
+                      { id: "FRI", label: "Пт" },
+                      { id: "SAT", label: "Сб" },
+                      { id: "SUN", label: "Вс" },
+                    ].map((d) => {
+                      const selected = daysOfWeek.has(d.id);
+                      return (
+                        <button
+                          key={d.id}
+                          type="button"
+                          onClick={() => {
+                            setDaysOfWeek((prev) => {
+                              const next = new Set(prev);
+                              if (next.has(d.id)) next.delete(d.id); else next.add(d.id);
+                              return next;
+                            });
+                          }}
+                          className={cn(
+                            "h-10 rounded-md border-2 text-sm font-medium transition-all",
+                            selected
+                              ? "border-primary bg-primary/10 text-primary"
+                              : "border-border bg-secondary/50 text-muted-foreground hover:border-border/80",
+                          )}
+                        >
+                          {d.label}
+                        </button>
+                      );
+                    })}
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    Игра автоматически создаётся для каждой выбранной даты, регистрация открывается в заданный момент.
+                  </p>
+                </div>
+              )}
 
               <div className="space-y-3">
                 <Label className="font-medium">Время проведения</Label>
@@ -371,6 +608,41 @@ export function V0CreateEventPage(props: {
               </div>
 
               <div className="space-y-3">
+                <Label className="font-medium">Видимость</Label>
+                <div className="grid gap-3 md:grid-cols-2">
+                  {[
+                    { id: "PRIVATE" as EventVisibility, icon: Lock, title: "Приватная", desc: "Видна только участникам, приглашённым и автору. По умолчанию." },
+                    { id: "PUBLIC" as EventVisibility, icon: Globe, title: "Открытая", desc: "Видна всем зарегистрированным юзерам в /games. Любой может записаться." },
+                  ].map((opt) => {
+                    const Icon = opt.icon;
+                    const active = visibility === opt.id;
+                    return (
+                      <button
+                        key={opt.id}
+                        type="button"
+                        onClick={() => setVisibility(opt.id)}
+                        className={cn(
+                          "relative rounded-lg border-2 p-4 text-left transition-all",
+                          active ? "border-primary bg-primary/5" : "border-border bg-secondary/50 hover:border-border/80",
+                        )}
+                      >
+                        <div className="flex items-center gap-2">
+                          <Icon className={cn("h-5 w-5", active ? "text-primary" : "text-muted-foreground")} />
+                          <div className="font-semibold">{opt.title}</div>
+                        </div>
+                        <div className="text-sm text-muted-foreground mt-2">{opt.desc}</div>
+                        {active ? (
+                          <div className="absolute top-3 right-3 flex h-5 w-5 items-center justify-center rounded-full bg-primary">
+                            <div className="h-2 w-2 rounded-full bg-primary-foreground" />
+                          </div>
+                        ) : null}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              <div className="space-y-3">
                 <Label className="font-medium">Раунды</Label>
                 <div className="grid gap-3 md:grid-cols-2">
                   {[
@@ -436,13 +708,50 @@ export function V0CreateEventPage(props: {
                 </div>
               </div>
 
+              {!recurring && telegramChats.length > 0 && (
+                <div className="rounded-lg border border-border bg-secondary/30 p-4 space-y-3">
+                  <div className="flex items-center gap-2">
+                    <Send className="h-4 w-4 text-sky-400" />
+                    <div className="text-sm font-medium">Отправить анонс в Telegram</div>
+                  </div>
+                  <div className="space-y-2">
+                    {telegramChats.map((chat) => {
+                      const checked = selectedTgChatIds.has(chat.id);
+                      const Icon = chat.chatType === "PRIVATE" ? MessageCircle : chat.chatType === "CHANNEL" ? Send : UsersIcon;
+                      return (
+                        <label
+                          key={chat.id}
+                          className="flex items-center gap-3 rounded-md bg-background/60 hover:bg-background px-3 py-2 cursor-pointer transition-colors"
+                        >
+                          <input
+                            type="checkbox"
+                            className="h-4 w-4 accent-sky-500"
+                            checked={checked}
+                            onChange={(e) => {
+                              setSelectedTgChatIds((prev) => {
+                                const next = new Set(prev);
+                                if (e.target.checked) next.add(chat.id);
+                                else next.delete(chat.id);
+                                return next;
+                              });
+                            }}
+                          />
+                          <Icon className="h-4 w-4 text-sky-400" />
+                          <span className="text-sm flex-1 truncate">{chat.title}</span>
+                        </label>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
               <div className="flex gap-3 pt-4">
                 <Button variant="outline" className="flex-1 h-12 bg-transparent" type="button" onClick={() => nav("/games")} disabled={loading}>
                   Отменить
                 </Button>
                 <Button className="flex-1 h-12 bg-primary text-primary-foreground" size="lg" disabled={loading}>
                   <Gamepad2 className="mr-2 h-5 w-5" />
-                  {loading ? "Создаём…" : "Создать игру"}
+                  {loading ? "Сохраняем…" : isEditing ? "Сохранить подписку" : "Создать игру"}
                 </Button>
               </div>
 
