@@ -217,11 +217,7 @@ class EventSeriesMaterializer(
                 emptyList()
             }
         if (groupChatIds.isNotEmpty()) {
-            // ВАЖНО: tick() выполняется в @Transactional, поэтому строка events ещё НЕ
-            // закоммичена. Если позвать bot прямо сейчас, его INSERT в event_telegram_post
-            // (FK → events.id) упадёт с FK violation — сообщение в чат уйдёт, но запись о
-            // нём не сохранится, и последующие edit/update в этом чате работать не будут.
-            // Откладываем вызов до afterCommit транзакции материализатора.
+            // Откладываем до afterCommit — см. TransactionUtils.runAfterCommit.
             val payload = EventCreatedNotify(
                 eventId = created.id!!,
                 ownerUserId = ownerId,
@@ -233,20 +229,7 @@ class EventSeriesMaterializer(
                 courtsCount = created.courtsCount,
                 registeredCount = 0
             )
-            if (org.springframework.transaction.support.TransactionSynchronizationManager.isSynchronizationActive()) {
-                org.springframework.transaction.support.TransactionSynchronizationManager.registerSynchronization(
-                    object : org.springframework.transaction.support.TransactionSynchronization {
-                        override fun afterCommit() {
-                            try {
-                                botClient.notifyEventCreated(payload)
-                            } catch (e: Exception) {
-                                log.warn("notifyEventCreated for materialized {} failed: {}", payload.eventId, e.message)
-                            }
-                        }
-                    }
-                )
-            } else {
-                // На случай если кто-то позовёт materialize() вне транзакции — fallback.
+            runAfterCommit {
                 try {
                     botClient.notifyEventCreated(payload)
                 } catch (e: Exception) {

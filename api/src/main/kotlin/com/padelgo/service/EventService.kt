@@ -559,21 +559,22 @@ class EventService(
             if (oldPairing != saved.pairingMode) add("Режим: ${humanPairing(oldPairing)} → ${humanPairing(saved.pairingMode)}")
         }
         if (changes.isNotEmpty()) {
-            try {
-                botClient.notifyEventUpdated(
-                    EventUpdatedNotify(
-                        eventId = saved.id!!,
-                        ownerUserId = userId,
-                        title = saved.title,
-                        date = saved.date,
-                        startTime = saved.startTime,
-                        endTime = saved.endTime,
-                        courtsCount = saved.courtsCount,
-                        changes = changes
-                    )
-                )
-            } catch (e: Exception) {
-                log.warn("Failed to notify bot about UPDATED: {}", e.message)
+            // Откладываем до afterCommit: бот при notifyEventUpdated делает
+            // eventRepo.findById, и если транзакция ещё не закоммичена — читает старую
+            // версию (баг «на 2-м апдейте подтягиваются изменения 1-го»).
+            val payload = EventUpdatedNotify(
+                eventId = saved.id!!,
+                ownerUserId = userId,
+                title = saved.title,
+                date = saved.date,
+                startTime = saved.startTime,
+                endTime = saved.endTime,
+                courtsCount = saved.courtsCount,
+                changes = changes
+            )
+            runAfterCommit {
+                try { botClient.notifyEventUpdated(payload) }
+                catch (e: Exception) { log.warn("Failed to notify bot about UPDATED: {}", e.message) }
             }
         }
 
@@ -599,23 +600,23 @@ class EventService(
         val newCount = regRepo.countByEventIdAndStatus(eventId).toInt()
         if (before == newCount) return
         val capacity = event.courtsCount * 4
-        try {
-            botClient.notifyRosterChanged(
-                RosterChangedNotify(
-                    eventId = eventId,
-                    ownerUserId = ownerId,
-                    title = event.title,
-                    date = event.date,
-                    startTime = event.startTime,
-                    endTime = event.endTime,
-                    courtsCount = event.courtsCount,
-                    oldCount = before,
-                    newCount = newCount,
-                    capacity = capacity
-                )
-            )
-        } catch (e: Exception) {
-            log.warn("Failed to notify bot about roster change for event {}: {}", eventId, e.message)
+        // Откладываем до afterCommit: иначе бот вытащит из БД устаревшее значение
+        // registrations (api-транзакция ещё не закоммитила insert/delete).
+        val payload = RosterChangedNotify(
+            eventId = eventId,
+            ownerUserId = ownerId,
+            title = event.title,
+            date = event.date,
+            startTime = event.startTime,
+            endTime = event.endTime,
+            courtsCount = event.courtsCount,
+            oldCount = before,
+            newCount = newCount,
+            capacity = capacity
+        )
+        runAfterCommit {
+            try { botClient.notifyRosterChanged(payload) }
+            catch (e: Exception) { log.warn("Failed to notify bot about roster change for event {}: {}", eventId, e.message) }
         }
     }
 
@@ -812,12 +813,16 @@ class EventService(
 
         eventRepo.delete(event)
 
-        // После удаления — отправляем уведомления об отмене.
-        if (cancellationPlan != null && cancellationPlan.targetTgChatIds.isNotEmpty()) {
-            try {
-                botClient.sendCancellation(cancellationPlan)
-            } catch (e: Exception) {
-                log.warn("Failed to send Telegram cancellation: {}", e.message)
+        // sendCancellation откладываем до afterCommit — событие будет удалено
+        // окончательно, и бот не будет пытаться editMessage/unpin сообщения,
+        // ссылающиеся на entry в event_telegram_post которое только что
+        // каскадно удалилось (но коммит ещё не прошёл — мы могли бы получить
+        // неожиданные эффекты, если транзакция откатится).
+        if (cancellationPlan != null &&
+            (cancellationPlan.targetTgChatIds.isNotEmpty() || cancellationPlan.originalPosts.isNotEmpty())) {
+            runAfterCommit {
+                try { botClient.sendCancellation(cancellationPlan) }
+                catch (e: Exception) { log.warn("Failed to send Telegram cancellation: {}", e.message) }
             }
         }
     }
@@ -1182,19 +1187,21 @@ class EventService(
                     }
                 val ownerId = event.createdByUserId
                 if (ownerId != null) {
-                    botClient.notifyEventFinished(
-                        EventFinishedNotify(
-                            eventId = eventId,
-                            ownerUserId = ownerId,
-                            title = event.title,
-                            date = event.date,
-                            startTime = event.startTime,
-                            endTime = event.endTime,
-                            courtsCount = event.courtsCount,
-                            top = top,
-                            matchCount = finishedMatches.size
-                        )
+                    val payload = EventFinishedNotify(
+                        eventId = eventId,
+                        ownerUserId = ownerId,
+                        title = event.title,
+                        date = event.date,
+                        startTime = event.startTime,
+                        endTime = event.endTime,
+                        courtsCount = event.courtsCount,
+                        top = top,
+                        matchCount = finishedMatches.size
                     )
+                    runAfterCommit {
+                        try { botClient.notifyEventFinished(payload) }
+                        catch (e: Exception) { log.warn("Failed to notify bot about FINISHED: {}", e.message) }
+                    }
                 }
             }
         } catch (e: Exception) {

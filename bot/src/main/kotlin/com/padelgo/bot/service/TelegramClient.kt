@@ -20,7 +20,12 @@ data class TelegramProps(
     var botToken: String = "",
     var botUsername: String = "",
     var apiBaseUrl: String = "https://api.telegram.org",
-    var pollingTimeoutSeconds: Int = 30
+    var pollingTimeoutSeconds: Int = 30,
+    /** Если true — sendMessage / editMessageText / pin / unpin не делают реальный HTTP
+     *  в Telegram API, возвращают фейковый успех. Используется только в smoke-тестах,
+     *  чтобы прогнать notifyEventCreated/Updated с фейк-чатом и спровоцировать
+     *  настоящую запись event_telegram_post (= проверка afterCommit race condition). */
+    var dryRun: Boolean = false
 )
 
 @Configuration
@@ -143,6 +148,7 @@ class TelegramClient(
         disableWebPagePreview: Boolean = false,
         replyMarkup: Map<String, Any>? = null
     ) {
+        if (props.dryRun) return  // dry-run: noop
         val body = mutableMapOf<String, Any>(
             "chat_id" to chatId,
             "message_id" to messageId,
@@ -174,6 +180,12 @@ class TelegramClient(
         disableWebPagePreview: Boolean = false,
         replyMarkup: Map<String, Any>? = null
     ): TgSentMessage {
+        if (props.dryRun) {
+            // DRY-RUN: возвращаем фейковый успех без реального TG-вызова, чтобы
+            // вышестоящий код дошёл до INSERT event_telegram_post (smoke-тест).
+            val fakeMsgId = System.currentTimeMillis() and 0x7FFF_FFFFL
+            return TgSentMessage(messageId = fakeMsgId, chat = TgChat(id = chatId, type = "group"))
+        }
         val body = mutableMapOf<String, Any>(
             "chat_id" to chatId,
             "text" to text,
@@ -200,6 +212,7 @@ class TelegramClient(
      * disableNotification = true — pin без шумного уведомления.
      */
     fun pinChatMessage(chatId: Long, messageId: Long, disableNotification: Boolean = true) {
+        if (props.dryRun) return
         val resp = restClient.post()
             .uri("${baseUrl()}/pinChatMessage")
             .contentType(MediaType.APPLICATION_JSON)
@@ -221,6 +234,7 @@ class TelegramClient(
      * закрепленное в чате (Telegram-семантика).
      */
     fun unpinChatMessage(chatId: Long, messageId: Long?) {
+        if (props.dryRun) return
         val body = mutableMapOf<String, Any>("chat_id" to chatId)
         if (messageId != null) body["message_id"] = messageId
         val resp = restClient.post()
