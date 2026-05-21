@@ -46,7 +46,7 @@ export function V0CreateEventPage(props: {
   const [autoRounds, setAutoRounds] = useState(true);
   const [rounds, setRounds] = useState(6);
   const [pointsPerPlayer, setPointsPerPlayer] = useState(6);
-  const [visibility, setVisibility] = useState<EventVisibility>("PRIVATE");
+  const [visibility, setVisibility] = useState<EventVisibility>("PUBLIC");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -705,8 +705,8 @@ export function V0CreateEventPage(props: {
                 <Label className="font-medium">Видимость</Label>
                 <div className="grid gap-3 md:grid-cols-2">
                   {[
-                    { id: "PRIVATE" as EventVisibility, icon: Lock, title: "Приватная", desc: "Видна только участникам, приглашённым и автору. По умолчанию." },
-                    { id: "PUBLIC" as EventVisibility, icon: Globe, title: "Открытая", desc: "Видна всем зарегистрированным юзерам в /games. Любой может записаться." },
+                    { id: "PUBLIC" as EventVisibility, icon: Globe, title: "Открытая", desc: "Видна всем в /games. Любой может записаться. По умолчанию." },
+                    { id: "PRIVATE" as EventVisibility, icon: Lock, title: "Приватная", desc: "В /games видна, но детали (состав, раунды) — только участникам, приглашённым и автору." },
                   ].map((opt) => {
                     const Icon = opt.icon;
                     const active = visibility === opt.id;

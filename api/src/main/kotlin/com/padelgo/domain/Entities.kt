@@ -117,7 +117,7 @@ class Event(
 
     @Enumerated(EnumType.STRING)
     @Column(name = "visibility", nullable = false)
-    var visibility: EventVisibility = EventVisibility.PRIVATE,
+    var visibility: EventVisibility = EventVisibility.PUBLIC,
 
     @Column(name = "series_id")
     var seriesId: UUID? = null
@@ -180,7 +180,7 @@ class EventSeries(
 
     @Enumerated(EnumType.STRING)
     @Column(name = "visibility", nullable = false)
-    var visibility: EventVisibility = EventVisibility.PRIVATE,
+    var visibility: EventVisibility = EventVisibility.PUBLIC,
 
     @Column(name = "materialize_hours_before", nullable = false)
     var materializeHoursBefore: Int = 168,
