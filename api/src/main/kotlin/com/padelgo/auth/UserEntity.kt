@@ -56,6 +56,18 @@ class UserAccount(
     @Column(name = "gender", length = 1)
     var gender: String? = null,
 
+    /** Показывать шансы выигрыша в модале «Раунды» (фаза 1 — статичный Elo expectedScore). */
+    @Column(name = "show_win_probability", nullable = false)
+    var showWinProbability: Boolean = false,
+
+    /**
+     * Этот юзер получает TG-уведомления о новых тикетах обратной связи.
+     * Назначается в /admin. Может быть несколько таких юзеров — нотификация летит каждому,
+     * у кого привязан PRIVATE Telegram-чат.
+     */
+    @Column(name = "is_feedback_admin", nullable = false)
+    var isFeedbackAdmin: Boolean = false,
+
     @CreationTimestamp
     @Column(name = "created_at", nullable = false)
     var createdAt: Instant? = null

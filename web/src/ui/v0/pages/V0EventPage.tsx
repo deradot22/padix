@@ -624,6 +624,19 @@ export function V0EventPage(props: { me: any; meLoaded?: boolean }) {
     const myPublicId = props.me?.publicId;
     const isRegistered = !!meId && registered.some((p) => p.id === meId);
     const isAuthor = data.isAuthor;
+
+    // Совместный ввод счёта: участник матча может ввести счёт своего матча первым.
+    // Автор может всё (включая перезапись и редактирование после FINISHED).
+    const isMyMatch = (m: Match): boolean =>
+      !!meId && (m.teamA.some((p) => p.id === meId) || m.teamB.some((p) => p.id === meId));
+    // Финальный счёт = есть submittedByUserId ИЛИ матч уже FINISHED (для исторических данных без submittedBy).
+    const hasFinalScore = (m: Match): boolean =>
+      m.status === "FINISHED" || !!m.submittedByUserId;
+    const canSubmitScore = (m: Match): boolean =>
+      isAuthor || (isMyMatch(m) && !hasFinalScore(m));
+    const isParticipantOfEvent =
+      !!meId &&
+      (data.rounds ?? []).some((r) => r.matches.some(isMyMatch));
     const progressPercent = Math.min(100, (registered.length / Math.max(1, e.courtsCount * 4)) * 100);
     const friendPublicIds = new Set((friends?.friends ?? []).map((f) => f.publicId));
     const outgoingPublicIds = new Set((friends?.outgoing ?? []).map((f) => f.publicId));
@@ -821,20 +834,26 @@ export function V0EventPage(props: { me: any; meLoaded?: boolean }) {
                 ) : e.status === "IN_PROGRESS" ? (
                   <>
                     <div className="flex flex-wrap items-center gap-2">
-                      {isAuthor ? (
+                      {isAuthor || isParticipantOfEvent ? (
                         <button
                           type="button"
                           className="h-11 w-full sm:w-auto px-6 rounded-md bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 transition-colors"
                           onClick={() => {
                             setActionError(null);
                             const rounds = data?.rounds ?? [];
-                            const firstUnscored = rounds.flatMap((r) => r.matches).find((m) => !isMatchFinished(m));
-                            if (firstUnscored) {
+                            const allMatches = rounds.flatMap((r) => r.matches);
+                            // Для не-автора-участника приоритет — собственный неввёденный матч.
+                            // Иначе (или для автора) — первый неввёденный.
+                            const myUnscored = !isAuthor
+                              ? allMatches.find((m) => isMyMatch(m) && !hasFinalScore(m))
+                              : undefined;
+                            const targetMatch = myUnscored ?? allMatches.find((m) => !isMatchFinished(m));
+                            if (targetMatch) {
                               userCollapsedRef.current = false;
-                              const round = rounds.find((r) => r.matches.some((m) => m.id === firstUnscored.id));
+                              const round = rounds.find((r) => r.matches.some((m) => m.id === targetMatch.id));
                               if (round) {
                                 setExpandedRoundId(round.id);
-                                setActiveMatchId(firstUnscored.id);
+                                setActiveMatchId(targetMatch.id);
                               }
                             } else {
                               userCollapsedRef.current = true;
@@ -1810,7 +1829,23 @@ export function V0EventPage(props: { me: any; meLoaded?: boolean }) {
                           {r.matches.map((m) => {
                             const scores = scoreByMatch[m.id] ?? { a: 0, b: 0 };
                             const active = m.id === activeMatchId;
-                            const showPadHere = active && scorePadOpen;
+                            const finalScored = hasFinalScore(m);
+                            const canEdit = canSubmitScore(m);
+                            const showPadHere = active && scorePadOpen && canEdit;
+                            // Подсказка для не-автора, почему карточка дизейблнута.
+                            const lockHint = !canEdit && !isAuthor
+                              ? finalScored
+                                ? `Введён${m.submittedByName ? `: ${m.submittedByName}` : ""}. Изменить может только организатор.`
+                                : !isMyMatch(m)
+                                  ? "Этот матч введёт его участник или организатор."
+                                  : null
+                              : null;
+                            const handleSelectTeam = (team: "A" | "B") => {
+                              if (!canEdit) return;
+                              setActiveMatchId(m.id);
+                              setActiveTeam(team);
+                              setScorePadOpen(true);
+                            };
                             return (
                               <div
                                 key={m.id}
@@ -1821,36 +1856,44 @@ export function V0EventPage(props: { me: any; meLoaded?: boolean }) {
                                 }}
                                 className={cn(
                                   "rounded-lg border p-3 transition-colors scroll-mt-4",
-                                  active ? "border-primary/50 bg-secondary/30 shadow-sm" : "border-border/50 bg-secondary/10",
+                                  finalScored
+                                    ? "border-emerald-500/40 bg-emerald-500/5"
+                                    : active
+                                      ? "border-primary/50 bg-secondary/30 shadow-sm"
+                                      : "border-border/50 bg-secondary/10",
                                 )}
                               >
                                 <div className="text-sm text-muted-foreground">{m.courtName ?? `Корт ${m.courtNumber}`}</div>
+                                {lockHint && (
+                                  <div className="mt-1 text-xs text-muted-foreground">{lockHint}</div>
+                                )}
+                                {props.me?.showWinProbability && typeof m.expectedA === "number" && !finalScored && (
+                                  <WinProbabilityHint expectedA={m.expectedA} />
+                                )}
                                 <div className="mt-3 grid grid-cols-2 gap-3">
                                   <button
                                     type="button"
+                                    disabled={!canEdit}
+                                    aria-disabled={!canEdit}
                                     className={cn(
                                       "rounded-lg border px-3 py-3 text-center transition-colors",
-                                      activeTeam === "A" && active ? "border-primary text-primary" : "border-border",
+                                      activeTeam === "A" && active && canEdit ? "border-primary text-primary" : "border-border",
+                                      !canEdit && "opacity-70 cursor-not-allowed",
                                     )}
-                                    onClick={() => {
-                                      setActiveMatchId(m.id);
-                                      setActiveTeam("A");
-                                      setScorePadOpen(true);
-                                    }}
+                                    onClick={() => handleSelectTeam("A")}
                                   >
                                     {renderTeamScore(m.teamA, scores.a, "left")}
                                   </button>
                                   <button
                                     type="button"
+                                    disabled={!canEdit}
+                                    aria-disabled={!canEdit}
                                     className={cn(
                                       "rounded-lg border px-3 py-3 text-center transition-colors",
-                                      activeTeam === "B" && active ? "border-primary text-primary" : "border-border",
+                                      activeTeam === "B" && active && canEdit ? "border-primary text-primary" : "border-border",
+                                      !canEdit && "opacity-70 cursor-not-allowed",
                                     )}
-                                    onClick={() => {
-                                      setActiveMatchId(m.id);
-                                      setActiveTeam("B");
-                                      setScorePadOpen(true);
-                                    }}
+                                    onClick={() => handleSelectTeam("B")}
                                   >
                                     {renderTeamScore(m.teamB, scores.b, "right")}
                                   </button>
@@ -1897,8 +1940,17 @@ export function V0EventPage(props: { me: any; meLoaded?: boolean }) {
                                                     const refreshed = await api.getEventDetails(eventId);
                                                     setData(refreshed);
                                                   })
-                                                  .catch((err: any) => {
+                                                  .catch(async (err: any) => {
                                                     setScoreError(err?.message ?? "Не удалось сохранить счёт");
+                                                    // Возможен 409 «уже введён» — обновим, чтобы UI показал актуальный счёт/автора.
+                                                    if (eventId) {
+                                                      try {
+                                                        const refreshed = await api.getEventDetails(eventId);
+                                                        setData(refreshed);
+                                                      } catch {
+                                                        /* ignore */
+                                                      }
+                                                    }
                                                   })
                                                   .finally(() => {
                                                     autoSavingRef.current.delete(m.id);
@@ -2198,6 +2250,43 @@ export function V0EventPage(props: { me: any; meLoaded?: boolean }) {
   ]);
 
   return <>{content}</>;
+}
+
+/**
+ * Шансы выигрыша (фаза 1). Полоска expectedA vs (1-expectedA) + текстовая метка.
+ * Пороги в expectedA-шкале соответствуют разнице рейтингов 50/150/300/500 (см. spec).
+ */
+function WinProbabilityHint({ expectedA }: { expectedA: number }) {
+  const pctA = Math.round(expectedA * 100);
+  const pctB = 100 - pctA;
+  const absDelta = Math.abs(expectedA - 0.5);
+  const favA = expectedA > 0.5;
+  let label: string;
+  if (absDelta < 0.07) label = "Равные шансы ⚖️";
+  else if (absDelta < 0.20) label = favA ? "Лёгкий фаворит ←" : "Лёгкий фаворит →";
+  else if (absDelta < 0.34) label = favA ? "Фаворит ←" : "Фаворит →";
+  else if (absDelta < 0.45) label = favA ? "Сильный фаворит ←" : "Сильный фаворит →";
+  else label = "Битва Давида и Голиафа 🎭";
+
+  return (
+    <div className="mt-2 space-y-1">
+      <div className="flex items-center justify-between text-[11px] font-medium text-muted-foreground">
+        <span>{pctA}%</span>
+        <span>{label}</span>
+        <span>{pctB}%</span>
+      </div>
+      <div className="h-1.5 w-full overflow-hidden rounded-full bg-secondary/40 flex">
+        <div
+          className="h-full bg-emerald-500/70 transition-all"
+          style={{ width: `${pctA}%` }}
+        />
+        <div
+          className="h-full bg-sky-500/60 transition-all"
+          style={{ width: `${pctB}%` }}
+        />
+      </div>
+    </div>
+  );
 }
 
 function EditGameScoresDialog(props: {

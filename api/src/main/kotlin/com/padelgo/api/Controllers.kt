@@ -318,6 +318,23 @@ class EventController(
             m.id!! to draftScoreRepo.findByMatchId(m.id!!)
         }
 
+        // Резолвим имена тех, кто ввёл счёт (для UI-метки "Введён: X").
+        // Берём submitted_by_user_id из первой строки сетов матча — для всех сетов он одинаков (один и тот же upsert).
+        val submitterUserIds = scoresByMatch.values
+            .mapNotNull { sets -> sets.firstOrNull()?.submittedByUserId }
+            .toSet()
+        val submittersById = if (submitterUserIds.isNotEmpty()) {
+            userRepo.findAllById(submitterUserIds).associateBy { it.id!! }
+        } else emptyMap()
+        // Имя: предпочитаем имя игрока (если у юзера есть player), иначе email.
+        val submitterPlayerIds = submittersById.values.mapNotNull { it.playerId }.toSet()
+        val submitterPlayers = if (submitterPlayerIds.isNotEmpty()) {
+            playerRepo.findAllById(submitterPlayerIds).associateBy { it.id!! }
+        } else emptyMap()
+        val submitterNameByUserId: Map<UUID, String> = submittersById.mapValues { (_, u) ->
+            u.playerId?.let { submitterPlayers[it]?.name } ?: u.email
+        }
+
         val roundDtos = rounds.map { r ->
             val ms = matches[r.id!!].orEmpty().map { m ->
                 val setEntities = scoresByMatch[m.id!!].orEmpty()
@@ -351,7 +368,23 @@ class EventController(
                     )
                 }
                 val courtName = courtNameByNumber[m.courtNumber] ?: "Корт ${m.courtNumber}"
-                MatchResponse.from(m, playerResponses, score, courtName)
+                val submittedByUserId = scoresByMatch[m.id!!]?.firstOrNull()?.submittedByUserId
+                val submittedByName = submittedByUserId?.let { submitterNameByUserId[it] }
+                // Шансы выигрыша (фаза 1): статичный Elo expectedScore для команды A.
+                // Считаем только пока матч не сыгран — после финиша скрываем (есть фактический результат).
+                val isFinalScored = m.status.name == "FINISHED" || submittedByUserId != null
+                val expectedA: Double? = if (isFinalScored) null else {
+                    val pA1 = players[m.teamAPlayer1Id]?.rating
+                    val pA2 = players[m.teamAPlayer2Id]?.rating
+                    val pB1 = players[m.teamBPlayer1Id]?.rating
+                    val pB2 = players[m.teamBPlayer2Id]?.rating
+                    if (pA1 != null && pA2 != null && pB1 != null && pB2 != null) {
+                        val ra = com.padelgo.service.EloRating.teamRating(pA1, pA2)
+                        val rb = com.padelgo.service.EloRating.teamRating(pB1, pB2)
+                        com.padelgo.service.EloRating.expectedScore(ra, rb)
+                    } else null
+                }
+                MatchResponse.from(m, playerResponses, score, courtName, submittedByUserId, submittedByName, expectedA)
             }
             RoundResponse.from(r, ms)
         }

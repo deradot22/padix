@@ -347,7 +347,11 @@ class MatchSetScore(
     var teamAGames: Int = 0,
 
     @Column(name = "team_b_games", nullable = false)
-    var teamBGames: Int = 0
+    var teamBGames: Int = 0,
+
+    /** Кто ввёл итоговый счёт. null для исторических данных. */
+    @Column(name = "submitted_by_user_id")
+    var submittedByUserId: UUID? = null
 )
 
 @Entity

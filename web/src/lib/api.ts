@@ -81,6 +81,12 @@ export type Match = {
     points?: PointsScore;
     sets?: SetScore[];
   } | null;
+  /** UUID юзера, который ввёл итоговый счёт. null — счёт ещё не введён или историческая запись. */
+  submittedByUserId?: string | null;
+  /** Имя того, кто ввёл счёт. Для UI-метки «Введён: X». */
+  submittedByName?: string | null;
+  /** Шанс победы команды A (0..1). null — матч уже сыгран. teamB = 1 - expectedA. */
+  expectedA?: number | null;
 };
 
 export type Round = {
@@ -125,6 +131,24 @@ export type MeResponse = {
   calibrationMatchesRemaining: number;
   avatarUrl?: string | null;
   gender?: string | null;
+  /** Показывать шансы выигрыша в модале «Раунды». По умолчанию false. */
+  showWinProbability: boolean;
+};
+
+/** Категории тикетов обратной связи. */
+export type FeedbackCategory = "BUG" | "FEATURE" | "QUESTION" | "OTHER";
+
+export type FeedbackTicket = {
+  id: string;
+  userId: string;
+  authorName: string;
+  category: FeedbackCategory;
+  message: string;
+  /** data URL вложения (image/* или video/*). null — без вложения. */
+  attachmentDataUrl?: string | null;
+  attachmentMime?: string | null;
+  attachmentSizeBytes?: number | null;
+  createdAt: string;
 };
 
 export type ApiError = {
@@ -196,6 +220,8 @@ export type AdminUser = {
   gamesPlayed: number;
   surveyCompleted: boolean;
   disabled: boolean;
+  /** Получает TG-уведомления о новых тикетах обратной связи. */
+  isFeedbackAdmin: boolean;
 };
 
 export type FriendsSnapshot = {
@@ -519,7 +545,7 @@ export const api = {
   me: () => request<MeResponse>("/api/me"),
   updateAvatar: (avatarDataUrl: string | null) =>
     request<MeResponse>("/api/me/avatar", { method: "PATCH", body: JSON.stringify({ avatarDataUrl }) }),
-  updateProfile: (payload: { name?: string; email?: string; password?: string; gender?: string }) =>
+  updateProfile: (payload: { name?: string; email?: string; password?: string; gender?: string; showWinProbability?: boolean }) =>
     request<MeResponse>("/api/me/profile", { method: "PATCH", body: JSON.stringify(payload) }),
   getFriends: () => request<FriendsSnapshot>("/api/friends"),
   requestFriend: (publicId: string) =>
@@ -558,10 +584,18 @@ export const api = {
   markRatingNotificationSeen: (id: string) =>
     request(`/api/me/rating-notification/${id}/seen`, { method: "POST" }),
 
+  // ---------- Feedback (тикеты обратной связи) ----------
+  submitFeedback: (payload: { category: FeedbackCategory; message: string; attachmentDataUrl?: string | null }) =>
+    request<FeedbackTicket>("/api/feedback", { method: "POST", body: JSON.stringify(payload) }),
+  getMyFeedback: () => request<FeedbackTicket[]>("/api/feedback/mine"),
+  adminListFeedback: () => adminRequest<FeedbackTicket[]>("/api/admin/feedback"),
+  adminDeleteFeedback: (id: string) =>
+    adminRequest<void>(`/api/admin/feedback/${id}`, { method: "DELETE" }),
+
   adminLogin: (username: string, password: string) =>
     request<{ token: string }>("/api/admin/login", { method: "POST", body: JSON.stringify({ username, password }) }),
   adminListUsers: () => adminRequest<AdminUser[]>("/api/admin/users"),
-  adminUpdateUser: (userId: string, payload: { email?: string; name?: string; password?: string; disabled?: boolean }) =>
+  adminUpdateUser: (userId: string, payload: { email?: string; name?: string; password?: string; disabled?: boolean; isFeedbackAdmin?: boolean }) =>
     adminRequest<AdminUser>(`/api/admin/users/${userId}`, { method: "PATCH", body: JSON.stringify(payload) }),
   adminDeleteUser: (userId: string) => adminRequest<AdminUser>(`/api/admin/users/${userId}`, { method: "DELETE" }),
   adminRestoreUser: (userId: string, payload: { email: string; password: string; name?: string }) =>

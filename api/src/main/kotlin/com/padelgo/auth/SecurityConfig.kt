@@ -222,6 +222,8 @@ class SurveyGateFilter(
                 path.startsWith("/api/survey/") ||
                 path == "/api/me" ||
                 path.startsWith("/api/me/") ||
+                // Feedback доступен и до прохождения анкеты — чтобы пожаловаться на сам онбординг.
+                path.startsWith("/api/feedback") ||
                 (path.startsWith("/api/events/") && (
                     path.endsWith("/invites") ||
                     path.endsWith("/invites/accept") ||

@@ -70,7 +70,8 @@ class AuthService(
             calibrationEventsRemaining = user.calibrationEventsRemaining,
             calibrationMatchesRemaining = user.calibrationMatchesRemaining,
             avatarUrl = player.avatarUrl,
-            gender = user.gender
+            gender = user.gender,
+            showWinProbability = user.showWinProbability
         )
     }
 
@@ -128,6 +129,8 @@ class AuthService(
             req.gender.trim().uppercase() in listOf("M", "F") -> user.gender = req.gender.trim().uppercase()
             else -> { /* invalid, no change */ }
         }
+
+        req.showWinProbability?.let { user.showWinProbability = it }
 
         players.save(player)
         users.save(user)

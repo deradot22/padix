@@ -1,7 +1,7 @@
 "use client";
 
 import { Link, NavLink, useLocation, useNavigate } from "react-router-dom";
-import { Bell, Check, LogOut, Menu, Moon, Settings, Sun, UserPlus, X } from "lucide-react";
+import { Bell, Check, LogOut, Menu, MessageSquare, Moon, Settings, Sun, UserPlus, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { useEffect, useMemo, useState } from "react";
@@ -435,6 +435,17 @@ export function Header(props: {
                   type="button"
                   onClick={() => {
                     setSettingsOpen(false);
+                    nav("/feedback");
+                  }}
+                  className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm font-medium text-muted-foreground hover:bg-secondary/50 hover:text-foreground transition-colors"
+                >
+                  <MessageSquare className="h-4 w-4" />
+                  Обратная связь
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSettingsOpen(false);
                     props.onLogout?.();
                   }}
                   className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm font-medium text-muted-foreground hover:bg-secondary/50 hover:text-foreground transition-colors"
@@ -473,21 +484,38 @@ export function Header(props: {
               </NavLink>
             ))}
             {props.authed && (
-              <NavLink
-                to="/settings"
-                onClick={() => setMobileOpen(false)}
-                className={({ isActive }) =>
-                  cn(
-                    "rounded-lg px-3 py-2 text-sm font-medium transition-all duration-200 flex items-center gap-2",
-                    isActive || pathname === "/settings"
-                      ? "bg-secondary text-foreground"
-                      : "text-muted-foreground hover:bg-secondary/50 hover:text-foreground",
-                  )
-                }
-              >
-                <Settings className="h-4 w-4" />
-                Настройки
-              </NavLink>
+              <>
+                <NavLink
+                  to="/settings"
+                  onClick={() => setMobileOpen(false)}
+                  className={({ isActive }) =>
+                    cn(
+                      "rounded-lg px-3 py-2 text-sm font-medium transition-all duration-200 flex items-center gap-2",
+                      isActive || pathname === "/settings"
+                        ? "bg-secondary text-foreground"
+                        : "text-muted-foreground hover:bg-secondary/50 hover:text-foreground",
+                    )
+                  }
+                >
+                  <Settings className="h-4 w-4" />
+                  Настройки
+                </NavLink>
+                <NavLink
+                  to="/feedback"
+                  onClick={() => setMobileOpen(false)}
+                  className={({ isActive }) =>
+                    cn(
+                      "rounded-lg px-3 py-2 text-sm font-medium transition-all duration-200 flex items-center gap-2",
+                      isActive || pathname === "/feedback"
+                        ? "bg-secondary text-foreground"
+                        : "text-muted-foreground hover:bg-secondary/50 hover:text-foreground",
+                    )
+                  }
+                >
+                  <MessageSquare className="h-4 w-4" />
+                  Обратная связь
+                </NavLink>
+              </>
             )}
             <div className="my-1 h-px bg-border" />
             {props.authed ? (

@@ -1,5 +1,10 @@
 server:
   port: 8080
+  # Поднимаем лимит POST-body, чтобы /api/feedback мог принять видео-вложение до ~7MB (data URL).
+  # Аватары/скриншоты ≤500KB укладывались в дефолт 2MB, но фидбек-вложения крупнее.
+  tomcat:
+    max-http-form-post-size: 16MB
+    max-swallow-size: 16MB
 
 spring:
   datasource:
@@ -34,6 +39,9 @@ app:
   admin:
     username: ${APP_ADMIN_USERNAME:admin228}
     password: ${APP_ADMIN_PASSWORD:admin228}
+    # Кто получает TG-уведомления о новых тикетах обратной связи — назначается в /admin
+    # (флаг `users.is_feedback_admin`, см. миграцию V36). Юзер должен также привязать
+    # свой Telegram через Настройки → Уведомления → Telegram (PRIVATE-чат).
   swagger:
     username: ${APP_SWAGGER_USERNAME:css101}
     password: ${APP_SWAGGER_PASSWORD:101css101}

@@ -5,9 +5,11 @@ import com.padelgo.bot.domain.EventStatus
 import com.padelgo.bot.service.FinishTopPlayer
 import com.padelgo.bot.service.TelegramCancellationOriginalPost
 import com.padelgo.bot.service.TelegramCancellationPlan
+import com.padelgo.bot.service.TelegramClient
 import com.padelgo.bot.service.TelegramService
 import com.padelgo.bot.domain.TelegramChatType
 import com.padelgo.bot.repo.TelegramChatRepository
+import org.slf4j.LoggerFactory
 import org.springframework.web.bind.annotation.GetMapping
 import org.springframework.web.bind.annotation.PathVariable
 import org.springframework.web.bind.annotation.PostMapping
@@ -112,14 +114,26 @@ data class RosterChangedRequest(
     val capacity: Int
 )
 
+data class AdminFeedbackRequest(
+    val adminUserId: UUID,
+    val ticketId: UUID,
+    val authorName: String,
+    val category: String,
+    val message: String,
+    val attachmentDataUrl: String? = null,
+    val attachmentMime: String? = null
+)
+
 data class NotifyResult(val sent: Int)
 
 @RestController
 @RequestMapping("/api/internal/telegram")
 class InternalNotifyController(
     private val service: TelegramService,
-    private val chatRepo: TelegramChatRepository
+    private val chatRepo: TelegramChatRepository,
+    private val telegramClient: TelegramClient
 ) {
+    private val log = LoggerFactory.getLogger(InternalNotifyController::class.java)
     @GetMapping("/owner-group-chats/{ownerUserId}")
     fun ownerGroupChats(@PathVariable ownerUserId: UUID): List<UUID> =
         chatRepo.findAllByUserIdOrderByLinkedAtAsc(ownerUserId)
@@ -163,6 +177,78 @@ class InternalNotifyController(
         val ev = req.toEvent()
         val sent = service.handleRosterChanged(ev, req.ownerUserId, req.oldCount, req.newCount, req.capacity)
         return NotifyResult(sent)
+    }
+
+    /**
+     * Уведомление админа о новом тикете обратной связи.
+     * Ищем PRIVATE-чат админа (берём самый ранний привязанный), отправляем туда текст
+     * и, при наличии, вложение через sendPhoto/sendVideo (multipart upload).
+     * Если у admin нет PRIVATE чата — sent=0 (no-op).
+     */
+    @PostMapping("/notify/admin-feedback")
+    fun adminFeedback(@RequestBody req: AdminFeedbackRequest): NotifyResult {
+        val privateChat = chatRepo.findAllByUserIdOrderByLinkedAtAsc(req.adminUserId)
+            .firstOrNull { it.chatType == TelegramChatType.PRIVATE.name }
+        if (privateChat == null) {
+            log.warn("admin-feedback: no PRIVATE TG chat linked for admin user {}", req.adminUserId)
+            return NotifyResult(0)
+        }
+
+        val categoryLabel = when (req.category.uppercase()) {
+            "BUG" -> "🐞 Баг"
+            "FEATURE" -> "💡 Идея"
+            "QUESTION" -> "❓ Вопрос"
+            else -> "💬 Другое"
+        }
+        // TG sendMessage limit = 4096; режем сообщение с запасом.
+        val preview = req.message.take(3500)
+        val text = buildString {
+            append("<b>$categoryLabel</b> · от <b>")
+            append(htmlEscape(req.authorName))
+            append("</b>\n\n")
+            append(htmlEscape(preview))
+            if (req.message.length > preview.length) append("\n…")
+            append("\n\n<i>ticket ")
+            append(req.ticketId)
+            append("</i>")
+        }
+
+        try {
+            telegramClient.sendMessage(privateChat.chatId, text, parseMode = "HTML")
+        } catch (e: Exception) {
+            log.warn("admin-feedback: sendMessage failed for chat {}: {}", privateChat.chatId, e.message)
+            return NotifyResult(0)
+        }
+
+        // Вложение, если есть. Не валим если не отправилось.
+        val dataUrl = req.attachmentDataUrl
+        val mime = req.attachmentMime
+        if (!dataUrl.isNullOrBlank() && !mime.isNullOrBlank()) {
+            try {
+                val bytes = decodeDataUrl(dataUrl)
+                val ext = mime.substringAfter('/', "bin").ifBlank { "bin" }
+                val filename = "feedback-${req.ticketId}.$ext"
+                when {
+                    mime.startsWith("image/") -> telegramClient.sendPhoto(privateChat.chatId, bytes, filename)
+                    mime.startsWith("video/") -> telegramClient.sendVideo(privateChat.chatId, bytes, filename)
+                    else -> log.info("admin-feedback: unsupported mime {} for ticket {}", mime, req.ticketId)
+                }
+            } catch (e: Exception) {
+                log.warn("admin-feedback: attachment send failed for ticket {}: {}", req.ticketId, e.message)
+            }
+        }
+
+        return NotifyResult(1)
+    }
+
+    private fun htmlEscape(s: String): String =
+        s.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+
+    private fun decodeDataUrl(dataUrl: String): ByteArray {
+        val comma = dataUrl.indexOf(',')
+        require(comma > 0) { "invalid data URL" }
+        val payload = dataUrl.substring(comma + 1)
+        return java.util.Base64.getDecoder().decode(payload)
     }
 
     private fun RosterChangedRequest.toEvent() = BotEvent(

@@ -75,6 +75,23 @@ data class RosterChangedNotify(
     val capacity: Int
 )
 
+/**
+ * Уведомление админа о новом тикете обратной связи.
+ * Бот находит PRIVATE-чат для adminUserId в `telegram_chat`, отправляет туда текст
+ * и, при наличии, прикреплённое медиа. Если у adminUserId нет привязанного private —
+ * вернёт sent=0 (no-op).
+ */
+data class AdminFeedbackNotify(
+    val adminUserId: UUID,
+    val ticketId: UUID,
+    val authorName: String,
+    val category: String,
+    val message: String,
+    /** data URL вложения. null — без вложения. */
+    val attachmentDataUrl: String? = null,
+    val attachmentMime: String? = null
+)
+
 data class PrepareCancellationRequest(
     val eventId: UUID,
     val ownerUserId: UUID,
@@ -154,6 +171,9 @@ class BotClient(
 
     fun notifyRosterChanged(payload: RosterChangedNotify): Int =
         post("/api/internal/telegram/notify/roster-changed", payload)
+
+    fun notifyAdminFeedback(payload: AdminFeedbackNotify): Int =
+        post("/api/internal/telegram/notify/admin-feedback", payload)
 
     // ---------- Прокси для user-facing /api/telegram/* ----------
 

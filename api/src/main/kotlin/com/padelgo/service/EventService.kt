@@ -949,9 +949,36 @@ class EventService(
 
         val round = roundRepo.findById(match.roundId!!).orElseThrow { ApiException(HttpStatus.NOT_FOUND, "Round not found") }
         val event = getEvent(round.eventId!!)
-        requireAuthor(event, userId)
         if (event.status != EventStatus.IN_PROGRESS && event.status != EventStatus.FINISHED) {
             throw ApiException(HttpStatus.CONFLICT, "Event is not in progress or finished (status=${event.status})")
+        }
+
+        // Авторизация: автор может всё (включая редактирование после FINISHED и перезапись).
+        // Не-автор-участник матча может только ПЕРВЫЙ раз ввести счёт пока игра IN_PROGRESS.
+        val isAuthor = event.createdByUserId == userId
+        if (!isAuthor) {
+            if (event.status != EventStatus.IN_PROGRESS) {
+                throw ApiException(HttpStatus.FORBIDDEN, "Изменить счёт завершённой игры может только организатор")
+            }
+            val user = userRepo.findById(userId).orElseThrow {
+                ApiException(HttpStatus.UNAUTHORIZED, "Unauthorized")
+            }
+            val playerId = user.playerId ?: throw ApiException(
+                HttpStatus.FORBIDDEN, "Только участник матча или организатор может вводить счёт"
+            )
+            val inMatch = playerId == match.teamAPlayer1Id || playerId == match.teamAPlayer2Id ||
+                playerId == match.teamBPlayer1Id || playerId == match.teamBPlayer2Id
+            if (!inMatch) {
+                throw ApiException(
+                    HttpStatus.FORBIDDEN, "Только участник матча или организатор может вводить счёт"
+                )
+            }
+            val existing = scoreRepo.findAllByMatchIdOrderBySetNumberAsc(matchId)
+            if (existing.isNotEmpty()) {
+                throw ApiException(
+                    HttpStatus.CONFLICT, "Счёт уже введён. Изменить может только организатор."
+                )
+            }
         }
 
         val setEntities: List<MatchSetScore> = when (event.scoringMode) {
@@ -995,7 +1022,7 @@ class EventService(
 
         val keepNumbers = setEntities.map { it.setNumber }
         setEntities.forEach { s ->
-            scoreRepo.upsertScore(matchId, s.setNumber, s.teamAGames, s.teamBGames)
+            scoreRepo.upsertScore(matchId, s.setNumber, s.teamAGames, s.teamBGames, userId)
         }
         if (keepNumbers.isNotEmpty()) {
             scoreRepo.deleteAllByMatchIdAndSetNumberNotIn(matchId, keepNumbers)
@@ -1052,7 +1079,8 @@ class EventService(
                 if (existingScores.isEmpty()) {
                     val draft = draftScoreRepo.findByMatchId(m.id!!)
                     if (draft != null && (draft.teamAPoints > 0 || draft.teamBPoints > 0)) {
-                        scoreRepo.upsertScore(m.id!!, 1, draft.teamAPoints, draft.teamBPoints)
+                        // Драфт принадлежит автору — финализирует тоже автор (finishEvent гарантирует requireAuthor выше).
+                        scoreRepo.upsertScore(m.id!!, 1, draft.teamAPoints, draft.teamBPoints, userId)
                         draftScoreRepo.deleteByMatchId(m.id!!)
                         m.status = MatchStatus.FINISHED
                         matchRepo.save(m)

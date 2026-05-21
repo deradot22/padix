@@ -13,6 +13,8 @@ import { V0LoginPage } from "./v0/pages/V0LoginPage";
 import { V0RegisterPage } from "./v0/pages/V0RegisterPage";
 import { V0SurveyPage } from "./v0/pages/V0SurveyPage";
 import { V0AdminPage } from "./v0/pages/V0AdminPage";
+import { V0AdminFeedbackPage } from "./v0/pages/V0AdminFeedbackPage";
+import { V0FeedbackPage } from "./v0/pages/V0FeedbackPage";
 import { V0LandingPage } from "./v0/pages/V0LandingPage";
 import { MainLayout } from "@/components/main-layout";
 
@@ -166,7 +168,9 @@ export function App() {
           <Route path="profile" element={<V0ProfilePage me={me} meLoaded={meLoaded} onMeUpdate={setMe} />} />
           <Route path="settings" element={<V0SettingsPage me={me} meLoaded={meLoaded} onMeUpdate={setMe} />} />
           <Route path="events/:eventId" element={<V0EventPage me={me} meLoaded={meLoaded} />} />
+          <Route path="feedback" element={<V0FeedbackPage me={me} meLoaded={meLoaded} />} />
           <Route path="admin" element={<V0AdminPage />} />
+          <Route path="admin/feedback" element={<V0AdminFeedbackPage />} />
         </Route>
       </Routes>
 

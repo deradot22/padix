@@ -1,9 +1,11 @@
 import { FormEvent, useEffect, useMemo, useState } from "react";
+import { Link } from "react-router-dom";
 import { api, AdminUser, adminToken, setAdminToken } from "@/lib/api";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
+import { MessageSquare } from "lucide-react";
 
 type EditState = {
   name?: string;
@@ -230,17 +232,26 @@ export function V0AdminPage() {
           <h1 className="text-3xl font-bold">Админка пользователей</h1>
           <p className="text-muted-foreground mt-2">Редактируйте имена, почту и пароли.</p>
         </div>
-        <Button
-          variant="outline"
-          onClick={() => {
-            setAdminToken(null);
-            setToken(null);
-            setUsers([]);
-            setEdits({});
-          }}
-        >
-          Выйти
-        </Button>
+        <div className="flex items-center gap-2">
+          <Link
+            to="/admin/feedback"
+            className="inline-flex h-9 items-center gap-2 rounded-md border border-border bg-background px-3 text-sm font-medium hover:bg-secondary transition-colors"
+          >
+            <MessageSquare className="h-4 w-4" />
+            Обратная связь
+          </Link>
+          <Button
+            variant="outline"
+            onClick={() => {
+              setAdminToken(null);
+              setToken(null);
+              setUsers([]);
+              setEdits({});
+            }}
+          >
+            Выйти
+          </Button>
+        </div>
       </div>
 
       <div className="flex flex-wrap items-center gap-3">
@@ -517,6 +528,25 @@ export function V0AdminPage() {
                     Восстановить
                   </Button>
                 ) : null}
+                {/* Auto-save тоггл: «получать TG-уведомления о новых тикетах». */}
+                <label className="ml-auto inline-flex items-center gap-2 rounded-md border border-border bg-background/50 px-2.5 py-1.5 cursor-pointer hover:bg-secondary/40 transition-colors">
+                  <input
+                    type="checkbox"
+                    className="h-4 w-4 accent-primary"
+                    checked={user.isFeedbackAdmin}
+                    onChange={async (e) => {
+                      const next = e.target.checked;
+                      setError(null);
+                      try {
+                        const updated = await api.adminUpdateUser(user.userId, { isFeedbackAdmin: next });
+                        setUsers((prev) => prev.map((u) => (u.userId === updated.userId ? updated : u)));
+                      } catch (err: any) {
+                        setError(err?.message ?? "Не удалось переключить feedback-admin");
+                      }
+                    }}
+                  />
+                  <span className="text-xs">Feedback admin (TG)</span>
+                </label>
                 {user.surveyCompleted ? (
                   <span className="text-xs text-muted-foreground">Тест пройден</span>
                 ) : (

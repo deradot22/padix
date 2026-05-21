@@ -6,9 +6,11 @@ import org.slf4j.LoggerFactory
 import org.springframework.boot.context.properties.ConfigurationProperties
 import org.springframework.context.annotation.Bean
 import org.springframework.context.annotation.Configuration
+import org.springframework.core.io.ByteArrayResource
 import org.springframework.http.MediaType
 import org.springframework.http.client.JdkClientHttpRequestFactory
 import org.springframework.stereotype.Component
+import org.springframework.util.LinkedMultiValueMap
 import org.springframework.web.client.RestClient
 import org.springframework.web.client.body
 import java.net.http.HttpClient
@@ -205,6 +207,50 @@ class TelegramClient(
             throw TelegramApiException("sendMessage to $chatId failed: ${resp.description}", resp.errorCode)
         }
         return resp.result
+    }
+
+    /**
+     * Отправить фото в чат через multipart-upload. caption ≤ 1024 символов (TG-лимит).
+     * filename — для подсказки TG, влияет на отображаемое имя в Saved Messages и т.п.
+     */
+    fun sendPhoto(chatId: Long, bytes: ByteArray, filename: String, caption: String? = null) {
+        if (props.dryRun) return
+        sendMedia("sendPhoto", "photo", chatId, bytes, filename, caption)
+    }
+
+    /** Отправить видео в чат. caption ≤ 1024 символов. */
+    fun sendVideo(chatId: Long, bytes: ByteArray, filename: String, caption: String? = null) {
+        if (props.dryRun) return
+        sendMedia("sendVideo", "video", chatId, bytes, filename, caption)
+    }
+
+    private fun sendMedia(
+        method: String,
+        fileFieldName: String,
+        chatId: Long,
+        bytes: ByteArray,
+        filename: String,
+        caption: String?
+    ) {
+        val parts = LinkedMultiValueMap<String, Any>()
+        parts.add("chat_id", chatId.toString())
+        if (!caption.isNullOrBlank()) {
+            // TG caption limit = 1024 символа; режем с запасом.
+            parts.add("caption", caption.take(1024))
+        }
+        parts.add(fileFieldName, object : ByteArrayResource(bytes) {
+            override fun getFilename(): String = filename
+        })
+        val resp = restClient.post()
+            .uri("${baseUrl()}/$method")
+            .contentType(MediaType.MULTIPART_FORM_DATA)
+            .body(parts)
+            .retrieve()
+            .body<TgResponse<TgSentMessage>>()
+            ?: throw TelegramApiException("$method: empty response")
+        if (!resp.ok || resp.result == null) {
+            throw TelegramApiException("$method to $chatId failed: ${resp.description}", resp.errorCode)
+        }
     }
 
     /**

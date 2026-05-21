@@ -68,10 +68,13 @@ interface MatchSetScoreRepository : JpaRepository<MatchSetScore, UUID> {
     @org.springframework.data.jpa.repository.Modifying
     @Query(
         value = """
-            insert into match_set_scores (match_id, set_number, team_a_games, team_b_games, id)
-            values (:matchId, :setNumber, :teamAGames, :teamBGames, gen_random_uuid())
+            insert into match_set_scores (match_id, set_number, team_a_games, team_b_games, submitted_by_user_id, id)
+            values (:matchId, :setNumber, :teamAGames, :teamBGames, :submittedByUserId, gen_random_uuid())
             on conflict (match_id, set_number)
-            do update set team_a_games = excluded.team_a_games, team_b_games = excluded.team_b_games
+            do update set
+                team_a_games = excluded.team_a_games,
+                team_b_games = excluded.team_b_games,
+                submitted_by_user_id = excluded.submitted_by_user_id
         """,
         nativeQuery = true
     )
@@ -79,7 +82,8 @@ interface MatchSetScoreRepository : JpaRepository<MatchSetScore, UUID> {
         @Param("matchId") matchId: UUID,
         @Param("setNumber") setNumber: Int,
         @Param("teamAGames") teamAGames: Int,
-        @Param("teamBGames") teamBGames: Int
+        @Param("teamBGames") teamBGames: Int,
+        @Param("submittedByUserId") submittedByUserId: UUID?
     )
 
     @org.springframework.data.jpa.repository.Modifying

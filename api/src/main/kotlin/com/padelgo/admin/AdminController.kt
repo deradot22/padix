@@ -89,7 +89,7 @@ class AdminController(
                 gender = gender
             )
         )
-        return AdminUserResponse.from(user.id!!, user.email, user.publicId, user.disabled, user.surveyCompleted, player)
+        return AdminUserResponse.from(user.id!!, user.email, user.publicId, user.disabled, user.surveyCompleted, user.isFeedbackAdmin, player)
     }
 
     @GetMapping("/users")
@@ -100,7 +100,7 @@ class AdminController(
         val playerById = players.findAllById(playerIds).associateBy { it.id!! }
         return allUsers.sortedBy { it.email.lowercase() }.map { u ->
             val player = playerById[u.playerId]
-            AdminUserResponse.from(u.id!!, u.email, u.publicId, u.disabled, u.surveyCompleted, player)
+            AdminUserResponse.from(u.id!!, u.email, u.publicId, u.disabled, u.surveyCompleted, u.isFeedbackAdmin, player)
         }
     }
 
@@ -124,8 +124,9 @@ class AdminController(
             user.passwordHash = encoder.encode(nextPassword)
         }
         req.disabled?.let { user.disabled = it }
+        req.isFeedbackAdmin?.let { user.isFeedbackAdmin = it }
         users.save(user)
-        return AdminUserResponse.from(user.id!!, user.email, user.publicId, user.disabled, user.surveyCompleted, player)
+        return AdminUserResponse.from(user.id!!, user.email, user.publicId, user.disabled, user.surveyCompleted, user.isFeedbackAdmin, player)
     }
 
     @DeleteMapping("/users/{userId}")
@@ -141,7 +142,7 @@ class AdminController(
             players.save(player)
         }
         users.save(user)
-        return AdminUserResponse.from(user.id!!, user.email, user.publicId, user.disabled, user.surveyCompleted, player)
+        return AdminUserResponse.from(user.id!!, user.email, user.publicId, user.disabled, user.surveyCompleted, user.isFeedbackAdmin, player)
     }
 
     @PostMapping("/users/{userId}/restore")
@@ -166,7 +167,7 @@ class AdminController(
             }
         }
         users.save(user)
-        return AdminUserResponse.from(user.id!!, user.email, user.publicId, user.disabled, user.surveyCompleted, player)
+        return AdminUserResponse.from(user.id!!, user.email, user.publicId, user.disabled, user.surveyCompleted, user.isFeedbackAdmin, player)
     }
 
     private fun requireAdmin() {
@@ -304,7 +305,9 @@ data class AdminUpdateUserRequest(
     val email: String? = null,
     val name: String? = null,
     val password: String? = null,
-    val disabled: Boolean? = null
+    val disabled: Boolean? = null,
+    /** Назначить/снять «admin для обратной связи» — получает TG-уведомления о новых тикетах. */
+    val isFeedbackAdmin: Boolean? = null
 )
 
 data class AdminRestoreUserRequest(
@@ -336,7 +339,8 @@ data class AdminUserResponse(
     val ntrp: String,
     val gamesPlayed: Int,
     val surveyCompleted: Boolean,
-    val disabled: Boolean
+    val disabled: Boolean,
+    val isFeedbackAdmin: Boolean
 ) {
     companion object {
         fun from(
@@ -345,6 +349,7 @@ data class AdminUserResponse(
             publicId: Long,
             disabled: Boolean,
             surveyCompleted: Boolean,
+            isFeedbackAdmin: Boolean,
             player: Player?
         ): AdminUserResponse {
             val name = player?.name ?: email
@@ -357,7 +362,8 @@ data class AdminUserResponse(
                 ntrp = player?.ntrp ?: "1.0",
                 gamesPlayed = player?.gamesPlayed ?: 0,
                 surveyCompleted = surveyCompleted,
-                disabled = disabled
+                disabled = disabled,
+                isFeedbackAdmin = isFeedbackAdmin
             )
         }
     }

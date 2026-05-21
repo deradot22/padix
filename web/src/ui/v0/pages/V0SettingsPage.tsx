@@ -334,6 +334,32 @@ function ProfileSection(props: {
             </Select>
           </div>
 
+          {/* Шансы выигрыша — отдельный auto-save тоггл (одноклик, не привязан к Save). */}
+          <label className="flex items-start justify-between gap-3 cursor-pointer rounded-md border border-border bg-background/50 hover:bg-background px-3 py-2.5 transition-colors">
+            <div className="space-y-0.5 min-w-0">
+              <div className="text-sm font-medium">Показывать шансы выигрыша</div>
+              <div className="text-xs text-muted-foreground">
+                В модале «Раунды» под каждым матчем будет полоска шансов и метка «Лёгкий фаворит» / «Равные шансы» и т.п. По Elo.
+              </div>
+            </div>
+            <input
+              type="checkbox"
+              className="mt-1 h-4 w-4 accent-primary shrink-0"
+              checked={me.showWinProbability === true}
+              onChange={async (e) => {
+                const next = e.target.checked;
+                setError(null);
+                try {
+                  const updated = await api.updateProfile({ showWinProbability: next });
+                  setMe(updated);
+                  props.onMeUpdate?.(updated);
+                } catch (err: any) {
+                  setError(err?.message ?? "Не удалось сохранить настройку");
+                }
+              }}
+            />
+          </label>
+
           {error && (
             <div className="rounded-lg border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive">
               {error}

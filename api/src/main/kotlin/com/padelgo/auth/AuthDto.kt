@@ -80,7 +80,10 @@ data class MeResponse(
     val avatarUrl: String? = null,
 
     @Schema(description = "Пол: M / F / null")
-    val gender: String? = null
+    val gender: String? = null,
+
+    @Schema(description = "Показывать шансы выигрыша перед матчем (полоска и метка в модале раундов). По умолчанию false.")
+    val showWinProbability: Boolean = false
 )
 
 @Schema(description = "Запрос на обновление профиля. Передавай только поля, которые нужно изменить")
@@ -95,7 +98,10 @@ data class UpdateProfileRequest(
     val password: String? = null,
 
     @Schema(description = "Пол: M / F", example = "M")
-    val gender: String? = null
+    val gender: String? = null,
+
+    @Schema(description = "Тоггл «Показывать шансы выигрыша» в модале «Раунды». null — не менять.")
+    val showWinProbability: Boolean? = null
 )
 
 @Schema(description = "Запрос на обновление аватара")

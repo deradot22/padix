@@ -8,5 +8,6 @@ interface UserRepository : JpaRepository<UserAccount, UUID> {
     fun findByPlayerId(playerId: UUID): UserAccount?
     fun findAllByPlayerIdIn(playerIds: Collection<UUID>): List<UserAccount>
     fun findByPublicId(publicId: Long): UserAccount?
+    fun findAllByIsFeedbackAdminTrue(): List<UserAccount>
 }
 

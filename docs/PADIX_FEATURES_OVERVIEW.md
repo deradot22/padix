@@ -184,7 +184,7 @@ EventVisibility:       PRIVATE, PUBLIC
 
 ### 3.3 Миграции Flyway (`api/src/main/resources/db/migration`)
 
-`V1..V28`. Кратко по эволюции:
+`V1..V36`. Кратко по эволюции:
 
 - **V1** — стартовая схема (events, players, registrations, rounds, matches).
 - **V2** — Match rules + set scores.
@@ -213,6 +213,14 @@ EventVisibility:       PRIVATE, PUBLIC
 - **V26** — `telegram_settings` (per-user preferences).
 - **V27** — `visibility` (PRIVATE/PUBLIC) у эвента.
 - **V28** — `event_series`.
+- **V29** — `event_series.materialize_at_time` (точное время материализации).
+- **V30** — pin announcement + weekly materialize у серий.
+- **V31** — per-series настройки уведомлений.
+- **V32** — `event_series_target_chats` (адресные TG-чаты у серий).
+- **V33** — `match_set_scores.submitted_by_user_id` (кто ввёл счёт; используется при совместном вводе участниками).
+- **V34** — `users.show_win_probability` (тоггл «Показывать шансы выигрыша», по умолчанию `FALSE`).
+- **V35** — `feedback_tickets` (обратная связь, фаза 1 — fire-and-forget, см. §16).
+- **V36** — `users.is_feedback_admin` (флаг «получаю TG-уведомления о новых тикетах», назначается в /admin).
 
 ---
 
@@ -275,7 +283,7 @@ OPEN_FOR_REGISTRATION → REGISTRATION_CLOSED → IN_PROGRESS → FINISHED
 | `POST` | `/api/events/{id}/remove/{playerId}` | Организатор удаляет игрока |
 | `DELETE` | `/api/events/{id}` | Удалить игру (только организатор, до старта) |
 | `POST` | `/api/events/{id}/start` | Стартовать игру (формирует раунды) |
-| `POST` | `/api/events/matches/{matchId}/score` | Записать итоговый счёт матча (sets ИЛИ points) |
+| `POST` | `/api/events/matches/{matchId}/score` | Записать итоговый счёт матча (sets ИЛИ points). См. 5.5 — кто может вводить |
 | `POST` | `/api/events/matches/{matchId}/draft-score` | Сохранить черновой счёт |
 | `POST` | `/api/events/{id}/finish` | Завершить игру и пересчитать рейтинг |
 | `POST` | `/api/events/{id}/rounds/add` | Добавить раунд вручную (autoRounds=false) |
@@ -297,12 +305,15 @@ authorName:           string
 
 `MatchResponse`:
 ```
-id:           UUID
-courtNumber:  int
-courtName:    string?       // из event_courts
-teamA / teamB: PlayerResponse[2]
-status:       "SCHEDULED" | "FINISHED"
-score:        { mode: SCORE_MODE, sets?: [...], points?: {teamAPoints,teamBPoints} } | null
+id:                 UUID
+courtNumber:        int
+courtName:          string?       // из event_courts
+teamA / teamB:      PlayerResponse[2]
+status:             "SCHEDULED" | "FINISHED"
+score:              { mode: SCORE_MODE, sets?: [...], points?: {teamAPoints,teamBPoints} } | null
+submittedByUserId:  UUID?         // кто ввёл итоговый счёт (null = ещё не введён или старая запись до V33)
+submittedByName:    string?       // имя игрока / email — для UI-метки «Введён: X»
+expectedA:          double?       // 0..1, шанс победы команды A по Elo. null если матч уже сыгран (см. 5.6)
 ```
 
 `PlayerResponse`:
@@ -318,6 +329,35 @@ avatarUrl
 `visibility` ∈ {`PRIVATE`, `PUBLIC`}. Контроллер `today`/`upcoming` сначала тянет события, потом фильтрует через `service.filterVisibleFor(events, currentUserId)`:
 - **PUBLIC** — видны всем.
 - **PRIVATE** — только участникам / приглашённым / автору.
+
+### 5.5 Авторизация ввода счёта (`POST /api/events/matches/{matchId}/score`)
+
+Реализация: `EventService.submitScore` + миграция V33 + поле `MatchSetScore.submittedByUserId`.
+
+| Кто | Когда | Что может |
+|---|---|---|
+| **Автор эвента** | `IN_PROGRESS` или `FINISHED` | Вводить, перезаписывать, редактировать после финиша |
+| **Участник конкретного матча** (один из 4 игроков) | только `IN_PROGRESS` | Ввести счёт **один раз**, если ещё пусто |
+| Участник эвента, но не этого матча | — | **403** |
+| Не-автор | `FINISHED` | **403** |
+| Не-автор, счёт уже введён (любым) | `IN_PROGRESS` | **409** `«Счёт уже введён. Изменить может только организатор.»` |
+
+Фронт (`V0EventPage`): кнопка «Ввести счёт» при `IN_PROGRESS` показывается автору **и** любому участнику эвента. В модале раундов карточка матча, по которому уже введён счёт, окрашивается зелёным; не-автору кнопки команд `disabled` с подсказкой «Введён: <Имя>. Изменить может только организатор.». При клике на «Ввести счёт» не-автору авто-разворачивается раунд с его первым неввёденным матчем. На ошибке сохранения (включая 409 «гонка») вызывается `getEventDetails`, UI автоматически подтягивает актуальное состояние.
+
+### 5.6 Шансы выигрыша, фаза 1
+
+Реализация: миграция V34 + `users.show_win_probability` + `MatchResponse.expectedA` + Switch в Настройках профиля.
+
+- `expectedA = EloRating.expectedScore(EloRating.teamRating(a1,a2), EloRating.teamRating(b1,b2))` — статичный расчёт в `EventController.getDetails`. Пока матч не сыгран. После `FINISHED` / `submittedByUserId != null` — `null` (есть фактический результат, шансы не показываем).
+- В **Настройках профиля** (`V0SettingsPage`) — Switch «Показывать шансы выигрыша» с auto-save через `PATCH /api/me/profile { showWinProbability }`. По умолчанию `false`.
+- В модале «Раунды» (`V0EventPage`) под `courtName` каждого неввёденного матча — компонент `WinProbabilityHint`: полоска `пАpct% : пBpct%` + текстовая метка по `abs(expectedA - 0.5)`:
+  - `< 0.07` (≈ Δrating < 50) → «Равные шансы ⚖️»
+  - `< 0.20` (≈ Δrating < 150) → «Лёгкий фаворит ← / →»
+  - `< 0.34` (≈ Δrating < 300) → «Фаворит ← / →»
+  - `< 0.45` (≈ Δrating < 500) → «Сильный фаворит ← / →»
+  - иначе → «Битва Давида и Голиафа 🎭» (мягкая формулировка, чтобы не давить на аутсайдера)
+
+**Фаза 2** (динамическая поправка по сегодняшней игре игрока) — отдельная задача #7 в roadmap.
 
 ---
 
@@ -547,6 +587,8 @@ web/src/
 | Старт игры, раунды (auto/manual) | ✅ | ✅ | ⬜ | ⬜ | — |
 | PairingPlanner (ROUND_ROBIN/BALANCED) | ✅ | — | — | — | — |
 | Ввод счёта (черновой + итоговый, SETS/POINTS) | ✅ | ✅ | ⬜ | ⬜ | — |
+| Совместный ввод счёта (участник своего матча, см. 5.5) | ✅ | ✅ | ⬜ | ⬜ | — |
+| Шансы выигрыша, фаза 1 (Elo expectedScore + тоггл, см. 5.6) | ✅ | ✅ | ⬜ | ⬜ | — |
 | Финиш игры + пересчёт Elo | ✅ | ✅ | ⬜ | ⬜ | ✅ (итоги) |
 | Pop-уведомление ±delta | ✅ | ✅ | ⬜ | ⬜ | — |
 | История игр / матчей | ✅ | ✅ | ⬜ | ⬜ | — |
@@ -561,6 +603,7 @@ web/src/
 | Telegram: напоминания/анонс/итоги | ✅ | — | — | — | ✅ |
 | Видимость PRIVATE/PUBLIC | ✅ | ✅ | ⬜ | ⬜ | — |
 | Админка (CRUD users, complete-games) | ✅ | ✅ | — | — | — |
+| Обратная связь / тикеты (см. §16) | ✅ | ✅ | ⬜ | ⬜ | ✅ TG-нотификация админу (текст + медиа) |
 | Push-уведомления | ⬜ | — | ⬜ | ⬜ | — |
 
 ### Готово (бэк + фронт)
@@ -585,8 +628,6 @@ web/src/
 
 | # | Задача | Объём |
 |---|---|---|
-| 4 | Совместный ввод счёта — любой участник матча, не только автор | ⚡ 2-3ч |
-| 5 | Шансы выигрыша, фаза 1 (Elo expectedScore с тогглом в настройках) | ⚡ 2ч |
 | 6 | Роль тренера (`coach_players` + подтверждение рейтинга) | 🔥 1-2 дня |
 | 7 | Шансы выигрыша, фаза 2 — динамическая поправка по сегодняшним играм | 🔥 1-2 дня |
 | 8 | Другие режимы турнира (помимо «Американки»: round-robin с фиксированными парами, групповой + плей-офф, мексиканка) | 🔥 TBD |
@@ -595,7 +636,44 @@ web/src/
 | 11 | График: горизонтальный пан внутри периода | ⚡ 3-4ч |
 | 12 | График: hover/tap-описание точек с деталями матча | ⚡ 2-3ч |
 | 13 | Безопасность: refresh-токены, rate-limit, CORS, audit log, авторизация на эндпойнтах | 🔥 TBD |
-| 14 | Обратная связь — форма + Telegram админу | ⚡ 4-6ч |
+
+---
+
+## 16. Обратная связь / тикеты
+
+Реализация: миграция V35 + `FeedbackTicket` entity + `FeedbackService` + `FeedbackController` + `FeedbackAdminController` + страницы `V0FeedbackPage` / `V0AdminFeedbackPage`.
+
+**Модель (фаза 1, fire-and-forget — без статусов и переписки в аппе)**:
+- Юзер шлёт тикет: `category` (BUG / FEATURE / QUESTION / OTHER) + `message` (5..5000 символов) + опц. вложение (фото или видео как data URL).
+- Хранится в `feedback_tickets`. Авторизация: только залогиненные. Доступно даже до прохождения анкеты (см. SurveyGateFilter allowed-list).
+- Ответ — внешним каналом (TG/email). Чтобы не плодить лишний UI — статусов нет, переписки в аппе нет.
+
+**Эндпойнты**:
+| Метод | Путь | Описание |
+|---|---|---|
+| `POST` | `/api/feedback` | Создать тикет |
+| `GET` | `/api/feedback/mine` | Свои тикеты (для UI «История обращений») |
+| `GET` | `/api/admin/feedback` | Все тикеты (admin) |
+| `DELETE` | `/api/admin/feedback/{id}` | Удалить тикет (admin) |
+
+**Лимиты**: `message` 5..5000 символов; вложение data URL ≤ 7 MB (≈ 5 MB сырого бинарника). `server.tomcat.max-http-form-post-size: 16MB` в `application.yml`. Принимаются только `image/*` и `video/*` MIME.
+
+**UI**:
+- `/feedback` — страница «Обратная связь»: форма (4-карточные категории на десктопе, Select на мобильном) + textarea со счётчиком символов + drag-and-drop вложения + превью + список «Мои обращения».
+- Точки входа: dropdown настроек в Header (десктоп) и мобильное меню (`MessageSquare` иконка).
+- `/admin/feedback` — список всех тикетов с фильтрами по категории + поиск по имени/тексту, превью вложений (image/video инлайн), удаление с подтверждением. Ссылка из `/admin` в правом верхнем углу.
+
+**Telegram-нотификация админу (фаза 2, готово)**:
+- Назначение admin'ов — в **`/admin`**: для каждого юзера чекбокс «Feedback admin (TG)», auto-save. Под капотом — `users.is_feedback_admin` (миграция V36) + `AdminController.updateUser({ isFeedbackAdmin })`. Может быть несколько admin'ов одновременно — нотификация летит каждому.
+- Чтобы юзер начал получать TG: войти под этим юзером → Настройки → Уведомления → Telegram → `/start` бота. Привязка хранится в `telegram_chat` (chat_type=PRIVATE).
+- API: после сохранения тикета `FeedbackService.notifyAdmins()` берёт `users.findAllByIsFeedbackAdminTrue()` и для каждого зовёт `BotClient.notifyAdminFeedback(...)` fire-and-forget. Ошибки бота не валят транзакцию.
+- Bot: `POST /api/internal/telegram/notify/admin-feedback` ищет PRIVATE-чат в `telegram_chat` по `adminUserId`, отправляет `sendMessage` с категорией + автором + полным текстом (≤3500 символов, HTML), затем — при наличии — `sendPhoto`/`sendVideo` через multipart-upload (бинарник декодируется из data URL на бот-стороне).
+- Если у admin-юзера нет привязанного PRIVATE-чата — `sent=0`, в логе warning. Тикет всё равно сохраняется в `/admin/feedback`.
+
+**Backlog (фаза 3, не сделано)**:
+- Email-нотификация админу (когда нет TG).
+- Rate-limit (n тикетов / сутки от одного юзера).
+- Кнопка-ссылка «Открыть в админке» в TG-сообщении (нужен публичный URL приложения).
 
 ---
 

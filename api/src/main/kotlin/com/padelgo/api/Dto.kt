@@ -323,17 +323,40 @@ data class MatchResponse(
     val status: String,
 
     @Schema(description = "Счёт матча. null — счёт не введён")
-    val score: ScoreResponse?
+    val score: ScoreResponse?,
+
+    @Schema(description = "UUID пользователя, который ввёл итоговый счёт. null — счёт не введён или историческая запись.")
+    val submittedByUserId: UUID? = null,
+
+    @Schema(description = "Имя пользователя, который ввёл итоговый счёт. Для UI-метки «Введён: X».")
+    val submittedByName: String? = null,
+
+    @Schema(
+        description = "Шанс победы команды A (0..1) по Elo expectedScore. null, если матч уже сыгран — тогда шансы не показываем. " +
+            "Команда B = 1 - expectedA. Считается через EloRating.expectedScore(teamRating(teamA), teamRating(teamB))."
+    )
+    val expectedA: Double? = null
 ) {
     companion object {
-        fun from(m: Match, players: Map<UUID, PlayerResponse>, score: ScoreResponse?, courtName: String? = null) = MatchResponse(
+        fun from(
+            m: Match,
+            players: Map<UUID, PlayerResponse>,
+            score: ScoreResponse?,
+            courtName: String? = null,
+            submittedByUserId: UUID? = null,
+            submittedByName: String? = null,
+            expectedA: Double? = null
+        ) = MatchResponse(
             id = m.id!!,
             courtNumber = m.courtNumber,
             courtName = courtName,
             teamA = listOf(players[m.teamAPlayer1Id]!!, players[m.teamAPlayer2Id]!!),
             teamB = listOf(players[m.teamBPlayer1Id]!!, players[m.teamBPlayer2Id]!!),
             status = m.status.name,
-            score = score
+            score = score,
+            submittedByUserId = submittedByUserId,
+            submittedByName = submittedByName,
+            expectedA = expectedA
         )
     }
 }
