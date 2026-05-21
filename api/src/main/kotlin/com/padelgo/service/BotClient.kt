@@ -50,6 +50,9 @@ data class EventUpdatedNotify(
 
 data class FinishTopDto(val name: String, val delta: Int)
 
+/** Финальная таблица лидеров по очкам, сыгранным в эвенте. */
+data class LeaderboardEntry(val name: String, val points: Int)
+
 data class EventFinishedNotify(
     val eventId: UUID,
     val ownerUserId: UUID,
@@ -58,7 +61,8 @@ data class EventFinishedNotify(
     val startTime: LocalTime,
     val endTime: LocalTime,
     val courtsCount: Int,
-    val top: List<FinishTopDto>,
+    val top: List<FinishTopDto>,           // deprecated — топ-3 по приросту рейтинга, оставлен для bw-compat
+    val leaderboard: List<LeaderboardEntry> = emptyList(),  // отсортированная по очкам полная таблица
     val matchCount: Int
 )
 

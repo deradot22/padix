@@ -78,6 +78,11 @@ data class FinishTopPlayer(
     val delta: Int
 )
 
+data class FinishLeaderboardEntry(
+    val name: String,
+    val points: Int
+)
+
 data class TelegramCancellationPlan(
     val title: String,
     val targetTgChatIds: List<Long>,
@@ -514,6 +519,7 @@ class TelegramService(
         event: BotEvent,
         ownerUserId: UUID,
         top: List<FinishTopPlayer>,
+        leaderboard: List<FinishLeaderboardEntry>,
         matchCount: Int
     ): Int {
         val eventId = event.id ?: return 0
@@ -521,7 +527,9 @@ class TelegramService(
         val targets = targetChatsForEvent(eventId, ownerUserId) { it.notifyFinished }
         if (targets.isEmpty()) return 0
         val cta = cta(eventId, "📊 Результаты")
-        return sendAndRecord(targets, renderEventFinished(event, top, matchCount) + cta.textSuffix, eventId, cta.replyMarkup)
+        // Передаём recordForEventId=null — это финал, не CREATED-пост, его не нужно
+        // потом редактировать при roster change.
+        return sendAndRecord(targets, renderEventFinished(event, top, leaderboard, matchCount) + cta.textSuffix, null, cta.replyMarkup)
     }
 
     /**
@@ -824,11 +832,28 @@ class TelegramService(
         "⚠️ <b>${escapeHtml(event.title)}</b> — освободилось место\n" +
             "Сейчас $newCount/$capacity. Регистрация снова открыта."
 
-    private fun renderEventFinished(event: BotEvent, top: List<FinishTopPlayer>, matchCount: Int): String {
+    private fun renderEventFinished(
+        event: BotEvent,
+        top: List<FinishTopPlayer>,
+        leaderboard: List<FinishLeaderboardEntry>,
+        matchCount: Int
+    ): String {
         val sb = StringBuilder()
         sb.append("🏁 <b>").append(escapeHtml(event.title)).append("</b> завершена\n")
         sb.append("Матчей сыграно: ").append(matchCount).append("\n")
-        if (top.isNotEmpty()) {
+
+        // Основной блок — таблица лидеров по очкам (как «Таблица лидеров» в UI).
+        // Если leaderboard пуст (старая api-версия / нет POINTS-режима) — fallback на топ-3
+        // по приросту рейтинга, чтобы сохранить читаемое сообщение.
+        if (leaderboard.isNotEmpty()) {
+            sb.append("\n<b>Таблица лидеров</b>\n")
+            val medals = listOf("🥇", "🥈", "🥉")
+            leaderboard.forEachIndexed { idx, p ->
+                val prefix = medals.getOrElse(idx) { "${idx + 1}." }
+                sb.append(prefix).append(" ").append(escapeHtml(p.name))
+                    .append(" — <b>").append(p.points).append("</b>\n")
+            }
+        } else if (top.isNotEmpty()) {
             sb.append("\nТоп по росту рейтинга:\n")
             val medals = listOf("🥇", "🥈", "🥉")
             top.take(3).forEachIndexed { idx, p ->

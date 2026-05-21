@@ -1198,10 +1198,14 @@ class EventService(
             eventRepo.save(event)
         }
 
-        // Telegram: после успешного финиша шлём сводку с топом по приросту рейтинга.
+        // Telegram: после успешного финиша шлём сводку — полная таблица лидеров
+        // (по сумме очков игроков, как «Таблица лидеров» в UI). Топ-3 по приросту
+        // рейтинга всё ещё кладём в payload для bw-compat, но bot использует
+        // leaderboard как основной блок.
         try {
-            val ratingChanges = ratingChangeRepo.findAllByEventId(eventId)
-            if (ratingChanges.isNotEmpty()) {
+            val ownerId = event.createdByUserId
+            if (ownerId != null) {
+                val ratingChanges = ratingChangeRepo.findAllByEventId(eventId)
                 val totalsByPlayer: Map<UUID, Int> = ratingChanges
                     .filter { it.playerId != null }
                     .groupBy { it.playerId!! }
@@ -1213,27 +1217,37 @@ class EventService(
                     .mapNotNull { (pid, delta) ->
                         playersById[pid]?.let { FinishTopDto(name = it.name, delta = delta) }
                     }
-                val ownerId = event.createdByUserId
-                if (ownerId != null) {
-                    val payload = EventFinishedNotify(
-                        eventId = eventId,
-                        ownerUserId = ownerId,
-                        title = event.title,
-                        date = event.date,
-                        startTime = event.startTime,
-                        endTime = event.endTime,
-                        courtsCount = event.courtsCount,
-                        top = top,
-                        matchCount = finishedMatches.size
-                    )
-                    runAfterCommit {
-                        try { botClient.notifyEventFinished(payload) }
-                        catch (e: Exception) { log.warn("Failed to notify bot about FINISHED: {}", e.message) }
+
+                // Полная таблица лидеров по очкам (как в UI Modal «Таблица лидеров»).
+                val playerIds = regRepo.findAllByEventIdAndStatus(eventId).mapNotNull { it.playerId }
+                val standings = computeTournamentStandings(eventId, playerIds, event.scoringMode)
+                val playersForBoard = playerRepo.findAllById(standings.keys).associateBy { it.id!! }
+                val leaderboard = standings.entries
+                    .sortedWith(compareByDescending<Map.Entry<UUID, Int>> { it.value }
+                        .thenBy { playersForBoard[it.key]?.name?.lowercase() ?: "" })
+                    .mapNotNull { (pid, pts) ->
+                        playersForBoard[pid]?.let { LeaderboardEntry(name = it.name, points = pts) }
                     }
+
+                val payload = EventFinishedNotify(
+                    eventId = eventId,
+                    ownerUserId = ownerId,
+                    title = event.title,
+                    date = event.date,
+                    startTime = event.startTime,
+                    endTime = event.endTime,
+                    courtsCount = event.courtsCount,
+                    top = top,
+                    leaderboard = leaderboard,
+                    matchCount = finishedMatches.size
+                )
+                runAfterCommit {
+                    try { botClient.notifyEventFinished(payload) }
+                    catch (e: Exception) { log.warn("Failed to notify bot about FINISHED: {}", e.message) }
                 }
             }
         } catch (e: Exception) {
-            log.warn("Failed to notify bot about FINISHED: {}", e.message)
+            log.warn("Failed to compute Telegram FINISHED payload: {}", e.message)
         }
     }
 

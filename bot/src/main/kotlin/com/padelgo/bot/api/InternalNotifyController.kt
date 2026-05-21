@@ -2,6 +2,7 @@ package com.padelgo.bot.api
 
 import com.padelgo.bot.domain.BotEvent
 import com.padelgo.bot.domain.EventStatus
+import com.padelgo.bot.service.FinishLeaderboardEntry
 import com.padelgo.bot.service.FinishTopPlayer
 import com.padelgo.bot.service.TelegramCancellationOriginalPost
 import com.padelgo.bot.service.TelegramCancellationPlan
@@ -88,6 +89,7 @@ data class CancellationPlanResponse(
 }
 
 data class FinishTopPlayerDto(val name: String, val delta: Int)
+data class LeaderboardEntryDto(val name: String, val points: Int)
 
 data class EventFinishedRequest(
     val eventId: UUID,
@@ -98,6 +100,7 @@ data class EventFinishedRequest(
     val endTime: LocalTime,
     val courtsCount: Int,
     val top: List<FinishTopPlayerDto>,
+    val leaderboard: List<LeaderboardEntryDto> = emptyList(),
     val matchCount: Int
 )
 
@@ -168,7 +171,8 @@ class InternalNotifyController(
     fun eventFinished(@RequestBody req: EventFinishedRequest): NotifyResult {
         val ev = req.toEvent()
         val top = req.top.map { FinishTopPlayer(it.name, it.delta) }
-        val sent = service.postEventFinished(ev, req.ownerUserId, top, req.matchCount)
+        val leaderboard = req.leaderboard.map { FinishLeaderboardEntry(it.name, it.points) }
+        val sent = service.postEventFinished(ev, req.ownerUserId, top, leaderboard, req.matchCount)
         return NotifyResult(sent)
     }
 
