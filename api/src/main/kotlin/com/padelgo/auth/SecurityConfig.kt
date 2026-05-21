@@ -140,32 +140,34 @@ class JwtAuthFilter(
         val header = request.getHeader(HttpHeaders.AUTHORIZATION)
         if (header != null && header.startsWith("Bearer ")) {
             val token = header.removePrefix("Bearer ").trim()
+            // Diagnostic: безопасный fingerprint для матчинга с клиентом без утечки секрета.
+            val tokenInfo = "len=${token.length} dots=${token.count { it == '.' }} prefix=${token.take(12)} suffix=${token.takeLast(6)}"
             try {
                 val principal = jwtService.parse(token)
                 val auth = UsernamePasswordAuthenticationToken(principal, null, emptyList())
                 SecurityContextHolder.getContext().authentication = auth
             } catch (e: ExpiredJwtException) {
-                log.info("JWT expired for path={} cause={}", request.requestURI, e.message)
+                log.info("JWT expired for path={} {} cause={}", request.requestURI, tokenInfo, e.message)
                 unauthorized(response, "Session expired")
                 return
             } catch (e: SignatureException) {
-                log.warn("JWT signature invalid for path={} cause={}", request.requestURI, e.message)
+                log.warn("JWT signature invalid for path={} {} cause={}", request.requestURI, tokenInfo, e.message)
                 unauthorized(response, "Token signature invalid")
                 return
             } catch (e: MalformedJwtException) {
-                log.warn("JWT malformed for path={} cause={}", request.requestURI, e.message)
+                log.warn("JWT malformed for path={} {} cause={}", request.requestURI, tokenInfo, e.message)
                 unauthorized(response, "Token malformed")
                 return
             } catch (e: UnsupportedJwtException) {
-                log.warn("JWT unsupported for path={} cause={}", request.requestURI, e.message)
+                log.warn("JWT unsupported for path={} {} cause={}", request.requestURI, tokenInfo, e.message)
                 unauthorized(response, "Token unsupported")
                 return
             } catch (e: JwtException) {
-                log.warn("JWT rejected for path={} cause={}", request.requestURI, e.message)
+                log.warn("JWT rejected for path={} {} cause={}", request.requestURI, tokenInfo, e.message)
                 unauthorized(response, "Invalid token")
                 return
             } catch (e: Exception) {
-                log.error("JWT auth filter error path={}", request.requestURI, e)
+                log.error("JWT auth filter error path={} {}", request.requestURI, tokenInfo, e)
                 unauthorized(response, "Invalid token")
                 return
             }
