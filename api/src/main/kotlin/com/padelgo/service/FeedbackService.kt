@@ -12,6 +12,7 @@ import org.slf4j.LoggerFactory
 import org.springframework.http.HttpStatus
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
+import java.time.Instant
 import java.util.UUID
 import kotlin.math.ceil
 
@@ -190,6 +191,8 @@ class FeedbackService(
         attachmentDataUrl = t.attachmentDataUrl,
         attachmentMime = t.attachmentMime,
         attachmentSizeBytes = t.attachmentSizeBytes,
-        createdAt = t.createdAt!!
+        // После repo.save() Hibernate @CreationTimestamp может не успеть отработать
+        // (особенно при DB-side DEFAULT NOW()), поэтому fallback на текущее время.
+        createdAt = t.createdAt ?: Instant.now()
     )
 }
