@@ -1,6 +1,6 @@
 import { Navigate, Outlet, Route, Routes, useLocation, useNavigate } from "react-router-dom";
 import { useEffect, useState } from "react";
-import { api, EventInviteItem, FriendsSnapshot, hasToken, setToken } from "../lib/api";
+import { api, EventInviteItem, FriendsSnapshot, hasToken, MeResponse, setToken } from "../lib/api";
 import { RatingNotificationModal } from "@/components/rating-notification-modal";
 import { V0HomePage } from "./v0/pages/V0HomePage";
 import { V0GamesPage } from "./v0/pages/V0GamesPage";
@@ -21,19 +21,7 @@ import { MainLayout } from "@/components/main-layout";
 export function App() {
   const navigate = useNavigate();
   const location = useLocation();
-  const [me, setMe] = useState<null | {
-    email: string;
-    playerId: string;
-    name: string;
-    rating: number;
-    gamesPlayed: number;
-    publicId: string;
-    surveyCompleted: boolean;
-    surveyLevel: number | null;
-    calibrationEventsRemaining: number;
-    calibrationMatchesRemaining: number;
-    avatarUrl?: string | null;
-  }>(null);
+  const [me, setMe] = useState<MeResponse | null>(null);
   const [meLoaded, setMeLoaded] = useState(false);
   const [surveyResult, setSurveyResult] = useState<null | { rating: number; remaining: number }>(null);
   const [notificationCount, setNotificationCount] = useState(0);
