@@ -300,16 +300,11 @@ export function V0EventPage(props: { me: any; meLoaded?: boolean }) {
         </div>
       </div>
     );
+    // В модале «Раунды» подсказку с инфой игрока не показываем — иначе она перехватывает
+    // клик по карточке команды и мешает вводу счёта. Рейтинг игрока виден на других страницах.
     const makePlayerTooltip = (p: typeof first, center = false) => {
       if (!p) return <span className={center ? "truncate w-full text-center" : "truncate"}>?</span>;
-      return (
-        <PlayerTooltip
-          player={{ id: p.id, name: p.name, rating: p.rating, ntrp: p.ntrp, matches: p.gamesPlayed, odid: p.publicId, avatarUrl: p.avatarUrl }}
-          showAddFriend={false}
-        >
-          <span className={center ? "truncate w-full text-center cursor-pointer" : "truncate cursor-pointer"}>{p.name}</span>
-        </PlayerTooltip>
-      );
+      return <span className={center ? "truncate w-full text-center" : "truncate"}>{p.name}</span>;
     };
     const names = (
       <div className="grid w-full min-w-0 grid-rows-[44px_44px] items-center gap-2 px-1 text-xs text-muted-foreground text-left">
