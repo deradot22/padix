@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useLocation } from "react-router-dom";
-import { Calendar, CalendarDays, Clock, Info, List, Plus, Users } from "lucide-react";
+import { Calendar, CalendarDays, Clock, Globe, Info, List, Lock, Plus, Users } from "lucide-react";
 import { api, Event } from "../../../lib/api";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -21,6 +21,14 @@ function formatDate(d: Date): string {
   const mm = `${d.getMonth() + 1}`.padStart(2, "0");
   const dd = `${d.getDate()}`.padStart(2, "0");
   return `${yyyy}-${mm}-${dd}`;
+}
+
+/** Маленькая иконка-маркер 🔒/🌐 перед названием игры. */
+function VisibilityIcon({ visibility }: { visibility: Event["visibility"] }) {
+  if (visibility === "PRIVATE") {
+    return <Lock className="h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-label="Приватная игра" />;
+  }
+  return <Globe className="h-3.5 w-3.5 shrink-0 text-primary/70" aria-label="Открытая игра" />;
 }
 
 function getStatusBadge(status: Event["status"], className?: string) {
@@ -201,7 +209,12 @@ export function V0GamesPage(props: { me: any }) {
               }}
             >
               <div className="flex flex-col gap-1 min-w-0 flex-1">
-                {e.title && <div className="font-medium text-sm truncate">{e.title}</div>}
+                {e.title && (
+                  <div className="flex items-center gap-1.5 min-w-0">
+                    <VisibilityIcon visibility={e.visibility} />
+                    <div className="font-medium text-sm truncate">{e.title}</div>
+                  </div>
+                )}
                 <div className="flex items-center gap-2 flex-wrap">
                   <Calendar className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
                   <span className="text-xs text-muted-foreground whitespace-nowrap">{shortDate(e.date)}</span>
@@ -258,7 +271,12 @@ export function V0GamesPage(props: { me: any }) {
                         <Calendar className="h-5 w-5 text-muted-foreground" />
                       </div>
                       <div className="min-w-0">
-                        {e.title && <div className="font-medium truncate">{e.title}</div>}
+                        {e.title && (
+                          <div className="flex items-center gap-1.5 min-w-0">
+                            <VisibilityIcon visibility={e.visibility} />
+                            <div className="font-medium truncate">{e.title}</div>
+                          </div>
+                        )}
                         <div className={cn("text-muted-foreground whitespace-nowrap", e.title ? "text-xs" : "font-medium text-sm text-foreground")}>
                           {formatEventDate(e.date)}
                         </div>
@@ -428,7 +446,10 @@ export function V0GamesPage(props: { me: any }) {
                         >
                           <div className="flex items-center justify-between gap-3">
                             <div className="min-w-0">
-                              <div className="font-medium text-sm truncate">{e.title || "Игра"}</div>
+                              <div className="flex items-center gap-1.5 min-w-0">
+                                <VisibilityIcon visibility={e.visibility} />
+                                <div className="font-medium text-sm truncate">{e.title || "Игра"}</div>
+                              </div>
                               <div className="text-xs text-muted-foreground mt-0.5">
                                 {timeRange(e.startTime, e.endTime)}
                               </div>
@@ -491,7 +512,10 @@ export function V0GamesPage(props: { me: any }) {
                 >
                   <div className="flex items-center justify-between gap-3">
                     <div>
-                      <div className="font-medium">{e.title || "Игра"}</div>
+                      <div className="flex items-center gap-1.5 min-w-0">
+                        <VisibilityIcon visibility={e.visibility} />
+                        <div className="font-medium truncate">{e.title || "Игра"}</div>
+                      </div>
                       <div className="text-sm text-muted-foreground">
                         {timeRange(e.startTime, e.endTime)} · {getStatusBadge(e.status)}
                       </div>

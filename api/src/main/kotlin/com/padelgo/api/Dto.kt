@@ -411,7 +411,14 @@ data class EventDetailsResponse(
     val isAuthor: Boolean,
 
     @Schema(description = "Имя организатора игры")
-    val authorName: String
+    val authorName: String,
+
+    @Schema(
+        description = "true — это приватная игра, и текущий пользователь не имеет доступа к деталям. " +
+            "В этом случае rounds/registeredPlayers/pendingCancelRequests возвращаются пустыми. " +
+            "UI должен показать заглушку «🔒 Приватная — попроси организатора пригласить»."
+    )
+    val accessRestricted: Boolean = false
 )
 
 @Schema(description = "Результат запроса отмены регистрации")

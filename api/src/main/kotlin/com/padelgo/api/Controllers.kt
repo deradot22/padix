@@ -117,11 +117,12 @@ class EventController(
         return EventResponse.from(saved)
     }
 
-    @Operation(summary = "Игры на сегодня")
+    @Operation(summary = "Игры на сегодня (включая PRIVATE — детали закрыты в getDetails)")
     @GetMapping("/today")
     fun today(): List<EventResponse> {
+        // Все эвенты светятся в листинге (включая PRIVATE c бэйджиком 🔒).
+        // Доступ к деталям контролирует getDetails (см. accessRestricted).
         val events = service.getToday(LocalDate.now())
-            .let { service.filterVisibleFor(it, currentUserIdOrNull()) }
         val titles = service.seriesTitles(events)
         return events.map { e -> EventResponse.from(e, service.getRegisteredCount(e.id!!), titles[e.seriesId]) }
     }
@@ -129,7 +130,8 @@ class EventController(
     @Operation(
         summary = "Предстоящие игры",
         description = "По умолчанию: от сегодня до +14 дней. Параметры from/to задают диапазон дат (YYYY-MM-DD). " +
-            "PRIVATE-игры показываются только их участникам/приглашённым/автору; PUBLIC — всем."
+            "PRIVATE-игры тоже включаются в листинг (с visibility=PRIVATE), но детали в getDetails " +
+            "недоступны не-участникам (вернётся accessRestricted=true)."
     )
     @GetMapping("/upcoming")
     fun upcoming(
@@ -141,7 +143,6 @@ class EventController(
         val start = from?.let { LocalDate.parse(it) } ?: LocalDate.now()
         val end = to?.let { LocalDate.parse(it) } ?: start.plusDays(14)
         val events = service.getUpcoming(start, end)
-            .let { service.filterVisibleFor(it, currentUserIdOrNull()) }
         val titles = service.seriesTitles(events)
         return events.map { e -> EventResponse.from(e, service.getRegisteredCount(e.id!!), titles[e.seriesId]) }
     }
@@ -288,12 +289,35 @@ class EventController(
     @Operation(
         summary = "Детали игры",
         description = "Возвращает всю информацию: раунды, матчи, счёт, зарегистрированных игроков. " +
-            "Публичный эндпоинт (GET), токен нужен только для флага isAuthor."
+            "Публичный эндпоинт (GET), токен нужен только для флага isAuthor. " +
+            "Для PRIVATE-игр не-участникам возвращается облегчённый ответ с accessRestricted=true и " +
+            "пустыми массивами rounds/registeredPlayers/pendingCancelRequests."
     )
     @GetMapping("/{eventId}")
     @Transactional(readOnly = true)
     fun getDetails(@PathVariable eventId: UUID): EventDetailsResponse {
         val event = service.getEvent(eventId)
+        val currentUserId = currentUserIdOrNull()
+
+        // Access control для PRIVATE: если юзер не имеет доступа, возвращаем заглушку.
+        // PUBLIC проходит всегда. Реальная проверка делегирована filterVisibleFor (та же логика что и в листинге).
+        val accessible = service.filterVisibleFor(listOf(event), currentUserId).isNotEmpty()
+        if (!accessible) {
+            val authorName = service.getAuthorName(eventId) ?: "Не указан"
+            val seriesTitle = service.seriesTitles(listOf(event))[event.seriesId]
+            // registeredCount можно показывать — это просто число «N/M», не утечка.
+            val registeredCount = service.getRegisteredCount(eventId)
+            return EventDetailsResponse(
+                event = EventResponse.from(event, registeredCount, seriesTitle),
+                rounds = emptyList(),
+                registeredPlayers = emptyList(),
+                pendingCancelRequests = emptyList(),
+                isAuthor = false,
+                authorName = authorName,
+                accessRestricted = true
+            )
+        }
+
         val courts = courtRepo.findAllByEventIdOrderByCourtNumberAsc(eventId)
         val courtNameByNumber = courts.associate { it.courtNumber to it.name }
         val rounds = roundRepo.findAllByEventIdOrderByRoundNumberAsc(eventId)

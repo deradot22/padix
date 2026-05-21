@@ -102,6 +102,8 @@ export type EventDetails = {
   pendingCancelRequests: Player[];
   isAuthor: boolean;
   authorName: string;
+  /** true — PRIVATE-игра и текущий юзер не имеет доступа. rounds/players приходят пустыми. */
+  accessRestricted?: boolean;
 };
 
 export type BalanceSeverity = "NONE" | "SMALL" | "MEDIUM" | "LARGE";

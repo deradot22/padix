@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useParams, useLocation } from "react-router-dom";
-import { AlertTriangle, ArrowLeft, Check, ChevronDown, Clock, MapPin, Pencil, Repeat, Scale, Share2, Target, Trash2, Trophy, UserPlus, Users, Zap, X } from "lucide-react";
+import { AlertTriangle, ArrowLeft, Check, ChevronDown, Clock, Lock, MapPin, Pencil, Repeat, Scale, Share2, Target, Trash2, Trophy, UserPlus, Users, Zap, X } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { api, BalancePreview, EventDetails, FriendItem, FriendsSnapshot, Match } from "../../../lib/api";
 import { PlayerTooltip } from "@/components/player-tooltip";
@@ -611,6 +611,45 @@ export function V0EventPage(props: { me: any; meLoaded?: boolean }) {
         </div>
       );
     if (!data) return <div className="text-sm text-muted-foreground">Событие не найдено.</div>;
+
+    // PRIVATE-игра, к которой у юзера нет доступа: показываем заглушку без раундов/игроков.
+    if (data.accessRestricted) {
+      const ev = data.event;
+      return (
+        <div className="mx-auto max-w-xl space-y-4 py-6">
+          <Link
+            to="/games"
+            state={location.state}
+            className="inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors group"
+          >
+            <ArrowLeft className="h-4 w-4 group-hover:-translate-x-1 transition-transform" />
+            К списку игр
+          </Link>
+          <div className="rounded-xl border border-border/60 bg-card p-6 space-y-4">
+            <div className="flex items-center gap-2 text-2xl">
+              <Lock className="h-6 w-6 text-muted-foreground" />
+              <span className="font-semibold">Приватная игра</span>
+            </div>
+            <div className="space-y-1.5">
+              <div className="text-lg font-medium">{ev.title || "Игра"}</div>
+              <div className="text-sm text-muted-foreground">
+                {ev.date} · {ev.startTime}–{ev.endTime} · Кортов: {ev.courtsCount}
+              </div>
+              <div className="text-sm text-muted-foreground">
+                Организатор: <span className="text-foreground font-medium">{data.authorName}</span>
+              </div>
+              <div className="text-sm text-muted-foreground">
+                Записано: <span className="text-foreground font-medium tabular-nums">{ev.registeredCount}/{ev.courtsCount * 4}</span>
+              </div>
+            </div>
+            <div className="rounded-lg border border-amber-500/30 bg-amber-500/5 p-3 text-sm text-amber-100">
+              Состав, раунды и счёт доступны только участникам игры и приглашённым.
+              Попроси организатора пригласить тебя — приглашение придёт в раздел уведомлений.
+            </div>
+          </div>
+        </div>
+      );
+    }
 
     const e = data.event;
     const registered = data.registeredPlayers ?? [];
