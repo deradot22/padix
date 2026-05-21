@@ -634,9 +634,11 @@ export function V0EventPage(props: { me: any; meLoaded?: boolean }) {
       m.status === "FINISHED" || !!m.submittedByUserId;
     const canSubmitScore = (m: Match): boolean =>
       isAuthor || (isMyMatch(m) && !hasFinalScore(m));
+    // Доступ к модалу «Раунды» для всех зарегистрированных, не только тех, кто уже в текущем матче
+    // (резервы тоже могут смотреть и ввести счёт в свой матч, когда их поставят).
     const isParticipantOfEvent =
-      !!meId &&
-      (data.rounds ?? []).some((r) => r.matches.some(isMyMatch));
+      isRegistered ||
+      (!!meId && (data.rounds ?? []).some((r) => r.matches.some(isMyMatch)));
     const progressPercent = Math.min(100, (registered.length / Math.max(1, e.courtsCount * 4)) * 100);
     const friendPublicIds = new Set((friends?.friends ?? []).map((f) => f.publicId));
     const outgoingPublicIds = new Set((friends?.outgoing ?? []).map((f) => f.publicId));
