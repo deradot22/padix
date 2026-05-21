@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useLocation } from "react-router-dom";
-import { Calendar, CalendarDays, Clock, Globe, Info, List, Lock, Plus, Users } from "lucide-react";
+import { Calendar, CalendarDays, Clock, Globe, Info, List, Lock, Plus, Search, Users, X } from "lucide-react";
 import { api, Event } from "../../../lib/api";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -73,6 +73,19 @@ export function V0GamesPage(props: { me: any }) {
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
   const [selectedEvents, setSelectedEvents] = useState<Event[]>([]);
   const [registeredIds, setRegisteredIds] = useState<Record<string, boolean>>({});
+
+  // Фильтр-вкладка (Все / 🌐 Открытые / 🔒 Мои) и поиск по названию.
+  // Сохраняем в localStorage чтобы не сбрасывалось при навигации.
+  type FilterTab = "all" | "public" | "mine";
+  const [filterTab, setFilterTab] = useState<FilterTab>(() => {
+    const stored = typeof window !== "undefined" ? window.localStorage.getItem("padix.games.filterTab") : null;
+    return (stored === "public" || stored === "mine" || stored === "all") ? stored : "all";
+  });
+  const [searchQuery, setSearchQuery] = useState<string>(() => {
+    return typeof window !== "undefined" ? (window.localStorage.getItem("padix.games.searchQuery") ?? "") : "";
+  });
+  useEffect(() => { try { window.localStorage.setItem("padix.games.filterTab", filterTab); } catch { /* ignore */ } }, [filterTab]);
+  useEffect(() => { try { window.localStorage.setItem("padix.games.searchQuery", searchQuery); } catch { /* ignore */ } }, [searchQuery]);
 
   useEffect(() => {
     if (props.me && !props.me.surveyCompleted) return;
@@ -171,6 +184,67 @@ export function V0GamesPage(props: { me: any }) {
     return `${d} ${shortMonths[m - 1] ?? ""}`;
   };
 
+  // Фильтрация по табу + поиску. Считаем здесь, чтобы и пустое-состояние и список были консистентны.
+  const filteredEvents = useMemo(() => {
+    if (!events) return null;
+    const q = searchQuery.trim().toLowerCase();
+    return events.filter((e) => {
+      if (filterTab === "public" && e.visibility !== "PUBLIC") return false;
+      if (filterTab === "mine" && !registeredIds[e.id]) return false;
+      if (q && !(e.title ?? "").toLowerCase().includes(q)) return false;
+      return true;
+    });
+  }, [events, filterTab, searchQuery, registeredIds]);
+
+  const filterBar = (
+    <div className="space-y-2">
+      <div className="flex flex-wrap items-center gap-2">
+        {([
+          { id: "all" as FilterTab, label: "Все" },
+          { id: "public" as FilterTab, label: "🌐 Открытые" },
+          { id: "mine" as FilterTab, label: "🔒 Мои" },
+        ]).map((t) => {
+          const active = filterTab === t.id;
+          return (
+            <button
+              key={t.id}
+              type="button"
+              onClick={() => setFilterTab(t.id)}
+              className={cn(
+                "h-8 rounded-full border px-3 text-xs font-medium transition-colors",
+                active
+                  ? "border-primary bg-primary text-primary-foreground"
+                  : "border-border bg-background hover:bg-secondary/40",
+              )}
+            >
+              {t.label}
+            </button>
+          );
+        })}
+      </div>
+      <div className="relative">
+        <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+        <input
+          type="search"
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+          placeholder="Поиск по названию игры…"
+          className="h-9 w-full rounded-md border border-border bg-background pl-8 pr-8 text-sm focus:outline-none focus:ring-2 focus:ring-primary/40"
+        />
+        {searchQuery && (
+          <button
+            type="button"
+            onClick={() => setSearchQuery("")}
+            className="absolute right-1.5 top-1/2 -translate-y-1/2 rounded-md p-1 text-muted-foreground hover:text-foreground hover:bg-secondary/50"
+            aria-label="Очистить поиск"
+          >
+            <X className="h-3.5 w-3.5" />
+          </button>
+        )}
+      </div>
+    </div>
+  );
+
   const listContent = useMemo(() => {
     if (loading) {
       return <div className="text-sm text-muted-foreground">Загрузка…</div>;
@@ -184,17 +258,39 @@ export function V0GamesPage(props: { me: any }) {
     }
     if (!events?.length) {
       return (
-        <div className="rounded-lg border border-border bg-secondary/30 p-6 text-sm text-muted-foreground">
-          Нет предстоящих игр.
+        <div className="space-y-3">
+          {filterBar}
+          <div className="rounded-lg border border-border bg-secondary/30 p-6 text-sm text-muted-foreground">
+            Нет предстоящих игр.
+          </div>
+        </div>
+      );
+    }
+    if (!filteredEvents?.length) {
+      return (
+        <div className="space-y-3">
+          {filterBar}
+          <div className="rounded-lg border border-border bg-secondary/30 p-6 text-sm text-muted-foreground">
+            Ничего не найдено по фильтру.
+            {searchQuery && (
+              <>
+                {" "}
+                <button type="button" onClick={() => setSearchQuery("")} className="underline">
+                  Сбросить поиск
+                </button>
+              </>
+            )}
+          </div>
         </div>
       );
     }
 
     return (
-      <>
+      <div className="space-y-3">
+        {filterBar}
         {/* Mobile cards */}
         <div className="space-y-2 md:hidden">
-          {events.map((e) => (
+          {filteredEvents.map((e) => (
             <button
               key={e.id}
               type="button"
@@ -252,7 +348,7 @@ export function V0GamesPage(props: { me: any }) {
               </tr>
             </thead>
             <tbody className="divide-y divide-border">
-              {events.map((e) => (
+              {filteredEvents.map((e) => (
                 <tr
                   key={e.id}
                   className="group cursor-pointer transition-colors hover:bg-secondary/50"
@@ -313,9 +409,9 @@ export function V0GamesPage(props: { me: any }) {
             </tbody>
           </table>
         </div>
-      </>
+      </div>
     );
-  }, [error, events, loading, nav, registeredIds]);
+  }, [error, events, filteredEvents, loading, nav, registeredIds, filterBar, searchQuery]);
 
   return (
     <div className="space-y-5">
