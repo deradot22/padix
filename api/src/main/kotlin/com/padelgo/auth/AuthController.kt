@@ -23,6 +23,7 @@ class AuthController(
     private val auth: AuthService,
     private val emailVerification: EmailVerificationService,
     private val telegramAuth: TelegramAuthService,
+    private val googleAuth: GoogleAuthService,
     @org.springframework.beans.factory.annotation.Value("\${app.telegram.bot-username:}") private val telegramBotUsername: String,
     @org.springframework.beans.factory.annotation.Value("\${app.google.client-id:}") private val googleClientId: String,
 ) {
@@ -61,6 +62,15 @@ class AuthController(
     )
     @PostMapping("/telegram")
     fun telegram(@RequestBody req: TelegramAuthRequest): AuthResponse = telegramAuth.loginOrRegister(req)
+
+    @Operation(
+        summary = "Войти/зарегистрироваться через Google Sign-In",
+        description = "Принимает ID-токен от Google Identity Services (`credential` в callback'е), " +
+            "верифицирует через Google tokeninfo endpoint, логинит существующего юзера (или авто-линкует " +
+            "к аккаунту с тем же email если он verified в Google), либо создаёт нового. Возвращает JWT."
+    )
+    @PostMapping("/google")
+    fun google(@Valid @RequestBody req: GoogleAuthRequest): AuthResponse = googleAuth.loginOrRegister(req.idToken)
 }
 
 @Tag(name = "Profile", description = "Профиль текущего авторизованного пользователя")

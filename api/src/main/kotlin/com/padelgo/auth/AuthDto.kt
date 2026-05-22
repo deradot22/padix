@@ -123,6 +123,13 @@ data class VerifyEmailRequest(
     val token: String
 )
 
+@Schema(description = "ID-токен от Google Identity Services. Это поле `credential` в callback'е google.accounts.id.")
+data class GoogleAuthRequest(
+    @field:NotBlank
+    @Schema(description = "JWT ID-токен, подписанный Google. Бэк верифицирует через oauth2.googleapis.com/tokeninfo.")
+    val idToken: String
+)
+
 @Schema(description = "Payload от Telegram Login Widget. Все поля приходят как есть из callback'а виджета (snake_case).")
 data class TelegramAuthRequest(
     @Schema(description = "Числовой ID юзера в Telegram", example = "12345678")

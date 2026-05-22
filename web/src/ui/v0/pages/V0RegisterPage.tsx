@@ -2,6 +2,7 @@ import { FormEvent, useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { api, AuthConfig, setToken, TelegramAuthPayload } from "../../../lib/api";
 import { TelegramLoginButton } from "@/components/telegram-login-button";
+import { GoogleLoginButton } from "@/components/google-login-button";
 
 export function V0RegisterPage(props: { onAuth: (me: any) => void }) {
   const nav = useNavigate();
@@ -13,6 +14,7 @@ export function V0RegisterPage(props: { onAuth: (me: any) => void }) {
   const [error, setError] = useState<string | null>(null);
   const [authConfig, setAuthConfig] = useState<AuthConfig | null>(null);
   const [tgLoading, setTgLoading] = useState(false);
+  const [googleLoading, setGoogleLoading] = useState(false);
 
   useEffect(() => {
     api.authConfig().then(setAuthConfig).catch(() => setAuthConfig(null));
@@ -53,7 +55,27 @@ export function V0RegisterPage(props: { onAuth: (me: any) => void }) {
     }
   }
 
+  async function onGoogleAuth(idToken: string) {
+    setGoogleLoading(true);
+    setError(null);
+    try {
+      const { token } = await api.loginViaGoogle(idToken);
+      setToken(token?.trim() || null);
+      const me = await api.me();
+      props.onAuth(me);
+      if (!me.surveyCompleted) nav("/survey");
+      else nav("/");
+    } catch (err: any) {
+      setError(err?.message ?? "Не удалось зарегистрироваться через Google");
+    } finally {
+      setGoogleLoading(false);
+    }
+  }
+
   const showTelegram = !!authConfig?.telegramBotUsername;
+  const showGoogle = !!authConfig?.googleClientId;
+  const showAnyOAuth = showTelegram || showGoogle;
+  const anyLoading = loading || tgLoading || googleLoading;
 
   return (
     <div className="mx-auto max-w-5xl space-y-6">
@@ -103,7 +125,7 @@ export function V0RegisterPage(props: { onAuth: (me: any) => void }) {
             </div>
             <button
               className="inline-flex h-11 w-full items-center justify-center rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground hover:bg-primary/90 transition-colors"
-              disabled={loading || tgLoading}
+              disabled={anyLoading}
             >
               {loading ? "Создаём…" : "Создать аккаунт"}
             </button>
@@ -112,27 +134,43 @@ export function V0RegisterPage(props: { onAuth: (me: any) => void }) {
             ) : null}
           </form>
 
-          {showTelegram && authConfig?.telegramBotUsername ? (
+          {showAnyOAuth ? (
             <div className="mt-6 space-y-3">
               <div className="flex items-center gap-3">
                 <div className="h-px flex-1 bg-border" />
                 <span className="text-xs uppercase tracking-wide text-muted-foreground">или</span>
                 <div className="h-px flex-1 bg-border" />
               </div>
-              <div className="flex justify-center">
-                {tgLoading ? (
-                  <div className="text-sm text-muted-foreground">Создаём аккаунт через Telegram…</div>
-                ) : (
-                  <TelegramLoginButton
-                    botUsername={authConfig.telegramBotUsername}
-                    onAuth={onTelegramAuth}
-                    size="large"
-                  />
-                )}
+              <div className="flex flex-col items-center gap-3">
+                {showGoogle && authConfig?.googleClientId ? (
+                  googleLoading ? (
+                    <div className="text-sm text-muted-foreground">Создаём аккаунт через Google…</div>
+                  ) : (
+                    <GoogleLoginButton
+                      clientId={authConfig.googleClientId}
+                      onAuth={onGoogleAuth}
+                      text="signup_with"
+                      size="large"
+                    />
+                  )
+                ) : null}
+                {showTelegram && authConfig?.telegramBotUsername ? (
+                  tgLoading ? (
+                    <div className="text-sm text-muted-foreground">Создаём аккаунт через Telegram…</div>
+                  ) : (
+                    <TelegramLoginButton
+                      botUsername={authConfig.telegramBotUsername}
+                      onAuth={onTelegramAuth}
+                      size="large"
+                    />
+                  )
+                ) : null}
               </div>
-              <div className="text-xs text-muted-foreground text-center">
-                Email можно будет добавить позже в настройках.
-              </div>
+              {showTelegram ? (
+                <div className="text-xs text-muted-foreground text-center">
+                  Email можно будет добавить позже в настройках.
+                </div>
+              ) : null}
             </div>
           ) : null}
         </div>

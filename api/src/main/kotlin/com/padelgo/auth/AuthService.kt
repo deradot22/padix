@@ -104,7 +104,8 @@ class AuthService(
             hasPassword = !user.passwordHash.isNullOrBlank(),
             authProviders = AuthProvidersInfo(
                 telegram = user.telegramUserId != null,
-                // Google/Facebook/Twitter появятся в следующих миграциях.
+                google = user.googleSub != null,
+                // Facebook/Twitter появятся в следующих шагах.
             ),
         )
     }

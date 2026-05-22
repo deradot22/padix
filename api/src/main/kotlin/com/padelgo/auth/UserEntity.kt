@@ -102,6 +102,13 @@ class UserAccount(
     @Column(name = "telegram_photo_url", length = 512)
     var telegramPhotoUrl: String? = null,
 
+    /**
+     * Google subject ID — стабильный уникальный идентификатор юзера в Google. Не меняется
+     * при смене email/имени в Google-аккаунте. Из claim `sub` ID-токена при логине через Google.
+     */
+    @Column(name = "google_sub", length = 255, unique = true)
+    var googleSub: String? = null,
+
     @CreationTimestamp
     @Column(name = "created_at", nullable = false)
     var createdAt: Instant? = null

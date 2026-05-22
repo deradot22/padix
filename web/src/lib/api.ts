@@ -591,6 +591,9 @@ export const api = {
   /** Логин/регистрация через Telegram Login Widget. Возвращает JWT. */
   loginViaTelegram: (payload: TelegramAuthPayload) =>
     request<{ token: string }>("/api/auth/telegram", { method: "POST", body: JSON.stringify(payload) }),
+  /** Логин/регистрация через Google Sign-In. Принимает ID-токен (credential от GIS). */
+  loginViaGoogle: (idToken: string) =>
+    request<{ token: string }>("/api/auth/google", { method: "POST", body: JSON.stringify({ idToken }) }),
   updateAvatar: (avatarDataUrl: string | null) =>
     request<MeResponse>("/api/me/avatar", { method: "PATCH", body: JSON.stringify({ avatarDataUrl }) }),
   updateProfile: (payload: { name?: string; email?: string; password?: string; gender?: string; showWinProbability?: boolean }) =>
