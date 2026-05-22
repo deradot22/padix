@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useParams, useLocation } from "react-router-dom";
-import { AlertTriangle, ArrowLeft, Check, ChevronDown, Clock, Lock, MapPin, Pencil, Repeat, Scale, Share2, Target, Trash2, Trophy, UserPlus, Users, Zap, X } from "lucide-react";
+import { AlertTriangle, ArrowLeft, Check, ChevronDown, Clock, Globe, Lock, MapPin, Pencil, Repeat, Scale, Share2, Target, Trash2, Trophy, UserPlus, Users, Zap, X } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { api, BalancePreview, EventDetails, FriendItem, FriendsSnapshot, Match } from "../../../lib/api";
 import { PlayerTooltip } from "@/components/player-tooltip";
@@ -1105,14 +1105,34 @@ export function V0EventPage(props: { me: any; meLoaded?: boolean }) {
               )}
               <div>
                 <label className="block mb-1 text-muted-foreground">Видимость</label>
-                <select
-                  className="w-full rounded-md border border-border bg-transparent px-3 py-2"
-                  value={editVisibility}
-                  onChange={(ev) => setEditVisibility(ev.target.value as "PRIVATE" | "PUBLIC")}
-                >
-                  <option value="PUBLIC">🌐 Открытая — видна всем, любой может записаться</option>
-                  <option value="PRIVATE">🔒 Приватная — в /games видна, но детали только участникам/приглашённым</option>
-                </select>
+                <div className="grid grid-cols-2 gap-2">
+                  {([
+                    { value: "PUBLIC" as const, icon: Globe, title: "Открытая", desc: "Видна всем, любой может записаться" },
+                    { value: "PRIVATE" as const, icon: Lock, title: "Приватная", desc: "В /games видна, детали — только участникам" },
+                  ]).map((opt) => {
+                    const Icon = opt.icon;
+                    const active = editVisibility === opt.value;
+                    return (
+                      <button
+                        key={opt.value}
+                        type="button"
+                        onClick={() => setEditVisibility(opt.value)}
+                        className={cn(
+                          "flex flex-col items-start gap-1 rounded-md border-2 p-3 text-left transition-colors",
+                          active
+                            ? "border-primary bg-primary/10"
+                            : "border-border bg-transparent hover:bg-secondary/30",
+                        )}
+                      >
+                        <div className="flex items-center gap-1.5">
+                          <Icon className="h-4 w-4" />
+                          <span className="text-sm font-medium">{opt.title}</span>
+                        </div>
+                        <span className="text-[11px] text-muted-foreground leading-snug">{opt.desc}</span>
+                      </button>
+                    );
+                  })}
+                </div>
               </div>
               {editError && <div className="text-destructive text-xs">{editError}</div>}
             </div>
