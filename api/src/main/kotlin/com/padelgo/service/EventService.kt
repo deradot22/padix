@@ -507,8 +507,9 @@ class EventService(
         val oldPoints = event.pointsPerPlayerPerMatch
         val oldCourts = event.courtsCount
         val oldPairing = event.pairingMode
+        val oldVisibility = event.visibility
 
-        // Поля доступные на любой стадии (кроме FINISHED): название, дата, время.
+        // Поля доступные на любой стадии (кроме FINISHED): название, дата, время, видимость.
         req.title?.let { t ->
             val trimmed = t.trim()
             if (trimmed.isBlank()) throw ApiException(HttpStatus.BAD_REQUEST, "Title can't be empty")
@@ -517,6 +518,7 @@ class EventService(
         req.date?.let { event.date = it }
         req.startTime?.let { event.startTime = it }
         req.endTime?.let { event.endTime = it }
+        req.visibility?.let { event.visibility = it }
         if (event.endTime <= event.startTime) {
             throw ApiException(HttpStatus.BAD_REQUEST, "endTime must be after startTime")
         }
@@ -557,6 +559,7 @@ class EventService(
             if (oldPoints != saved.pointsPerPlayerPerMatch) add("Подач на игрока: $oldPoints → ${saved.pointsPerPlayerPerMatch}")
             if (oldCourts != saved.courtsCount) add("Кортов: $oldCourts → ${saved.courtsCount}")
             if (oldPairing != saved.pairingMode) add("Режим: ${humanPairing(oldPairing)} → ${humanPairing(saved.pairingMode)}")
+            if (oldVisibility != saved.visibility) add("Видимость: ${humanVisibility(oldVisibility)} → ${humanVisibility(saved.visibility)}")
         }
         if (changes.isNotEmpty()) {
             // Откладываем до afterCommit: бот при notifyEventUpdated делает
@@ -587,6 +590,11 @@ class EventService(
     private fun humanPairing(mode: com.padelgo.domain.PairingMode): String = when (mode) {
         com.padelgo.domain.PairingMode.ROUND_ROBIN -> "Каждый с каждым"
         com.padelgo.domain.PairingMode.BALANCED -> "Равный бой"
+    }
+
+    private fun humanVisibility(v: com.padelgo.domain.EventVisibility): String = when (v) {
+        com.padelgo.domain.EventVisibility.PRIVATE -> "Приватная"
+        com.padelgo.domain.EventVisibility.PUBLIC -> "Открытая"
     }
 
     /**

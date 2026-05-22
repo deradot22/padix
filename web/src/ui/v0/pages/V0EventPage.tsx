@@ -56,6 +56,7 @@ export function V0EventPage(props: { me: any; meLoaded?: boolean }) {
   const [editPoints, setEditPoints] = useState<number | "">("");
   const [editCourts, setEditCourts] = useState<number | "">("");
   const [editPairing, setEditPairing] = useState<"ROUND_ROBIN" | "BALANCED">("ROUND_ROBIN");
+  const [editVisibility, setEditVisibility] = useState<"PRIVATE" | "PUBLIC">("PUBLIC");
   const [editSaving, setEditSaving] = useState(false);
   const [editError, setEditError] = useState<string | null>(null);
   const [infoExpanded, setInfoExpanded] = useState(false);
@@ -970,6 +971,7 @@ export function V0EventPage(props: { me: any; meLoaded?: boolean }) {
                         setEditPoints(typeof e.pointsPerPlayerPerMatch === "number" ? e.pointsPerPlayerPerMatch : "");
                         setEditCourts(typeof e.courtsCount === "number" ? e.courtsCount : "");
                         setEditPairing(e.pairingMode === "BALANCED" ? "BALANCED" : "ROUND_ROBIN");
+                        setEditVisibility(e.visibility === "PUBLIC" ? "PUBLIC" : "PRIVATE");
                         setEditError(null);
                         setEditOpen(true);
                       }}
@@ -1098,9 +1100,20 @@ export function V0EventPage(props: { me: any; meLoaded?: boolean }) {
                 </>
               ) : (
                 <div className="text-xs text-muted-foreground">
-                  Игра уже стартовала — можно редактировать только название, дату и время.
+                  Игра уже стартовала — можно редактировать только название, дату, время и видимость.
                 </div>
               )}
+              <div>
+                <label className="block mb-1 text-muted-foreground">Видимость</label>
+                <select
+                  className="w-full rounded-md border border-border bg-transparent px-3 py-2"
+                  value={editVisibility}
+                  onChange={(ev) => setEditVisibility(ev.target.value as "PRIVATE" | "PUBLIC")}
+                >
+                  <option value="PUBLIC">🌐 Открытая — видна всем, любой может записаться</option>
+                  <option value="PRIVATE">🔒 Приватная — в /games видна, но детали только участникам/приглашённым</option>
+                </select>
+              </div>
               {editError && <div className="text-destructive text-xs">{editError}</div>}
             </div>
             <div className="mt-4 flex items-center gap-2 justify-end">
@@ -1125,6 +1138,8 @@ export function V0EventPage(props: { me: any; meLoaded?: boolean }) {
                       if (editCourts !== "") payload.courtsCount = editCourts;
                       payload.pairingMode = editPairing;
                     }
+                    // Видимость можно менять на любой стадии (кроме FINISHED, и туда мы edit-dialog не пускаем).
+                    payload.visibility = editVisibility;
                     await api.updateEvent(eventId, payload);
                     const refreshed = await api.getEventDetails(eventId);
                     setData(refreshed);
