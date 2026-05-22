@@ -200,23 +200,25 @@ export function V0GamesPage(props: { me: any }) {
     <div className="space-y-2">
       <div className="flex flex-wrap items-center gap-2">
         {([
-          { id: "all" as FilterTab, label: "Все" },
-          { id: "public" as FilterTab, label: "🌐 Открытые" },
-          { id: "mine" as FilterTab, label: "🔒 Мои" },
+          { id: "all" as FilterTab, label: "Все", icon: null },
+          { id: "public" as FilterTab, label: "Открытые", icon: Globe },
+          { id: "mine" as FilterTab, label: "Мои", icon: Lock },
         ]).map((t) => {
           const active = filterTab === t.id;
+          const Icon = t.icon;
           return (
             <button
               key={t.id}
               type="button"
               onClick={() => setFilterTab(t.id)}
               className={cn(
-                "h-8 rounded-full border px-3 text-xs font-medium transition-colors",
+                "inline-flex h-8 items-center gap-1.5 rounded-full border px-3 text-xs font-medium transition-colors",
                 active
                   ? "border-primary bg-primary text-primary-foreground"
                   : "border-border bg-background hover:bg-secondary/40",
               )}
             >
+              {Icon && <Icon className="h-3.5 w-3.5" />}
               {t.label}
             </button>
           );
