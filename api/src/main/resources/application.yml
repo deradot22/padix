@@ -49,4 +49,13 @@ app:
     base-url: ${APP_BOT_BASE_URL:}
   internal:
     secret: ${APP_INTERNAL_SECRET:}
+  # Базовый URL фронта — используется при формировании ссылок в письмах верификации.
+  # В dev по-умолчанию 8083 (Vite через Docker). В проде задаётся через APP_PUBLIC_BASE_URL.
+  public-base-url: ${APP_PUBLIC_BASE_URL:http://localhost:8083}
+  mail:
+    # Адрес «От кого». Должен быть на верифицированном в Resend домене.
+    from: ${APP_MAIL_FROM:Padix <noreply@padix.club>}
+    resend:
+      # API-ключ Resend. Если не задан — письма пишутся в логи (ConsoleMailService).
+      api-key: ${RESEND_API_KEY:}
 

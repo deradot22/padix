@@ -20,7 +20,8 @@ import jakarta.validation.Valid
 @RestController
 @RequestMapping("/api/auth")
 class AuthController(
-    private val auth: AuthService
+    private val auth: AuthService,
+    private val emailVerification: EmailVerificationService,
 ) {
     @Operation(summary = "Регистрация нового пользователя")
     @PostMapping("/register")
@@ -29,6 +30,15 @@ class AuthController(
     @Operation(summary = "Вход. Возвращает JWT токен")
     @PostMapping("/login")
     fun login(@Valid @RequestBody req: LoginRequest): AuthResponse = auth.login(req)
+
+    @Operation(
+        summary = "Подтвердить email по токену из письма",
+        description = "Публичный эндпойнт. Юзер кликает по ссылке /verify-email?token=... — фронт шлёт сюда токен."
+    )
+    @PostMapping("/verify-email")
+    fun verifyEmail(@Valid @RequestBody req: VerifyEmailRequest) {
+        emailVerification.consume(req.token)
+    }
 }
 
 @Tag(name = "Profile", description = "Профиль текущего авторизованного пользователя")
@@ -51,6 +61,13 @@ class MeController(
     @Operation(summary = "Обновить профиль (имя / email / пароль / пол)")
     @PatchMapping("/profile")
     fun updateProfile(@RequestBody req: UpdateProfileRequest): MeResponse = auth.updateProfile(principal(), req)
+
+    @Operation(
+        summary = "Выслать ссылку подтверждения email повторно",
+        description = "Только для текущего юзера, у которого email ещё не подтверждён. Старые ссылки деактивируются."
+    )
+    @PostMapping("/resend-verification")
+    fun resendVerification() = auth.resendVerification(principal())
 
     @Operation(summary = "История игр (список событий с итогами)")
     @GetMapping("/history")

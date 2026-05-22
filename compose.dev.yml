@@ -28,6 +28,12 @@ services:
       SPRING_DATASOURCE_PASSWORD: padix
       APP_BOT_BASE_URL: http://bot:8081
       APP_INTERNAL_SECRET: ${APP_INTERNAL_SECRET:-dev-internal-secret-change-me}
+      # Базовый URL фронта — используется в письмах верификации (ссылка /verify-email).
+      APP_PUBLIC_BASE_URL: ${APP_PUBLIC_BASE_URL:-http://localhost:8083}
+      # Resend SMTP. Если пустой — письма пишутся в логи api (см. ConsoleMailService).
+      # Зарегистрироваться: https://resend.com/signup → API Keys
+      RESEND_API_KEY: ${RESEND_API_KEY:-}
+      APP_MAIL_FROM: ${APP_MAIL_FROM:-Padix <onboarding@resend.dev>}
     ports:
       - "8080:8080"
 

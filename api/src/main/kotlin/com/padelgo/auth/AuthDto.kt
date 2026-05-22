@@ -83,7 +83,17 @@ data class MeResponse(
     val gender: String? = null,
 
     @Schema(description = "Показывать шансы выигрыша перед матчем (полоска и метка в модале раундов). По умолчанию false.")
-    val showWinProbability: Boolean = false
+    val showWinProbability: Boolean = false,
+
+    @Schema(description = "true — email подтверждён по ссылке из письма")
+    val emailVerified: Boolean = false
+)
+
+@Schema(description = "Запрос на подтверждение email по ссылке из письма")
+data class VerifyEmailRequest(
+    @field:NotBlank
+    @Schema(description = "Токен из ссылки /verify-email?token=...")
+    val token: String
 )
 
 @Schema(description = "Запрос на обновление профиля. Передавай только поля, которые нужно изменить")

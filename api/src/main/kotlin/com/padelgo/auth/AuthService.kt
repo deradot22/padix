@@ -15,7 +15,8 @@ class AuthService(
     private val users: UserRepository,
     private val players: PlayerRepository,
     private val encoder: PasswordEncoder,
-    private val jwt: JwtService
+    private val jwt: JwtService,
+    private val emailVerification: EmailVerificationService,
 ) {
     private val rng = SecureRandom()
 
@@ -39,10 +40,29 @@ class AuthService(
                 passwordHash = encoder.encode(req.password),
                 playerId = player.id!!,
                 publicId = generatePublicId(),
-                gender = gender
+                gender = gender,
+                emailVerifiedAt = null,
             )
         )
+        // Письмо с верификацией. Регистрацию не валим если SMTP упал —
+        // юзер сможет нажать «выслать повторно» из настроек.
+        emailVerification.sendVerificationEmail(user, player.name, EmailVerificationPurpose.REGISTRATION)
         return AuthResponse(jwt.createToken(user.id!!, user.email, user.playerId!!, false))
+    }
+
+    /**
+     * Повторная отправка письма верификации текущему юзеру.
+     * Старые активные токены деактивируются в [EmailVerificationService.sendVerificationEmail].
+     */
+    @Transactional
+    fun resendVerification(principal: JwtPrincipal) {
+        val user = users.findById(principal.userId).orElseThrow { ApiException(HttpStatus.UNAUTHORIZED, "User not found") }
+        if (user.disabled) throw ApiException(HttpStatus.FORBIDDEN, "Account disabled")
+        if (user.emailVerifiedAt != null) {
+            throw ApiException(HttpStatus.BAD_REQUEST, "Email already verified")
+        }
+        val player = players.findById(user.playerId!!).orElseThrow { ApiException(HttpStatus.UNAUTHORIZED, "Player not found") }
+        emailVerification.sendVerificationEmail(user, player.name, EmailVerificationPurpose.RESEND)
     }
 
     fun login(req: LoginRequest): AuthResponse {
@@ -71,7 +91,8 @@ class AuthService(
             calibrationMatchesRemaining = user.calibrationMatchesRemaining,
             avatarUrl = player.avatarUrl,
             gender = user.gender,
-            showWinProbability = user.showWinProbability
+            showWinProbability = user.showWinProbability,
+            emailVerified = user.emailVerifiedAt != null
         )
     }
 
@@ -111,12 +132,18 @@ class AuthService(
             player.name = name
         }
 
+        var emailChanged = false
         req.email?.trim()?.lowercase()?.takeIf { it.isNotBlank() }?.let { email ->
             val existing = users.findByEmailIgnoreCase(email)
             if (existing != null && existing.id != user.id) {
                 throw ApiException(HttpStatus.CONFLICT, "Email уже занят")
             }
-            user.email = email
+            if (!user.email.equals(email, ignoreCase = true)) {
+                user.email = email
+                // При смене email сбрасываем подтверждение — новый адрес тоже надо подтвердить.
+                user.emailVerifiedAt = null
+                emailChanged = true
+            }
         }
 
         req.password?.takeIf { it.isNotBlank() }?.let { password ->
@@ -134,6 +161,9 @@ class AuthService(
 
         players.save(player)
         users.save(user)
+        if (emailChanged) {
+            emailVerification.sendVerificationEmail(user, player.name, EmailVerificationPurpose.EMAIL_CHANGE)
+        }
         return me(principal)
     }
 

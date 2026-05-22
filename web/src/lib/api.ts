@@ -135,6 +135,8 @@ export type MeResponse = {
   gender?: string | null;
   /** Показывать шансы выигрыша в модале «Раунды». По умолчанию false. */
   showWinProbability: boolean;
+  /** true — email подтверждён по ссылке из письма. */
+  emailVerified: boolean;
 };
 
 /** Категории тикетов обратной связи. */
@@ -545,6 +547,12 @@ export const api = {
       body: JSON.stringify({ email, password }),
     }),
   me: () => request<MeResponse>("/api/me"),
+  /** Подтвердить email по токену из ссылки в письме (публичный эндпойнт). */
+  verifyEmail: (token: string) =>
+    request<void>("/api/auth/verify-email", { method: "POST", body: JSON.stringify({ token }) }),
+  /** Запросить повторную отправку письма верификации (требует авторизации). */
+  resendVerification: () =>
+    request<void>("/api/me/resend-verification", { method: "POST" }),
   updateAvatar: (avatarDataUrl: string | null) =>
     request<MeResponse>("/api/me/avatar", { method: "PATCH", body: JSON.stringify({ avatarDataUrl }) }),
   updateProfile: (payload: { name?: string; email?: string; password?: string; gender?: string; showWinProbability?: boolean }) =>

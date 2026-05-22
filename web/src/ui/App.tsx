@@ -16,6 +16,7 @@ import { V0AdminPage } from "./v0/pages/V0AdminPage";
 import { V0AdminFeedbackPage } from "./v0/pages/V0AdminFeedbackPage";
 import { V0FeedbackPage } from "./v0/pages/V0FeedbackPage";
 import { V0LandingPage } from "./v0/pages/V0LandingPage";
+import { V0VerifyEmailPage } from "./v0/pages/V0VerifyEmailPage";
 import { MainLayout } from "@/components/main-layout";
 
 export function App() {
@@ -92,6 +93,21 @@ export function App() {
     return () => { cancelled = true; };
   }, [me?.playerId, meLoaded]);
 
+  async function resendVerificationEmail() {
+    await api.resendVerification();
+  }
+
+  // После успешной верификации обновляем me чтобы баннер пропал.
+  async function refreshMeAfterVerify() {
+    if (!hasToken()) return;
+    try {
+      const m = await api.me();
+      setMe(m);
+    } catch {
+      // ignore — токен мог быть невалиден, баннер просто не пропадёт
+    }
+  }
+
   async function closeRatingNotification() {
     if (!ratingNotification) return;
     try {
@@ -104,9 +120,16 @@ export function App() {
     setRatingNotification(null);
   }
 
-  // Hard gate: если вошёл, но не прошёл тест — отправляем на /survey и прячем остальной сайт
+  // Hard gate: если вошёл, но не прошёл тест — отправляем на /survey и прячем остальной сайт.
+  // /verify-email пропускаем — иначе юзер кликнувший по ссылке из письма до прохождения теста
+  // улетал бы на /survey и не подтверждал email.
   useEffect(() => {
-    if (me && !me.surveyCompleted && location.pathname !== "/survey") {
+    if (
+      me &&
+      !me.surveyCompleted &&
+      location.pathname !== "/survey" &&
+      location.pathname !== "/verify-email"
+    ) {
       navigate("/survey", { replace: true });
     }
   }, [location.pathname, me, navigate]);
@@ -135,6 +158,9 @@ export function App() {
               authed={authed}
               notificationCount={notificationCount}
               onRefreshNotifications={refreshNotifications}
+              emailVerified={me?.emailVerified}
+              email={me?.email}
+              onResendVerification={resendVerificationEmail}
               onLogout={() => {
                 setToken(null);
                 setMe(null);
@@ -157,6 +183,7 @@ export function App() {
           <Route path="settings" element={<V0SettingsPage me={me} meLoaded={meLoaded} onMeUpdate={setMe} />} />
           <Route path="events/:eventId" element={<V0EventPage me={me} meLoaded={meLoaded} />} />
           <Route path="feedback" element={<V0FeedbackPage me={me} meLoaded={meLoaded} />} />
+          <Route path="verify-email" element={<V0VerifyEmailPage authed={authed} onVerified={refreshMeAfterVerify} />} />
           <Route path="admin" element={<V0AdminPage />} />
           <Route path="admin/feedback" element={<V0AdminFeedbackPage />} />
         </Route>

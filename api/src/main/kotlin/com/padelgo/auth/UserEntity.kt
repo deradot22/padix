@@ -68,6 +68,14 @@ class UserAccount(
     @Column(name = "is_feedback_admin", nullable = false)
     var isFeedbackAdmin: Boolean = false,
 
+    /**
+     * Когда email был подтверждён по ссылке. null — email не подтверждён.
+     * Существующим аккаунтам выставляется now() в миграции V37, чтобы текущие юзеры
+     * не получали баннер «подтвердите email».
+     */
+    @Column(name = "email_verified_at")
+    var emailVerifiedAt: Instant? = null,
+
     @CreationTimestamp
     @Column(name = "created_at", nullable = false)
     var createdAt: Instant? = null
