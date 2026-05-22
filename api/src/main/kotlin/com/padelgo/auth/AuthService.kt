@@ -55,6 +55,32 @@ class AuthService(
     }
 
     /**
+     * Установить или сменить пароль.
+     *  - Если у юзера уже есть пароль (hasPassword) — currentPassword обязателен и должен совпадать.
+     *  - Если пароля нет (OAuth-only юзер) — currentPassword можно опустить.
+     * Минимальная длина — 6 символов.
+     */
+    @Transactional
+    fun setPassword(principal: JwtPrincipal, currentPassword: String?, newPassword: String) {
+        if (newPassword.length < 6) {
+            throw ApiException(HttpStatus.BAD_REQUEST, "Пароль должен быть не короче 6 символов")
+        }
+        val user = users.findById(principal.userId).orElseThrow { ApiException(HttpStatus.UNAUTHORIZED, "User not found") }
+        val existingHash = user.passwordHash
+        if (!existingHash.isNullOrBlank()) {
+            // У юзера уже есть пароль — требуем текущий
+            if (currentPassword.isNullOrBlank()) {
+                throw ApiException(HttpStatus.BAD_REQUEST, "Введите текущий пароль")
+            }
+            if (!encoder.matches(currentPassword, existingHash)) {
+                throw ApiException(HttpStatus.UNAUTHORIZED, "Текущий пароль неверный")
+            }
+        }
+        user.passwordHash = encoder.encode(newPassword)
+        users.save(user)
+    }
+
+    /**
      * Повторная отправка письма верификации текущему юзеру.
      * Старые активные токены деактивируются в [EmailVerificationService.sendVerificationEmail].
      */
@@ -165,9 +191,8 @@ class AuthService(
             }
         }
 
-        req.password?.takeIf { it.isNotBlank() }?.let { password ->
-            user.passwordHash = encoder.encode(password)
-        }
+        // Смена пароля через /profile больше не поддерживается — используйте POST /api/me/auth/password
+        // (там требуется текущий пароль если он уже был задан). Поле req.password игнорируется.
 
         when {
             req.gender == null -> { /* no change */ }

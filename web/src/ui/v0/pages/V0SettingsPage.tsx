@@ -9,6 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { useConfirm } from "@/components/ui/confirm-dialog";
 import { TelegramIntegrationCard } from "@/components/telegram-integration";
 import { ConnectedAccountsSection } from "@/components/connected-accounts-section";
+import { PasswordSection } from "@/components/password-section";
 import { User, Bell, ShieldCheck, Upload, Check, Send, ChevronLeft, ChevronRight, BellOff, BellRing, Repeat, Pause, Play, Trash2, Plus, Pencil } from "lucide-react";
 
 type SectionId = "profile" | "notifications" | "subscriptions" | "security";
@@ -111,6 +112,9 @@ export function V0SettingsPage(props: {
           {section === "security" && (
             <div className="space-y-6">
               {props.me ? (
+                <PasswordSection me={props.me} onMeUpdate={props.onMeUpdate ?? (() => {})} />
+              ) : null}
+              {props.me ? (
                 <ConnectedAccountsSection me={props.me} onMeUpdate={props.onMeUpdate ?? (() => {})} />
               ) : null}
               <SecuritySection />
@@ -179,7 +183,6 @@ function ProfileSection(props: {
   const [me, setMe] = useState<MeResponse | null>(props.me ?? null);
   const [name, setName] = useState(props.me?.name ?? "");
   const [email, setEmail] = useState(props.me?.email ?? "");
-  const [password, setPassword] = useState("");
   const [gender, setGender] = useState(props.me?.gender ?? "");
   const [avatar, setAvatar] = useState<string | null>(props.me?.avatarUrl ?? null);
   const [saving, setSaving] = useState(false);
@@ -201,10 +204,9 @@ function ProfileSection(props: {
     return (
       name.trim() !== (me.name ?? "") ||
       email.trim() !== (me.email ?? "") ||
-      gender !== (me.gender ?? "") ||
-      password.length > 0
+      gender !== (me.gender ?? "")
     );
-  }, [me, name, email, gender, password]);
+  }, [me, name, email, gender]);
 
   const persistAvatar = async (next: string | null) => {
     setAvatar(next);
@@ -224,10 +226,9 @@ function ProfileSection(props: {
     setError(null);
     setInfo(null);
     try {
-      const payload: { name?: string; email?: string; password?: string; gender?: string } = {};
+      const payload: { name?: string; email?: string; gender?: string } = {};
       if (name.trim() && name.trim() !== (me?.name ?? "")) payload.name = name.trim();
       if (email.trim() && email.trim() !== (me?.email ?? "")) payload.email = email.trim();
-      if (password) payload.password = password;
       if (gender !== (me?.gender ?? "")) payload.gender = gender;
       if (Object.keys(payload).length === 0) {
         setInfo("Нечего сохранять");
@@ -236,7 +237,6 @@ function ProfileSection(props: {
       const updated = await api.updateProfile(payload);
       setMe(updated);
       props.onMeUpdate?.(updated);
-      setPassword("");
       setInfo("Сохранено");
       window.setTimeout(() => setInfo(null), 1500);
     } catch (e: any) {
@@ -318,16 +318,7 @@ function ProfileSection(props: {
               autoComplete="email"
             />
           </div>
-          <div className="space-y-2">
-            <label className="text-sm font-medium">Новый пароль</label>
-            <Input
-              type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              placeholder="Оставьте пустым, чтобы не менять"
-              autoComplete="new-password"
-            />
-          </div>
+          {/* Смена пароля переехала в раздел «Безопасность» — теперь требует текущий пароль. */}
           <div className="space-y-2">
             <label className="text-sm font-medium">Пол</label>
             <Select value={gender || "_unset"} onValueChange={(v) => setGender(v === "_unset" ? "" : v)}>

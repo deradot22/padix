@@ -621,6 +621,15 @@ export const api = {
   /** Отвязать провайдера. */
   unlinkProvider: (provider: "telegram" | "google" | "facebook" | "twitter") =>
     request<MeResponse>(`/api/me/auth/${provider}`, { method: "DELETE" }),
+  /**
+   * Установить или сменить пароль. Если у юзера уже есть пароль — currentPassword обязателен.
+   * Для OAuth-only юзеров — можно опустить (первая установка).
+   */
+  setPassword: (newPassword: string, currentPassword?: string | null) =>
+    request<MeResponse>("/api/me/auth/password", {
+      method: "POST",
+      body: JSON.stringify({ newPassword, currentPassword: currentPassword || null }),
+    }),
   updateAvatar: (avatarDataUrl: string | null) =>
     request<MeResponse>("/api/me/avatar", { method: "PATCH", body: JSON.stringify({ avatarDataUrl }) }),
   updateProfile: (payload: { name?: string; email?: string; password?: string; gender?: string; showWinProbability?: boolean }) =>

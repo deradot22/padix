@@ -102,6 +102,15 @@ data class OAuthLinkStartResponse(
     val url: String,
 )
 
+@Schema(description = "Установка или смена пароля. Если у юзера уже задан пароль — нужен currentPassword.")
+data class SetPasswordRequest(
+    @Schema(description = "Текущий пароль. Обязателен если у юзера уже есть пароль; для OAuth-only можно опустить.")
+    val currentPassword: String? = null,
+    @field:NotBlank
+    @Schema(description = "Новый пароль (минимум 6 символов).")
+    val newPassword: String,
+)
+
 @Schema(description = "Какие способы входа доступны юзеру")
 data class AuthProvidersInfo(
     @Schema(description = "true — привязан Telegram (логин через Telegram Login Widget)")
@@ -177,7 +186,8 @@ data class UpdateProfileRequest(
     @Schema(description = "Новый email", example = "new@example.com")
     val email: String? = null,
 
-    @Schema(description = "Новый пароль", example = "newpassword123")
+    @Deprecated("Используйте POST /api/me/auth/password — там требуется текущий пароль для смены.")
+    @Schema(description = "DEPRECATED: смена пароля через /profile больше не работает. Используйте /api/me/auth/password.", deprecated = true)
     val password: String? = null,
 
     @Schema(description = "Пол: M / F", example = "M")

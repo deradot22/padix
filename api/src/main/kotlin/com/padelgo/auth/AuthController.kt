@@ -144,6 +144,18 @@ class MeController(
     @PostMapping("/resend-verification")
     fun resendVerification() = auth.resendVerification(principal())
 
+    @Operation(
+        summary = "Установить/сменить пароль",
+        description = "Если у юзера уже есть пароль — currentPassword обязателен. " +
+            "Для OAuth-only юзеров (зарегались через Telegram/Google и т.п.) currentPassword можно опустить — " +
+            "это первая установка пароля. Минимум 6 символов."
+    )
+    @PostMapping("/auth/password")
+    fun setPassword(@Valid @RequestBody req: SetPasswordRequest): MeResponse {
+        auth.setPassword(principal(), req.currentPassword, req.newPassword)
+        return auth.me(principal())
+    }
+
     @Operation(summary = "Привязать Google к текущему аккаунту")
     @PostMapping("/auth/google/link")
     fun linkGoogle(@Valid @RequestBody req: GoogleAuthRequest): MeResponse =
