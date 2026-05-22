@@ -40,6 +40,12 @@ services:
       APP_TELEGRAM_BOT_USERNAME: ${APP_TELEGRAM_BOT_USERNAME:-}
       # Google Sign-In Client ID (получить на console.cloud.google.com). Пусто — кнопка не показывается.
       APP_GOOGLE_CLIENT_ID: ${APP_GOOGLE_CLIENT_ID:-}
+      # Facebook Login (https://developers.facebook.com). Нужны и App ID, и App Secret.
+      APP_FACEBOOK_APP_ID: ${APP_FACEBOOK_APP_ID:-}
+      APP_FACEBOOK_APP_SECRET: ${APP_FACEBOOK_APP_SECRET:-}
+      # Twitter/X OAuth2 (https://developer.x.com). Нужны и Client ID, и Secret для exchange.
+      APP_TWITTER_CLIENT_ID: ${APP_TWITTER_CLIENT_ID:-}
+      APP_TWITTER_CLIENT_SECRET: ${APP_TWITTER_CLIENT_SECRET:-}
     ports:
       - "8080:8080"
 

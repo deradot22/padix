@@ -105,7 +105,8 @@ class AuthService(
             authProviders = AuthProvidersInfo(
                 telegram = user.telegramUserId != null,
                 google = user.googleSub != null,
-                // Facebook/Twitter появятся в следующих шагах.
+                facebook = user.facebookSub != null,
+                // Twitter появится в следующем шаге.
             ),
         )
     }

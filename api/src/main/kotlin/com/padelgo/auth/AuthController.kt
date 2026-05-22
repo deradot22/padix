@@ -24,8 +24,11 @@ class AuthController(
     private val emailVerification: EmailVerificationService,
     private val telegramAuth: TelegramAuthService,
     private val googleAuth: GoogleAuthService,
+    private val facebookAuth: FacebookAuthService,
     @org.springframework.beans.factory.annotation.Value("\${app.telegram.bot-username:}") private val telegramBotUsername: String,
     @org.springframework.beans.factory.annotation.Value("\${app.google.client-id:}") private val googleClientId: String,
+    @org.springframework.beans.factory.annotation.Value("\${app.facebook.app-id:}") private val facebookAppId: String,
+    @org.springframework.beans.factory.annotation.Value("\${app.twitter.client-id:}") private val twitterClientId: String,
 ) {
     @Operation(
         summary = "Публичный конфиг авторизации",
@@ -36,6 +39,8 @@ class AuthController(
     fun config(): AuthConfigResponse = AuthConfigResponse(
         telegramBotUsername = telegramBotUsername.ifBlank { null },
         googleClientId = googleClientId.ifBlank { null },
+        facebookAppId = facebookAppId.ifBlank { null },
+        twitterClientId = twitterClientId.ifBlank { null },
     )
 
     @Operation(summary = "Регистрация нового пользователя")
@@ -71,6 +76,14 @@ class AuthController(
     )
     @PostMapping("/google")
     fun google(@Valid @RequestBody req: GoogleAuthRequest): AuthResponse = googleAuth.loginOrRegister(req.idToken)
+
+    @Operation(
+        summary = "Войти/зарегистрироваться через Facebook Login",
+        description = "Принимает access_token от FB JS SDK. Бэк через Graph API верифицирует токен " +
+            "и забирает профиль. Auto-link к существующему email-аккаунту аналогично Google."
+    )
+    @PostMapping("/facebook")
+    fun facebook(@Valid @RequestBody req: FacebookAuthRequest): AuthResponse = facebookAuth.loginOrRegister(req.accessToken)
 }
 
 @Tag(name = "Profile", description = "Профиль текущего авторизованного пользователя")

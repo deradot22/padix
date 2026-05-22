@@ -3,6 +3,7 @@ import { Link, useNavigate } from "react-router-dom";
 import { api, AuthConfig, setAdminToken, setToken, TelegramAuthPayload } from "../../../lib/api";
 import { TelegramLoginButton } from "@/components/telegram-login-button";
 import { GoogleLoginButton } from "@/components/google-login-button";
+import { FacebookLoginButton } from "@/components/facebook-login-button";
 
 export function V0LoginPage(props: { onAuth: (me: any) => void }) {
   const nav = useNavigate();
@@ -13,6 +14,7 @@ export function V0LoginPage(props: { onAuth: (me: any) => void }) {
   const [authConfig, setAuthConfig] = useState<AuthConfig | null>(null);
   const [tgLoading, setTgLoading] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
+  const [fbLoading, setFbLoading] = useState(false);
 
   useEffect(() => {
     api.authConfig().then(setAuthConfig).catch(() => setAuthConfig(null));
@@ -80,10 +82,29 @@ export function V0LoginPage(props: { onAuth: (me: any) => void }) {
     }
   }
 
+  async function onFacebookAuth(accessToken: string) {
+    setFbLoading(true);
+    setError(null);
+    try {
+      const { token } = await api.loginViaFacebook(accessToken);
+      setAdminToken(null);
+      setToken(token?.trim() || null);
+      const me = await api.me();
+      props.onAuth(me);
+      if (!me.surveyCompleted) nav("/survey");
+      else nav("/");
+    } catch (err: any) {
+      setError(err?.message ?? "Не удалось войти через Facebook");
+    } finally {
+      setFbLoading(false);
+    }
+  }
+
   const showTelegram = !!authConfig?.telegramBotUsername;
   const showGoogle = !!authConfig?.googleClientId;
-  const showAnyOAuth = showTelegram || showGoogle;
-  const anyLoading = loading || tgLoading || googleLoading;
+  const showFacebook = !!authConfig?.facebookAppId;
+  const showAnyOAuth = showTelegram || showGoogle || showFacebook;
+  const anyLoading = loading || tgLoading || googleLoading || fbLoading;
 
   return (
     <div className="mx-auto max-w-5xl space-y-6">
@@ -138,6 +159,16 @@ export function V0LoginPage(props: { onAuth: (me: any) => void }) {
                       onAuth={onGoogleAuth}
                       text="signin_with"
                       size="large"
+                    />
+                  )
+                ) : null}
+                {showFacebook && authConfig?.facebookAppId ? (
+                  fbLoading ? (
+                    <div className="text-sm text-muted-foreground">Входим через Facebook…</div>
+                  ) : (
+                    <FacebookLoginButton
+                      appId={authConfig.facebookAppId}
+                      onAuth={onFacebookAuth}
                     />
                   )
                 ) : null}

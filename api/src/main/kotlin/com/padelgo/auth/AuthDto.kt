@@ -114,6 +114,10 @@ data class AuthConfigResponse(
     val telegramBotUsername: String? = null,
     @Schema(description = "Google OAuth2 Client ID. null — Google-логин выключен.")
     val googleClientId: String? = null,
+    @Schema(description = "Facebook App ID. null — Facebook-логин выключен.")
+    val facebookAppId: String? = null,
+    @Schema(description = "Twitter/X OAuth2 Client ID. null — Twitter-логин выключен.")
+    val twitterClientId: String? = null,
 )
 
 @Schema(description = "Запрос на подтверждение email по ссылке из письма")
@@ -128,6 +132,13 @@ data class GoogleAuthRequest(
     @field:NotBlank
     @Schema(description = "JWT ID-токен, подписанный Google. Бэк верифицирует через oauth2.googleapis.com/tokeninfo.")
     val idToken: String
+)
+
+@Schema(description = "Access token от Facebook JS SDK после FB.login()")
+data class FacebookAuthRequest(
+    @field:NotBlank
+    @Schema(description = "User access token из response.authResponse.accessToken. Бэк проверяет через Graph API.")
+    val accessToken: String
 )
 
 @Schema(description = "Payload от Telegram Login Widget. Все поля приходят как есть из callback'а виджета (snake_case).")

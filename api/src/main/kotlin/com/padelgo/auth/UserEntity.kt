@@ -109,6 +109,12 @@ class UserAccount(
     @Column(name = "google_sub", length = 255, unique = true)
     var googleSub: String? = null,
 
+    /**
+     * Facebook user ID (т.н. ASID). Уникальный per-app, не меняется. Получается из /me?fields=id.
+     */
+    @Column(name = "facebook_sub", length = 64, unique = true)
+    var facebookSub: String? = null,
+
     @CreationTimestamp
     @Column(name = "created_at", nullable = false)
     var createdAt: Instant? = null

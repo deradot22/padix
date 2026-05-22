@@ -58,6 +58,17 @@ app:
     # Google OAuth2 Client ID (получить на https://console.cloud.google.com/apis/credentials).
     # Если пусто — кнопка Google на /login не показывается.
     client-id: ${APP_GOOGLE_CLIENT_ID:}
+  facebook:
+    # Facebook App ID (https://developers.facebook.com → My Apps → app → Settings → Basic).
+    # App secret НЕ должен утечь — используется только бэком для debug_token.
+    # Если пусто — Facebook-логин выключен.
+    app-id: ${APP_FACEBOOK_APP_ID:}
+    app-secret: ${APP_FACEBOOK_APP_SECRET:}
+  twitter:
+    # Twitter/X OAuth2 Client ID (https://developer.x.com → Apps → app → User authentication settings).
+    # Если пусто — Twitter-логин выключен.
+    client-id: ${APP_TWITTER_CLIENT_ID:}
+    client-secret: ${APP_TWITTER_CLIENT_SECRET:}
   internal:
     secret: ${APP_INTERNAL_SECRET:}
   # Базовый URL фронта — используется при формировании ссылок в письмах верификации.

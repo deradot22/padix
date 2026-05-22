@@ -11,5 +11,6 @@ interface UserRepository : JpaRepository<UserAccount, UUID> {
     fun findAllByIsFeedbackAdminTrue(): List<UserAccount>
     fun findByTelegramUserId(telegramUserId: Long): UserAccount?
     fun findByGoogleSub(googleSub: String): UserAccount?
+    fun findByFacebookSub(facebookSub: String): UserAccount?
 }
 

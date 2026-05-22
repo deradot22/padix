@@ -157,6 +157,10 @@ export type AuthConfig = {
   telegramBotUsername: string | null;
   /** Google OAuth2 Client ID. null — кнопка не показывается. */
   googleClientId: string | null;
+  /** Facebook App ID. null — кнопка не показывается. */
+  facebookAppId: string | null;
+  /** Twitter/X OAuth2 Client ID. null — кнопка не показывается. */
+  twitterClientId: string | null;
 };
 
 /** Payload от Telegram Login Widget (snake_case как присылает виджет). */
@@ -594,6 +598,9 @@ export const api = {
   /** Логин/регистрация через Google Sign-In. Принимает ID-токен (credential от GIS). */
   loginViaGoogle: (idToken: string) =>
     request<{ token: string }>("/api/auth/google", { method: "POST", body: JSON.stringify({ idToken }) }),
+  /** Логин/регистрация через Facebook Login. Принимает user access_token. */
+  loginViaFacebook: (accessToken: string) =>
+    request<{ token: string }>("/api/auth/facebook", { method: "POST", body: JSON.stringify({ accessToken }) }),
   updateAvatar: (avatarDataUrl: string | null) =>
     request<MeResponse>("/api/me/avatar", { method: "PATCH", body: JSON.stringify({ avatarDataUrl }) }),
   updateProfile: (payload: { name?: string; email?: string; password?: string; gender?: string; showWinProbability?: boolean }) =>
