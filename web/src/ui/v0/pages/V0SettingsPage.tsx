@@ -366,7 +366,7 @@ function ProfileSection(props: {
             </div>
           )}
           {info && (
-            <div className="rounded-lg border border-emerald-500/30 bg-emerald-500/10 p-3 text-sm text-emerald-300 flex items-center gap-2">
+            <div className="rounded-lg border border-emerald-500/40 dark:border-emerald-500/30 bg-emerald-500/10 p-3 text-sm text-emerald-700 dark:text-emerald-300 flex items-center gap-2">
               <Check className="h-4 w-4" />
               {info}
             </div>
@@ -460,7 +460,7 @@ function NotificationsSection() {
         <CardContent>
           <div className="grid gap-3 sm:grid-cols-2">
             <ChannelButton
-              icon={<Send className="h-6 w-6 text-sky-400" />}
+              icon={<Send className="h-6 w-6 text-sky-600 dark:text-sky-400" />}
               title="Telegram"
               subtitle={
                 tgEnabled
@@ -509,13 +509,13 @@ function PersonalRemindersCard(props: {
     const hoursLabel =
       hours === 1 ? "за 1 час" : hours === 24 ? "за сутки" : `за ${hours} часов`;
     return (
-      <div className="rounded-lg border border-emerald-500/30 bg-emerald-500/10 p-4">
+      <div className="rounded-lg border border-emerald-500/40 dark:border-emerald-500/30 bg-emerald-500/10 p-4">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-start">
           <div className="flex items-start gap-3 flex-1 min-w-0">
-            <BellRing className="h-5 w-5 text-emerald-400 shrink-0 mt-0.5" />
+            <BellRing className="h-5 w-5 text-emerald-600 dark:text-emerald-400 shrink-0 mt-0.5" />
             <div className="min-w-0">
-              <div className="text-sm font-medium text-emerald-200">Личные напоминания включены</div>
-              <div className="text-xs text-emerald-200/80 mt-1">
+              <div className="text-sm font-medium text-emerald-800 dark:text-emerald-200">Личные напоминания включены</div>
+              <div className="text-xs text-emerald-800/80 dark:text-emerald-200/80 mt-1">
                 Бот пришлёт в личный чат напоминание {hoursLabel} до старта каждой игры,
                 в которую вы зарегистрированы.
               </div>
@@ -539,13 +539,13 @@ function PersonalRemindersCard(props: {
         : "Уведомления полностью выключены.";
 
   return (
-    <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 p-4">
+    <div className="rounded-lg border border-amber-500/40 dark:border-amber-500/30 bg-amber-500/10 p-4">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start">
         <div className="flex items-start gap-3 flex-1 min-w-0">
-          <BellOff className="h-5 w-5 text-amber-400 shrink-0 mt-0.5" />
+          <BellOff className="h-5 w-5 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
           <div className="min-w-0">
-            <div className="text-sm font-medium text-amber-200">Личные напоминания не настроены</div>
-            <div className="text-xs text-amber-200/80 mt-1">{reason}</div>
+            <div className="text-sm font-medium text-amber-800 dark:text-amber-200">Личные напоминания не настроены</div>
+            <div className="text-xs text-amber-800/80 dark:text-amber-200/80 mt-1">{reason}</div>
           </div>
         </div>
         <Button
@@ -586,7 +586,7 @@ function ChannelButton(props: {
         <div className="text-sm font-medium flex items-center gap-2">
           {props.title}
           {props.connected && (
-            <span className="inline-flex items-center gap-1 text-[10px] uppercase tracking-wide rounded-full bg-emerald-500/15 text-emerald-300 px-2 py-0.5">
+            <span className="inline-flex items-center gap-1 text-[10px] uppercase tracking-wide rounded-full bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 px-2 py-0.5">
               <Check className="h-3 w-3" />
               подключено
             </span>
@@ -744,7 +744,7 @@ function SubscriptionsSection() {
                         {!s.active && (
                           <>
                             <span>·</span>
-                            <span className="text-amber-300">На паузе</span>
+                            <span className="text-amber-700 dark:text-amber-300">На паузе</span>
                           </>
                         )}
                       </div>

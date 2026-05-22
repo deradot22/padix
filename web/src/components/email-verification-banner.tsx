@@ -40,17 +40,17 @@ export function EmailVerificationBanner(props: {
   };
 
   return (
-    <div className="border-b border-amber-500/30 bg-amber-500/10 text-amber-100">
+    <div className="border-b border-amber-500/40 dark:border-amber-500/30 bg-amber-500/10 text-amber-900 dark:text-amber-100">
       <div className="mx-auto flex max-w-7xl items-center justify-between gap-3 px-4 py-2 sm:px-6 lg:px-8">
         <div className="flex items-start gap-2 text-xs sm:text-sm">
-          <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-amber-400" />
+          <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-amber-700 dark:text-amber-400" />
           <div>
             <span className="font-medium">Подтвердите email</span>
             <span className="hidden sm:inline">
               {" "}— письмо со ссылкой отправлено на <span className="font-mono">{props.email}</span>.
             </span>
             {status ? (
-              <span className={status.kind === "ok" ? "ml-2 text-emerald-300" : "ml-2 text-rose-300"}>
+              <span className={status.kind === "ok" ? "ml-2 text-emerald-700 dark:text-emerald-300" : "ml-2 text-rose-700 dark:text-rose-300"}>
                 {status.text}
               </span>
             ) : null}
@@ -60,7 +60,7 @@ export function EmailVerificationBanner(props: {
           <Button
             variant="ghost"
             size="sm"
-            className="h-7 text-xs text-amber-100 hover:bg-amber-500/20 hover:text-amber-50"
+            className="h-7 text-xs text-amber-900 dark:text-amber-100 hover:bg-amber-500/20 hover:text-amber-950 dark:hover:text-amber-50"
             onClick={handleResend}
             disabled={sending}
           >
@@ -69,7 +69,7 @@ export function EmailVerificationBanner(props: {
           <Button
             variant="ghost"
             size="icon"
-            className="h-7 w-7 text-amber-100 hover:bg-amber-500/20 hover:text-amber-50"
+            className="h-7 w-7 text-amber-900 dark:text-amber-100 hover:bg-amber-500/20 hover:text-amber-950 dark:hover:text-amber-50"
             onClick={handleDismiss}
             aria-label="Скрыть"
             title="Скрыть"

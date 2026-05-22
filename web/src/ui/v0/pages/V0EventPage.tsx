@@ -643,7 +643,7 @@ export function V0EventPage(props: { me: any; meLoaded?: boolean }) {
                 Записано: <span className="text-foreground font-medium tabular-nums">{ev.registeredCount}/{ev.courtsCount * 4}</span>
               </div>
             </div>
-            <div className="rounded-lg border border-amber-500/30 bg-amber-500/5 p-3 text-sm text-amber-100">
+            <div className="rounded-lg border border-amber-500/40 dark:border-amber-500/30 bg-amber-500/10 dark:bg-amber-500/5 p-3 text-sm text-amber-900 dark:text-amber-100">
               Состав, раунды и счёт доступны только участникам игры и приглашённым.
               Попроси организатора пригласить тебя — приглашение придёт в раздел уведомлений.
             </div>
@@ -711,13 +711,13 @@ export function V0EventPage(props: { me: any; meLoaded?: boolean }) {
                     isAuthor ? (
                       <Link
                         to="/settings?tab=subscriptions"
-                        className="inline-flex items-center gap-1 rounded-md border border-sky-500/40 bg-sky-500/10 px-3 py-1 text-sm font-medium text-sky-300 hover:bg-sky-500/20 transition-colors"
+                        className="inline-flex items-center gap-1 rounded-md border border-sky-500/40 bg-sky-500/10 px-3 py-1 text-sm font-medium text-sky-700 dark:text-sky-300 hover:bg-sky-500/20 transition-colors"
                       >
                         <Repeat className="h-3.5 w-3.5" />
                         По подписке{e.seriesTitle ? `: ${e.seriesTitle}` : ""}
                       </Link>
                     ) : (
-                      <span className="inline-flex items-center gap-1 rounded-md border border-sky-500/30 bg-sky-500/5 px-3 py-1 text-sm font-medium text-sky-300/80">
+                      <span className="inline-flex items-center gap-1 rounded-md border border-sky-500/40 dark:border-sky-500/30 bg-sky-500/10 dark:bg-sky-500/5 px-3 py-1 text-sm font-medium text-sky-700/90 dark:text-sky-300/80">
                         <Repeat className="h-3.5 w-3.5" />
                         Регулярная{e.seriesTitle ? `: ${e.seriesTitle}` : ""}
                       </span>
@@ -1302,9 +1302,9 @@ export function V0EventPage(props: { me: any; meLoaded?: boolean }) {
                 <div className="flex justify-center pt-2">
                   <div className={cn(
                     "w-14 h-14 rounded-full flex items-center justify-center ring-1",
-                    balancePreview.severity === "LARGE" && "bg-rose-500/10 text-rose-400 ring-rose-500/30",
-                    balancePreview.severity === "MEDIUM" && "bg-amber-500/10 text-amber-300 ring-amber-500/30",
-                    balancePreview.severity === "SMALL" && "bg-emerald-500/10 text-emerald-300 ring-emerald-500/30",
+                    balancePreview.severity === "LARGE" && "bg-rose-500/10 text-rose-700 dark:text-rose-400 ring-rose-500/40 dark:ring-rose-500/30",
+                    balancePreview.severity === "MEDIUM" && "bg-amber-500/10 text-amber-700 dark:text-amber-300 ring-amber-500/40 dark:ring-amber-500/30",
+                    balancePreview.severity === "SMALL" && "bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 ring-emerald-500/40 dark:ring-emerald-500/30",
                   )}>
                     <AlertTriangle className="h-7 w-7" />
                   </div>
@@ -1318,9 +1318,9 @@ export function V0EventPage(props: { me: any; meLoaded?: boolean }) {
                       <>
                         Возможно{" "}
                         <span className={cn(
-                          balancePreview.severity === "LARGE" && "text-rose-400",
-                          balancePreview.severity === "MEDIUM" && "text-amber-300",
-                          balancePreview.severity === "SMALL" && "text-emerald-300",
+                          balancePreview.severity === "LARGE" && "text-rose-700 dark:text-rose-400",
+                          balancePreview.severity === "MEDIUM" && "text-amber-700 dark:text-amber-300",
+                          balancePreview.severity === "SMALL" && "text-emerald-700 dark:text-emerald-300",
                         )}>
                           {balancePreview.maxGoodRounds}
                         </span>{" "}
@@ -1462,9 +1462,9 @@ export function V0EventPage(props: { me: any; meLoaded?: boolean }) {
                   <span className="text-border">·</span>
                   <span className={cn(
                     "flex items-center gap-1",
-                    balancePreview.severity === "LARGE" && "text-rose-300",
-                    balancePreview.severity === "MEDIUM" && "text-amber-300",
-                    balancePreview.severity === "SMALL" && "text-emerald-300",
+                    balancePreview.severity === "LARGE" && "text-rose-700 dark:text-rose-300",
+                    balancePreview.severity === "MEDIUM" && "text-amber-700 dark:text-amber-300",
+                    balancePreview.severity === "SMALL" && "text-emerald-700 dark:text-emerald-300",
                   )}>
                     <Scale className="h-3.5 w-3.5" />
                     {balancePreview.maxGoodRounds} {roundWord(balancePreview.maxGoodRounds)}

@@ -399,7 +399,7 @@ export function V0ProfilePage(props: { me: any; meLoaded?: boolean; onMeUpdate?:
                 </button>
                 <span
                   className={cn(
-                    "pointer-events-none absolute -top-2 right-0 translate-y-[-100%] rounded-md bg-emerald-500/15 px-2 py-1 text-[11px] text-emerald-300 transition-all duration-200",
+                    "pointer-events-none absolute -top-2 right-0 translate-y-[-100%] rounded-md bg-emerald-500/15 px-2 py-1 text-[11px] text-emerald-700 dark:text-emerald-300 transition-all duration-200",
                     idCopied ? "opacity-100 translate-y-[-110%]" : "opacity-0 translate-y-[-80%]",
                   )}
                 >
@@ -409,14 +409,14 @@ export function V0ProfilePage(props: { me: any; meLoaded?: boolean; onMeUpdate?:
             </div>
 
             {calibration ? (
-              <div className="mt-6 rounded-lg border border-amber-500/30 bg-amber-500/10 px-4 py-3 space-y-2">
+              <div className="mt-6 rounded-lg border border-amber-500/40 dark:border-amber-500/30 bg-amber-500/10 px-4 py-3 space-y-2">
                 <div className="flex items-center gap-3">
-                  <Clock className="h-5 w-5 text-amber-500 shrink-0" />
-                  <p className="text-sm text-amber-200">
+                  <Clock className="h-5 w-5 text-amber-600 dark:text-amber-500 shrink-0" />
+                  <p className="text-sm text-amber-800 dark:text-amber-200">
                     Калибровка: <strong>{calibrationPlayed}/30</strong> матчей сыграно
                   </p>
                 </div>
-                <div className="h-2 rounded-full bg-amber-900/40 overflow-hidden">
+                <div className="h-2 rounded-full bg-amber-200 dark:bg-amber-900/40 overflow-hidden">
                   <div
                     className="h-full rounded-full bg-amber-500 transition-all duration-300"
                     style={{ width: `${(calibrationPlayed / 30) * 100}%` }}
@@ -608,7 +608,7 @@ export function V0ProfilePage(props: { me: any; meLoaded?: boolean; onMeUpdate?:
                 <div className="rounded-lg border border-destructive/30 bg-destructive/10 p-3 text-sm">{friendError}</div>
               ) : null}
               {info ? (
-                <div className="rounded-lg border border-emerald-500/30 bg-emerald-500/10 p-3 text-sm text-emerald-200">
+                <div className="rounded-lg border border-emerald-500/40 dark:border-emerald-500/30 bg-emerald-500/10 p-3 text-sm text-emerald-800 dark:text-emerald-200">
                   {info}
                 </div>
               ) : null}

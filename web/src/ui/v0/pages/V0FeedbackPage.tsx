@@ -266,7 +266,7 @@ export function V0FeedbackPage(props: { me: MeResponse | null; meLoaded: boolean
               </div>
             )}
             {info && (
-              <div className="rounded-lg border border-emerald-500/30 bg-emerald-500/10 p-3 text-sm text-emerald-300 flex items-center gap-2">
+              <div className="rounded-lg border border-emerald-500/40 dark:border-emerald-500/30 bg-emerald-500/10 p-3 text-sm text-emerald-700 dark:text-emerald-300 flex items-center gap-2">
                 <Check className="h-4 w-4" />
                 {info}
               </div>
