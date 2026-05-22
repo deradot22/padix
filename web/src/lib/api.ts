@@ -434,6 +434,7 @@ export const api = {
       pointsPerPlayerPerMatch?: number;
       courtsCount?: number;
       pairingMode?: PairingMode;
+      visibility?: EventVisibility;
     },
   ) =>
     request<Event>(`/api/events/${eventId}`, {

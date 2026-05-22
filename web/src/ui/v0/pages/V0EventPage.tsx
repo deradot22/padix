@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useParams, useLocation } from "react-router-dom";
-import { AlertTriangle, ArrowLeft, Check, ChevronDown, Clock, Lock, MapPin, Pencil, Repeat, Scale, Share2, Target, Trash2, Trophy, UserPlus, Users, Zap, X } from "lucide-react";
+import { AlertTriangle, ArrowLeft, Check, ChevronDown, Clock, Globe, Lock, MapPin, Pencil, Repeat, Scale, Share2, Target, Trash2, Trophy, UserPlus, Users, Zap, X } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { api, BalancePreview, EventDetails, FriendItem, FriendsSnapshot, Match } from "../../../lib/api";
 import { PlayerTooltip } from "@/components/player-tooltip";
@@ -56,6 +56,7 @@ export function V0EventPage(props: { me: any; meLoaded?: boolean }) {
   const [editPoints, setEditPoints] = useState<number | "">("");
   const [editCourts, setEditCourts] = useState<number | "">("");
   const [editPairing, setEditPairing] = useState<"ROUND_ROBIN" | "BALANCED">("ROUND_ROBIN");
+  const [editVisibility, setEditVisibility] = useState<"PRIVATE" | "PUBLIC">("PUBLIC");
   const [editSaving, setEditSaving] = useState(false);
   const [editError, setEditError] = useState<string | null>(null);
   const [infoExpanded, setInfoExpanded] = useState(false);
@@ -970,6 +971,7 @@ export function V0EventPage(props: { me: any; meLoaded?: boolean }) {
                         setEditPoints(typeof e.pointsPerPlayerPerMatch === "number" ? e.pointsPerPlayerPerMatch : "");
                         setEditCourts(typeof e.courtsCount === "number" ? e.courtsCount : "");
                         setEditPairing(e.pairingMode === "BALANCED" ? "BALANCED" : "ROUND_ROBIN");
+                        setEditVisibility(e.visibility === "PUBLIC" ? "PUBLIC" : "PRIVATE");
                         setEditError(null);
                         setEditOpen(true);
                       }}
@@ -1086,21 +1088,72 @@ export function V0EventPage(props: { me: any; meLoaded?: boolean }) {
                   </div>
                   <div>
                     <label className="block mb-1 text-muted-foreground">Режим</label>
-                    <select
-                      className="w-full rounded-md border border-border bg-transparent px-3 py-2"
-                      value={editPairing}
-                      onChange={(ev) => setEditPairing(ev.target.value as "ROUND_ROBIN" | "BALANCED")}
-                    >
-                      <option value="ROUND_ROBIN">Каждый с каждым</option>
-                      <option value="BALANCED">Равный бой</option>
-                    </select>
+                    <div className="grid grid-cols-2 gap-2">
+                      {([
+                        { value: "ROUND_ROBIN" as const, icon: Repeat, title: "Каждый с каждым", desc: "Все партнёры по очереди" },
+                        { value: "BALANCED" as const, icon: Scale, title: "Равный бой", desc: "Подбор по рейтингу" },
+                      ]).map((opt) => {
+                        const Icon = opt.icon;
+                        const active = editPairing === opt.value;
+                        return (
+                          <button
+                            key={opt.value}
+                            type="button"
+                            onClick={() => setEditPairing(opt.value)}
+                            className={cn(
+                              "flex flex-col items-start gap-1 rounded-md border-2 p-3 text-left transition-colors",
+                              active
+                                ? "border-primary bg-primary/10"
+                                : "border-border bg-transparent hover:bg-secondary/30",
+                            )}
+                          >
+                            <div className="flex items-center gap-1.5">
+                              <Icon className="h-4 w-4" />
+                              <span className="text-sm font-medium">{opt.title}</span>
+                            </div>
+                            <span className="text-[11px] text-muted-foreground leading-snug">{opt.desc}</span>
+                          </button>
+                        );
+                      })}
+                    </div>
                   </div>
                 </>
               ) : (
                 <div className="text-xs text-muted-foreground">
-                  Игра уже стартовала — можно редактировать только название, дату и время.
+                  Игра уже стартовала — можно редактировать только название, дату, время и видимость.
                 </div>
               )}
+              <div>
+                <label className="block mb-1 text-muted-foreground">Видимость</label>
+                <div className="grid grid-cols-2 gap-2">
+                  {([
+                    { value: "PUBLIC" as const, icon: Globe, title: "Открытая", desc: "Видна всем, любой может записаться" },
+                    { value: "PRIVATE" as const, icon: Lock, title: "Приватная", desc: "В /games видна, детали — только участникам" },
+                  ]).map((opt) => {
+                    const Icon = opt.icon;
+                    const active = editVisibility === opt.value;
+                    return (
+                      <button
+                        key={opt.value}
+                        type="button"
+                        onClick={() => setEditVisibility(opt.value)}
+                        className={cn(
+                          "flex flex-col items-start gap-1 rounded-md border-2 p-3 text-left transition-colors",
+                          active
+                            ? "border-primary bg-primary/10"
+                            : "border-border bg-transparent hover:bg-secondary/30",
+                        )}
+                      >
+                        <div className="flex items-center gap-1.5">
+                          <Icon className="h-4 w-4" />
+                          <span className="text-sm font-medium">{opt.title}</span>
+                        </div>
+                        <span className="text-[11px] text-muted-foreground leading-snug">{opt.desc}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
               {editError && <div className="text-destructive text-xs">{editError}</div>}
             </div>
             <div className="mt-4 flex items-center gap-2 justify-end">
@@ -1125,6 +1178,8 @@ export function V0EventPage(props: { me: any; meLoaded?: boolean }) {
                       if (editCourts !== "") payload.courtsCount = editCourts;
                       payload.pairingMode = editPairing;
                     }
+                    // Видимость можно менять на любой стадии (кроме FINISHED, и туда мы edit-dialog не пускаем).
+                    payload.visibility = editVisibility;
                     await api.updateEvent(eventId, payload);
                     const refreshed = await api.getEventDetails(eventId);
                     setData(refreshed);

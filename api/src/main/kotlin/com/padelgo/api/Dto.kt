@@ -147,7 +147,10 @@ data class UpdateEventRequest(
     val courtsCount: Int? = null,
 
     @Schema(description = "Новый режим расстановки (только до старта)")
-    val pairingMode: com.padelgo.domain.PairingMode? = null
+    val pairingMode: com.padelgo.domain.PairingMode? = null,
+
+    @Schema(description = "Новая видимость (PRIVATE / PUBLIC). Можно менять на любой стадии кроме FINISHED.")
+    val visibility: com.padelgo.domain.EventVisibility? = null
 )
 
 @Schema(description = "Игра (краткая информация)")
