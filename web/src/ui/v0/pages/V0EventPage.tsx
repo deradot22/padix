@@ -1088,14 +1088,34 @@ export function V0EventPage(props: { me: any; meLoaded?: boolean }) {
                   </div>
                   <div>
                     <label className="block mb-1 text-muted-foreground">Режим</label>
-                    <select
-                      className="w-full rounded-md border border-border bg-transparent px-3 py-2"
-                      value={editPairing}
-                      onChange={(ev) => setEditPairing(ev.target.value as "ROUND_ROBIN" | "BALANCED")}
-                    >
-                      <option value="ROUND_ROBIN">Каждый с каждым</option>
-                      <option value="BALANCED">Равный бой</option>
-                    </select>
+                    <div className="grid grid-cols-2 gap-2">
+                      {([
+                        { value: "ROUND_ROBIN" as const, icon: Repeat, title: "Каждый с каждым", desc: "Все партнёры по очереди" },
+                        { value: "BALANCED" as const, icon: Scale, title: "Равный бой", desc: "Подбор по рейтингу" },
+                      ]).map((opt) => {
+                        const Icon = opt.icon;
+                        const active = editPairing === opt.value;
+                        return (
+                          <button
+                            key={opt.value}
+                            type="button"
+                            onClick={() => setEditPairing(opt.value)}
+                            className={cn(
+                              "flex flex-col items-start gap-1 rounded-md border-2 p-3 text-left transition-colors",
+                              active
+                                ? "border-primary bg-primary/10"
+                                : "border-border bg-transparent hover:bg-secondary/30",
+                            )}
+                          >
+                            <div className="flex items-center gap-1.5">
+                              <Icon className="h-4 w-4" />
+                              <span className="text-sm font-medium">{opt.title}</span>
+                            </div>
+                            <span className="text-[11px] text-muted-foreground leading-snug">{opt.desc}</span>
+                          </button>
+                        );
+                      })}
+                    </div>
                   </div>
                 </>
               ) : (
