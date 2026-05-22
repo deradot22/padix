@@ -73,7 +73,7 @@ class SocialService(
             FriendItem(
                 userId = user.id!!,
                 publicId = formatPublicId(user.publicId),
-                name = player?.name ?: user.email,
+                name = player?.name ?: user.email ?: "Пользователь",
                 rating = player?.rating ?: 0,
                 ntrp = player?.ntrp ?: "1.0",
                 gamesPlayed = player?.gamesPlayed ?: 0,
@@ -139,7 +139,7 @@ class SocialService(
                 eventId = event.id!!,
                 eventTitle = event.title,
                 eventDate = event.date.toString(),
-                fromName = fromPlayer?.name ?: fromUser.email,
+                fromName = fromPlayer?.name ?: fromUser.email ?: "Пользователь",
                 fromPublicId = formatPublicId(fromUser.publicId)
             )
         }.sortedWith(compareBy({ it.eventDate }, { it.eventTitle }))
@@ -176,7 +176,7 @@ class SocialService(
             val player = user.playerId?.let { playersById[it] }
             EventInviteStatusItem(
                 publicId = formatPublicId(user.publicId),
-                name = player?.name ?: user.email,
+                name = player?.name ?: user.email ?: "Пользователь",
                 status = inv.status
             )
         }.sortedBy { it.name.lowercase() }
@@ -206,7 +206,7 @@ class SocialService(
             val player = user.playerId?.let { playersById[it] }
             FriendRequestItem(
                 publicId = formatPublicId(user.publicId),
-                name = player?.name ?: user.email,
+                name = player?.name ?: user.email ?: "Пользователь",
                 avatarUrl = player?.avatarUrl
             )
         }.sortedBy { it.name.lowercase() }

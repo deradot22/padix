@@ -98,7 +98,7 @@ class AdminController(
         val allUsers = users.findAll()
         val playerIds = allUsers.mapNotNull { it.playerId }.toSet()
         val playerById = players.findAllById(playerIds).associateBy { it.id!! }
-        return allUsers.sortedBy { it.email.lowercase() }.map { u ->
+        return allUsers.sortedBy { (it.email ?: "").lowercase() }.map { u ->
             val player = playerById[u.playerId]
             AdminUserResponse.from(u.id!!, u.email, u.publicId, u.disabled, u.surveyCompleted, u.isFeedbackAdmin, player)
         }
@@ -149,7 +149,7 @@ class AdminController(
     fun restoreUser(@PathVariable userId: UUID, @RequestBody req: AdminRestoreUserRequest): AdminUserResponse {
         requireAdmin()
         val user = users.findById(userId).orElseThrow { ApiException(HttpStatus.NOT_FOUND, "User not found") }
-        if (!user.disabled || !user.email.startsWith("deleted-")) {
+        if (!user.disabled || user.email?.startsWith("deleted-") != true) {
             throw ApiException(HttpStatus.BAD_REQUEST, "User is not deleted")
         }
         val newEmail = req.email.trim().lowercase()
@@ -332,7 +332,7 @@ data class AdminCreateUserRequest(
 
 data class AdminUserResponse(
     val userId: UUID,
-    val email: String,
+    val email: String?,
     val publicId: String,
     val name: String,
     val rating: Int,
@@ -345,14 +345,14 @@ data class AdminUserResponse(
     companion object {
         fun from(
             userId: UUID,
-            email: String,
+            email: String?,
             publicId: Long,
             disabled: Boolean,
             surveyCompleted: Boolean,
             isFeedbackAdmin: Boolean,
             player: Player?
         ): AdminUserResponse {
-            val name = player?.name ?: email
+            val name = player?.name ?: email ?: "Пользователь #$publicId"
             return AdminUserResponse(
                 userId = userId,
                 email = email,

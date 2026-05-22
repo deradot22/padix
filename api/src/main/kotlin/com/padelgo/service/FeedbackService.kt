@@ -99,7 +99,7 @@ class FeedbackService(
             ticket.id, userId, category, message.length, attachment != null, sizeBytes ?: 0
         )
 
-        val authorName = user.playerId?.let { players.findById(it).orElse(null)?.name } ?: user.email
+        val authorName = user.playerId?.let { players.findById(it).orElse(null)?.name } ?: user.email ?: "Пользователь"
 
         // Fire-and-forget уведомления всем feedback-админам в TG. Ошибки бота не валят транзакцию.
         notifyAdmins(ticket, category, message, attachment, mime, authorName)
@@ -151,7 +151,7 @@ class FeedbackService(
     fun listForUser(userId: UUID): List<FeedbackResponse> {
         val tickets = repo.findAllByUserIdOrderByCreatedAtDesc(userId)
         val authorName = users.findById(userId).orElse(null)?.let { u ->
-            u.playerId?.let { players.findById(it).orElse(null)?.name } ?: u.email
+            u.playerId?.let { players.findById(it).orElse(null)?.name } ?: u.email ?: "Вы"
         } ?: "Вы"
         return tickets.map { toResponse(it, authorName) }
     }

@@ -34,6 +34,12 @@ services:
       # Зарегистрироваться: https://resend.com/signup → API Keys
       RESEND_API_KEY: ${RESEND_API_KEY:-}
       APP_MAIL_FROM: ${APP_MAIL_FROM:-Padix <onboarding@resend.dev>}
+      # Telegram Login Widget — тот же bot-token что и для нотификаций (используется для HMAC-проверки).
+      # Bot username нужен фронту чтобы отрисовать виджет. В BotFather: /setdomain → padix.club + localhost
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
+      APP_TELEGRAM_BOT_USERNAME: ${APP_TELEGRAM_BOT_USERNAME:-}
+      # Google Sign-In Client ID (получить на console.cloud.google.com). Пусто — кнопка не показывается.
+      APP_GOOGLE_CLIENT_ID: ${APP_GOOGLE_CLIENT_ID:-}
     ports:
       - "8080:8080"
 

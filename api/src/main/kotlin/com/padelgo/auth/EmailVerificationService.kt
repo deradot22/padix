@@ -41,6 +41,12 @@ class EmailVerificationService(
     @Transactional
     fun sendVerificationEmail(user: UserAccount, name: String, purpose: EmailVerificationPurpose) {
         val userId = user.id ?: error("UserAccount must be persisted before sending verification")
+        val email = user.email
+        if (email.isNullOrBlank()) {
+            // OAuth-only юзер (Telegram-логин и т.п.) ещё не привязал email — нечего верифицировать.
+            log.debug("Skip sending verification for user {} — no email set", userId)
+            return
+        }
         val now = Instant.now()
         tokenRepo.markAllActiveAsUsed(userId, now)
 
@@ -49,16 +55,16 @@ class EmailVerificationService(
             userId = userId,
             tokenHash = sha256(rawToken),
             purpose = purpose.name,
-            email = user.email,
+            email = email,
             expiresAt = now.plus(24, ChronoUnit.HOURS),
         )
         tokenRepo.save(token)
 
         val verifyUrl = "${publicBaseUrl.trimEnd('/')}/verify-email?token=$rawToken"
         try {
-            mail.sendEmailVerification(toEmail = user.email, toName = name, verifyUrl = verifyUrl)
+            mail.sendEmailVerification(toEmail = email, toName = name, verifyUrl = verifyUrl)
         } catch (e: Exception) {
-            log.error("Failed to send verification email to {}", user.email, e)
+            log.error("Failed to send verification email to {}", email, e)
         }
     }
 
@@ -82,7 +88,9 @@ class EmailVerificationService(
             ApiException(HttpStatus.BAD_REQUEST, "User no longer exists")
         }
         // Email мог поменяться между созданием токена и кликом — тогда токен невалиден.
-        if (!user.email.equals(token.email, ignoreCase = true)) {
+        // Или email вообще убрали (теоретически) — тоже невалидно.
+        val currentEmail = user.email
+        if (currentEmail == null || !currentEmail.equals(token.email, ignoreCase = true)) {
             throw ApiException(HttpStatus.BAD_REQUEST, "Verification link no longer matches current email")
         }
         user.emailVerifiedAt = now

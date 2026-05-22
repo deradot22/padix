@@ -73,7 +73,11 @@ class AuthService(
         val email = req.email.trim().lowercase()
         val user = users.findByEmailIgnoreCase(email) ?: throw ApiException(HttpStatus.UNAUTHORIZED, "Неверный email или пароль")
         if (user.disabled) throw ApiException(HttpStatus.FORBIDDEN, "Аккаунт заблокирован")
-        if (!encoder.matches(req.password, user.passwordHash)) throw ApiException(HttpStatus.UNAUTHORIZED, "Неверный email или пароль")
+        // OAuth-only юзер (зарегался через Telegram/Google) — пароль не задавал, логин по паролю невозможен
+        // пока он не задаст пароль через настройки.
+        val hash = user.passwordHash
+            ?: throw ApiException(HttpStatus.UNAUTHORIZED, "Этот аккаунт зарегистрирован через внешний сервис. Войдите тем же способом или задайте пароль в настройках.")
+        if (!encoder.matches(req.password, hash)) throw ApiException(HttpStatus.UNAUTHORIZED, "Неверный email или пароль")
         return AuthResponse(jwt.createToken(user.id!!, user.email, user.playerId!!, false))
     }
 
@@ -96,7 +100,12 @@ class AuthService(
             avatarUrl = player.avatarUrl,
             gender = user.gender,
             showWinProbability = user.showWinProbability,
-            emailVerified = user.emailVerifiedAt != null
+            emailVerified = user.emailVerifiedAt != null,
+            hasPassword = !user.passwordHash.isNullOrBlank(),
+            authProviders = AuthProvidersInfo(
+                telegram = user.telegramUserId != null,
+                // Google/Facebook/Twitter появятся в следующих миграциях.
+            ),
         )
     }
 
@@ -145,9 +154,10 @@ class AuthService(
             if (existing != null && existing.id != user.id) {
                 throw ApiException(HttpStatus.CONFLICT, "Email уже занят")
             }
-            if (!user.email.equals(email, ignoreCase = true)) {
+            if (user.email == null || !user.email!!.equals(email, ignoreCase = true)) {
                 user.email = email
-                // При смене email сбрасываем подтверждение — новый адрес тоже надо подтвердить.
+                // При смене email (или первой установке) сбрасываем подтверждение —
+                // новый адрес тоже надо подтвердить.
                 user.emailVerifiedAt = null
                 emailChanged = true
             }

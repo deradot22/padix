@@ -1,5 +1,6 @@
 package com.padelgo.auth
 
+import com.fasterxml.jackson.annotation.JsonProperty
 import io.swagger.v3.oas.annotations.media.Schema
 import jakarta.validation.constraints.Email
 import jakarta.validation.constraints.NotBlank
@@ -43,8 +44,8 @@ data class AuthResponse(
 
 @Schema(description = "Профиль текущего пользователя")
 data class MeResponse(
-    @Schema(description = "Email")
-    val email: String,
+    @Schema(description = "Email. null — у OAuth-only юзеров без привязанного email (например, Telegram-логин).")
+    val email: String?,
 
     @Schema(description = "UUID связанного игрока (используется при регистрации на игру)")
     val playerId: java.util.UUID,
@@ -86,7 +87,33 @@ data class MeResponse(
     val showWinProbability: Boolean = false,
 
     @Schema(description = "true — email подтверждён по ссылке из письма")
-    val emailVerified: Boolean = false
+    val emailVerified: Boolean = false,
+
+    @Schema(description = "true — у юзера задан пароль (можно входить по паролю)")
+    val hasPassword: Boolean = false,
+
+    @Schema(description = "Какие OAuth-провайдеры привязаны к аккаунту. Используется на странице Настроек.")
+    val authProviders: AuthProvidersInfo = AuthProvidersInfo()
+)
+
+@Schema(description = "Какие способы входа доступны юзеру")
+data class AuthProvidersInfo(
+    @Schema(description = "true — привязан Telegram (логин через Telegram Login Widget)")
+    val telegram: Boolean = false,
+    @Schema(description = "true — привязан Google")
+    val google: Boolean = false,
+    @Schema(description = "true — привязан Facebook")
+    val facebook: Boolean = false,
+    @Schema(description = "true — привязан Twitter/X")
+    val twitter: Boolean = false,
+)
+
+@Schema(description = "Публичный конфиг авторизации — какие OAuth-кнопки рендерить на /login.")
+data class AuthConfigResponse(
+    @Schema(description = "@username бота для Telegram Login Widget. null — Telegram-логин выключен на этом сервере.")
+    val telegramBotUsername: String? = null,
+    @Schema(description = "Google OAuth2 Client ID. null — Google-логин выключен.")
+    val googleClientId: String? = null,
 )
 
 @Schema(description = "Запрос на подтверждение email по ссылке из письма")
@@ -94,6 +121,28 @@ data class VerifyEmailRequest(
     @field:NotBlank
     @Schema(description = "Токен из ссылки /verify-email?token=...")
     val token: String
+)
+
+@Schema(description = "Payload от Telegram Login Widget. Все поля приходят как есть из callback'а виджета (snake_case).")
+data class TelegramAuthRequest(
+    @Schema(description = "Числовой ID юзера в Telegram", example = "12345678")
+    val id: Long,
+    @JsonProperty("first_name")
+    @Schema(description = "Имя из профиля Telegram", example = "Алексей")
+    val firstName: String? = null,
+    @JsonProperty("last_name")
+    @Schema(description = "Фамилия из профиля Telegram (опционально)", example = "Иванов")
+    val lastName: String? = null,
+    @Schema(description = "@username (без @). Может быть null если юзер не задал.", example = "alexivanov")
+    val username: String? = null,
+    @JsonProperty("photo_url")
+    @Schema(description = "URL аватара (если у юзера есть public profile photo).", example = "https://t.me/i/userpic/...")
+    val photoUrl: String? = null,
+    @JsonProperty("auth_date")
+    @Schema(description = "Unix timestamp когда юзер авторизовался в виджете. Проверяется на свежесть (24ч).", example = "1735000000")
+    val authDate: Long,
+    @Schema(description = "HMAC-SHA256 подпись данных. Проверяется по bot_token (см. core.telegram.org/widgets/login).")
+    val hash: String,
 )
 
 @Schema(description = "Запрос на обновление профиля. Передавай только поля, которые нужно изменить")

@@ -119,8 +119,16 @@ export type BalancePreview = {
   shouldWarn: boolean;
 };
 
+export type AuthProvidersInfo = {
+  telegram: boolean;
+  google: boolean;
+  facebook: boolean;
+  twitter: boolean;
+};
+
 export type MeResponse = {
-  email: string;
+  /** Email юзера. null — у OAuth-only юзеров (например, зарегались только через Telegram). */
+  email: string | null;
   playerId: string;
   name: string;
   rating: number;
@@ -137,6 +145,29 @@ export type MeResponse = {
   showWinProbability: boolean;
   /** true — email подтверждён по ссылке из письма. */
   emailVerified: boolean;
+  /** true — у юзера задан пароль (можно входить email+password). */
+  hasPassword: boolean;
+  /** Какие OAuth-провайдеры привязаны. */
+  authProviders: AuthProvidersInfo;
+};
+
+/** Публичный конфиг авторизации — какие OAuth-провайдеры доступны на сервере. */
+export type AuthConfig = {
+  /** @username бота для Telegram Login Widget. null — кнопка не показывается. */
+  telegramBotUsername: string | null;
+  /** Google OAuth2 Client ID. null — кнопка не показывается. */
+  googleClientId: string | null;
+};
+
+/** Payload от Telegram Login Widget (snake_case как присылает виджет). */
+export type TelegramAuthPayload = {
+  id: number;
+  first_name?: string;
+  last_name?: string;
+  username?: string;
+  photo_url?: string;
+  auth_date: number;
+  hash: string;
 };
 
 /** Категории тикетов обратной связи. */
@@ -216,7 +247,8 @@ export type FriendRequestItem = {
 
 export type AdminUser = {
   userId: string;
-  email: string;
+  /** null — у OAuth-only юзеров без привязанного email. */
+  email: string | null;
   publicId: string;
   name: string;
   rating: number;
@@ -554,6 +586,11 @@ export const api = {
   /** Запросить повторную отправку письма верификации (требует авторизации). */
   resendVerification: () =>
     request<void>("/api/me/resend-verification", { method: "POST" }),
+  /** Публичный конфиг — какие OAuth-провайдеры включены на сервере. */
+  authConfig: () => request<AuthConfig>("/api/auth/config"),
+  /** Логин/регистрация через Telegram Login Widget. Возвращает JWT. */
+  loginViaTelegram: (payload: TelegramAuthPayload) =>
+    request<{ token: string }>("/api/auth/telegram", { method: "POST", body: JSON.stringify(payload) }),
   updateAvatar: (avatarDataUrl: string | null) =>
     request<MeResponse>("/api/me/avatar", { method: "PATCH", body: JSON.stringify({ avatarDataUrl }) }),
   updateProfile: (payload: { name?: string; email?: string; password?: string; gender?: string; showWinProbability?: boolean }) =>

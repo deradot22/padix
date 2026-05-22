@@ -47,6 +47,17 @@ app:
     password: ${APP_SWAGGER_PASSWORD:101css101}
   bot:
     base-url: ${APP_BOT_BASE_URL:}
+  telegram:
+    # Bot token из BotFather (тот же что использует bot-модуль).
+    # Используется для HMAC-проверки Telegram Login Widget. Если пусто — TG-логин выключен.
+    bot-token: ${TELEGRAM_BOT_TOKEN:}
+    # @username бота (без @) — нужен фронту чтобы отрисовать виджет логина.
+    # В BotFather: /setdomain → padix.club, /setdomain → localhost (для dev).
+    bot-username: ${APP_TELEGRAM_BOT_USERNAME:}
+  google:
+    # Google OAuth2 Client ID (получить на https://console.cloud.google.com/apis/credentials).
+    # Если пусто — кнопка Google на /login не показывается.
+    client-id: ${APP_GOOGLE_CLIENT_ID:}
   internal:
     secret: ${APP_INTERNAL_SECRET:}
   # Базовый URL фронта — используется при формировании ссылок в письмах верификации.

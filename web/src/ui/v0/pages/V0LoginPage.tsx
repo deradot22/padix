@@ -1,6 +1,7 @@
-import { FormEvent, useState } from "react";
+import { FormEvent, useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { api, setAdminToken, setToken } from "../../../lib/api";
+import { api, AuthConfig, setAdminToken, setToken, TelegramAuthPayload } from "../../../lib/api";
+import { TelegramLoginButton } from "@/components/telegram-login-button";
 
 export function V0LoginPage(props: { onAuth: (me: any) => void }) {
   const nav = useNavigate();
@@ -8,6 +9,12 @@ export function V0LoginPage(props: { onAuth: (me: any) => void }) {
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [authConfig, setAuthConfig] = useState<AuthConfig | null>(null);
+  const [tgLoading, setTgLoading] = useState(false);
+
+  useEffect(() => {
+    api.authConfig().then(setAuthConfig).catch(() => setAuthConfig(null));
+  }, []);
 
   async function onSubmit(e: FormEvent) {
     e.preventDefault();
@@ -34,6 +41,26 @@ export function V0LoginPage(props: { onAuth: (me: any) => void }) {
       setLoading(false);
     }
   }
+
+  async function onTelegramAuth(payload: TelegramAuthPayload) {
+    setTgLoading(true);
+    setError(null);
+    try {
+      const { token } = await api.loginViaTelegram(payload);
+      setAdminToken(null);
+      setToken(token?.trim() || null);
+      const me = await api.me();
+      props.onAuth(me);
+      if (!me.surveyCompleted) nav("/survey");
+      else nav("/");
+    } catch (err: any) {
+      setError(err?.message ?? "Не удалось войти через Telegram");
+    } finally {
+      setTgLoading(false);
+    }
+  }
+
+  const showTelegram = !!authConfig?.telegramBotUsername;
 
   return (
     <div className="mx-auto max-w-5xl space-y-6">
@@ -62,7 +89,7 @@ export function V0LoginPage(props: { onAuth: (me: any) => void }) {
             </div>
             <button
               className="inline-flex h-11 w-full items-center justify-center rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground hover:bg-primary/90 transition-colors"
-              disabled={loading}
+              disabled={loading || tgLoading}
             >
               {loading ? "Входим…" : "Войти"}
             </button>
@@ -70,6 +97,27 @@ export function V0LoginPage(props: { onAuth: (me: any) => void }) {
               <div className="rounded-lg border border-destructive/30 bg-destructive/10 p-4 text-sm">{error}</div>
             ) : null}
           </form>
+
+          {showTelegram && authConfig?.telegramBotUsername ? (
+            <div className="mt-6 space-y-3">
+              <div className="flex items-center gap-3">
+                <div className="h-px flex-1 bg-border" />
+                <span className="text-xs uppercase tracking-wide text-muted-foreground">или</span>
+                <div className="h-px flex-1 bg-border" />
+              </div>
+              <div className="flex justify-center">
+                {tgLoading ? (
+                  <div className="text-sm text-muted-foreground">Входим через Telegram…</div>
+                ) : (
+                  <TelegramLoginButton
+                    botUsername={authConfig.telegramBotUsername}
+                    onAuth={onTelegramAuth}
+                    size="large"
+                  />
+                )}
+              </div>
+            </div>
+          ) : null}
         </div>
 
         <div className="rounded-xl border border-border bg-card p-6">
@@ -88,4 +136,3 @@ export function V0LoginPage(props: { onAuth: (me: any) => void }) {
     </div>
   );
 }
-

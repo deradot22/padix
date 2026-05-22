@@ -11,8 +11,8 @@ export function MainLayout(props: {
   onLogout: () => void;
   /** Если authed=true и emailVerified=false — показываем баннер сверху. */
   emailVerified?: boolean;
-  /** Email юзера для отображения в баннере. */
-  email?: string;
+  /** Email юзера для отображения в баннере. null/undefined — баннер не показывается. */
+  email?: string | null;
   /** Колбэк для повторной отправки письма верификации. */
   onResendVerification?: () => Promise<void>;
 }) {

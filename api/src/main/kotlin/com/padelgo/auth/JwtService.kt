@@ -15,12 +15,17 @@ class JwtService(
 ) {
     private val key = Keys.hmacShaKeyFor(secret.toByteArray(Charsets.UTF_8))
 
-    fun createToken(userId: UUID, email: String, playerId: UUID, isAdmin: Boolean = false): String {
+    /**
+     * Создаёт JWT. email — nullable: OAuth-only юзеры (Telegram и т.п.) могут не иметь email.
+     * В этом случае в claim записываем пустую строку — клиент не должен полагаться на это значение,
+     * первоисточник правды — `/api/me`.
+     */
+    fun createToken(userId: UUID, email: String?, playerId: UUID, isAdmin: Boolean = false): String {
         val now = Instant.now()
         val exp = now.plusSeconds(ttlSeconds)
         return Jwts.builder()
             .subject(userId.toString())
-            .claim("email", email)
+            .claim("email", email ?: "")
             .claim("playerId", playerId.toString())
             .claim("admin", isAdmin)
             .issuedAt(Date.from(now))

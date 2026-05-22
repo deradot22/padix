@@ -22,7 +22,21 @@ import jakarta.validation.Valid
 class AuthController(
     private val auth: AuthService,
     private val emailVerification: EmailVerificationService,
+    private val telegramAuth: TelegramAuthService,
+    @org.springframework.beans.factory.annotation.Value("\${app.telegram.bot-username:}") private val telegramBotUsername: String,
+    @org.springframework.beans.factory.annotation.Value("\${app.google.client-id:}") private val googleClientId: String,
 ) {
+    @Operation(
+        summary = "Публичный конфиг авторизации",
+        description = "Возвращает какие OAuth-провайдеры включены на сервере. Фронт использует чтобы " +
+            "понять, рендерить ли кнопки «Войти через Telegram/Google». Не требует авторизации."
+    )
+    @GetMapping("/config")
+    fun config(): AuthConfigResponse = AuthConfigResponse(
+        telegramBotUsername = telegramBotUsername.ifBlank { null },
+        googleClientId = googleClientId.ifBlank { null },
+    )
+
     @Operation(summary = "Регистрация нового пользователя")
     @PostMapping("/register")
     fun register(@Valid @RequestBody req: RegisterRequest): AuthResponse = auth.register(req)
@@ -39,6 +53,14 @@ class AuthController(
     fun verifyEmail(@Valid @RequestBody req: VerifyEmailRequest) {
         emailVerification.consume(req.token)
     }
+
+    @Operation(
+        summary = "Войти/зарегистрироваться через Telegram Login Widget",
+        description = "Принимает payload от Telegram-виджета (id, hash, auth_date, first_name и т.д.), " +
+            "верифицирует HMAC-подпись, логинит существующего юзера или создаёт нового. Возвращает JWT."
+    )
+    @PostMapping("/telegram")
+    fun telegram(@RequestBody req: TelegramAuthRequest): AuthResponse = telegramAuth.loginOrRegister(req)
 }
 
 @Tag(name = "Profile", description = "Профиль текущего авторизованного пользователя")
