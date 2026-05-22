@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useConfirm } from "@/components/ui/confirm-dialog";
 import { TelegramIntegrationCard } from "@/components/telegram-integration";
+import { ConnectedAccountsSection } from "@/components/connected-accounts-section";
 import { User, Bell, ShieldCheck, Upload, Check, Send, ChevronLeft, ChevronRight, BellOff, BellRing, Repeat, Pause, Play, Trash2, Plus, Pencil } from "lucide-react";
 
 type SectionId = "profile" | "notifications" | "subscriptions" | "security";
@@ -107,7 +108,14 @@ export function V0SettingsPage(props: {
           )}
           {section === "notifications" && <NotificationsSection />}
           {section === "subscriptions" && <SubscriptionsSection />}
-          {section === "security" && <SecuritySection />}
+          {section === "security" && (
+            <div className="space-y-6">
+              {props.me ? (
+                <ConnectedAccountsSection me={props.me} onMeUpdate={props.onMeUpdate ?? (() => {})} />
+              ) : null}
+              <SecuritySection />
+            </div>
+          )}
         </div>
       </div>
     </div>

@@ -46,6 +46,23 @@ class FacebookAuthService(
         .baseUrl("https://graph.facebook.com")
         .build()
 
+    /**
+     * Используется при привязке Facebook к существующему юзеру (через [ProviderLinkService]).
+     * Возвращает sub/email после верификации токена. Кидает 401 если токен невалиден.
+     */
+    fun verifyForLink(accessToken: String): FacebookVerifyInfo {
+        if (appId.isBlank() || appSecret.isBlank()) {
+            throw ApiException(HttpStatus.SERVICE_UNAVAILABLE, "Facebook login is not configured on this server")
+        }
+        if (accessToken.isBlank()) throw ApiException(HttpStatus.BAD_REQUEST, "accessToken is required")
+        verifyToken(accessToken)
+        val profile = fetchProfile(accessToken)
+        val sub = profile.id.ifBlank {
+            throw ApiException(HttpStatus.UNAUTHORIZED, "Facebook profile missing id")
+        }
+        return FacebookVerifyInfo(sub = sub, email = profile.email?.trim()?.lowercase())
+    }
+
     @Transactional
     fun loginOrRegister(accessToken: String): AuthResponse {
         if (appId.isBlank() || appSecret.isBlank()) {
@@ -179,6 +196,12 @@ class FacebookAuthService(
         throw ApiException(HttpStatus.CONFLICT, "Failed to generate public id")
     }
 }
+
+/** Результат верификации FB-токена для привязки к существующему юзеру. */
+data class FacebookVerifyInfo(
+    val sub: String,
+    val email: String?,
+)
 
 private data class FacebookDebugTokenResponse(
     val data: FacebookDebugData? = null,

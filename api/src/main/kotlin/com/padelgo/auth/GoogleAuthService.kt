@@ -46,6 +46,25 @@ class GoogleAuthService(
         .baseUrl("https://oauth2.googleapis.com")
         .build()
 
+    /**
+     * Используется при привязке Google к существующему юзеру (через [ProviderLinkService]).
+     * Возвращает sub/email из verified ID-токена. Кидает 401 если токен невалиден.
+     */
+    fun verifyForLink(idToken: String): GoogleVerifyInfo {
+        if (clientId.isBlank()) {
+            throw ApiException(HttpStatus.SERVICE_UNAVAILABLE, "Google login is not configured on this server")
+        }
+        val claims = verifyIdToken(idToken)
+        val sub = claims.sub.ifBlank {
+            throw ApiException(HttpStatus.UNAUTHORIZED, "Google token missing sub")
+        }
+        return GoogleVerifyInfo(
+            sub = sub,
+            email = claims.email?.trim()?.lowercase(),
+            emailVerified = claims.emailVerified == "true",
+        )
+    }
+
     @Transactional
     fun loginOrRegister(idToken: String): AuthResponse {
         if (clientId.isBlank()) {
@@ -162,6 +181,13 @@ class GoogleAuthService(
         throw ApiException(HttpStatus.CONFLICT, "Failed to generate public id")
     }
 }
+
+/** Результат верификации Google ID-токена для привязки к существующему юзеру. */
+data class GoogleVerifyInfo(
+    val sub: String,
+    val email: String?,
+    val emailVerified: Boolean,
+)
 
 /** Подмножество claim'ов, которое возвращает tokeninfo endpoint. */
 private data class GoogleTokenClaims(

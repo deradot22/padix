@@ -606,6 +606,21 @@ export const api = {
    * Бэк 302-редиректит на x.com/authorize, потом вернётся на /auth/oauth-callback#token=...
    */
   twitterAuthStartUrl: () => `${API_BASE_URL}/api/auth/twitter/start`,
+  /** Привязать Google к текущему юзеру. Принимает ID-токен от GIS. */
+  linkGoogle: (idToken: string) =>
+    request<MeResponse>("/api/me/auth/google/link", { method: "POST", body: JSON.stringify({ idToken }) }),
+  /** Привязать Facebook к текущему юзеру. Принимает access_token от FB SDK. */
+  linkFacebook: (accessToken: string) =>
+    request<MeResponse>("/api/me/auth/facebook/link", { method: "POST", body: JSON.stringify({ accessToken }) }),
+  /** Привязать Telegram к текущему юзеру. */
+  linkTelegram: (payload: TelegramAuthPayload) =>
+    request<MeResponse>("/api/me/auth/telegram/link", { method: "POST", body: JSON.stringify(payload) }),
+  /** Получить URL для редиректа на Twitter (linkUserId уже зашит в state на бэке). */
+  linkTwitterStart: () =>
+    request<{ url: string }>("/api/me/auth/twitter/link/start", { method: "POST" }),
+  /** Отвязать провайдера. */
+  unlinkProvider: (provider: "telegram" | "google" | "facebook" | "twitter") =>
+    request<MeResponse>(`/api/me/auth/${provider}`, { method: "DELETE" }),
   updateAvatar: (avatarDataUrl: string | null) =>
     request<MeResponse>("/api/me/avatar", { method: "PATCH", body: JSON.stringify({ avatarDataUrl }) }),
   updateProfile: (payload: { name?: string; email?: string; password?: string; gender?: string; showWinProbability?: boolean }) =>

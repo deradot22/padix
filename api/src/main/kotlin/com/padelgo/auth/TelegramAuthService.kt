@@ -42,6 +42,19 @@ class TelegramAuthService(
     private val authMaxAgeSec = 24L * 60 * 60 // 24 часа
 
     /**
+     * Используется при привязке к существующему юзеру (через [ProviderLinkService]).
+     * Проводит ту же верификацию что и loginOrRegister, но без создания/логина юзера.
+     * Кидает 401 если payload невалиден.
+     */
+    fun verifyForLink(req: TelegramAuthRequest) {
+        if (botToken.isBlank()) {
+            throw ApiException(HttpStatus.SERVICE_UNAVAILABLE, "Telegram login is not configured on this server")
+        }
+        verifySignature(req)
+        verifyFreshness(req.authDate)
+    }
+
+    /**
      * Главный метод — принимает payload от Telegram, верифицирует, логинит/регистрирует.
      */
     @Transactional

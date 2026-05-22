@@ -121,6 +121,8 @@ class AuthController(
 class MeController(
     private val auth: AuthService,
     private val events: EventService,
+    private val providerLink: ProviderLinkService,
+    private val twitterAuth: TwitterAuthService,
     private val ratingNotificationRepo: com.padelgo.repo.UserRatingNotificationRepository
 ) {
     @Operation(summary = "Получить профиль текущего пользователя")
@@ -141,6 +143,43 @@ class MeController(
     )
     @PostMapping("/resend-verification")
     fun resendVerification() = auth.resendVerification(principal())
+
+    @Operation(summary = "Привязать Google к текущему аккаунту")
+    @PostMapping("/auth/google/link")
+    fun linkGoogle(@Valid @RequestBody req: GoogleAuthRequest): MeResponse =
+        providerLink.linkGoogle(principal(), req.idToken)
+
+    @Operation(summary = "Привязать Facebook к текущему аккаунту")
+    @PostMapping("/auth/facebook/link")
+    fun linkFacebook(@Valid @RequestBody req: FacebookAuthRequest): MeResponse =
+        providerLink.linkFacebook(principal(), req.accessToken)
+
+    @Operation(summary = "Привязать Telegram к текущему аккаунту")
+    @PostMapping("/auth/telegram/link")
+    fun linkTelegram(@RequestBody req: TelegramAuthRequest): MeResponse =
+        providerLink.linkTelegram(principal(), req)
+
+    @Operation(
+        summary = "Старт привязки Twitter — возвращает URL для window.location",
+        description = "В отличие от других провайдеров, Twitter использует redirect flow. " +
+            "Этот endpoint требует JWT, создаёт state с привязкой к текущему userId, возвращает URL. " +
+            "Фронт делает window.location.href = url. После callback'а пользователь линкуется и " +
+            "редиректится на /auth/oauth-callback с новым JWT."
+    )
+    @PostMapping("/auth/twitter/link/start")
+    fun linkTwitterStart(): OAuthLinkStartResponse =
+        OAuthLinkStartResponse(url = twitterAuth.buildAuthorizeUrl(linkUserId = principal().userId))
+
+    @Operation(summary = "Отвязать провайдера от аккаунта")
+    @org.springframework.web.bind.annotation.DeleteMapping("/auth/{provider}")
+    fun unlinkProvider(@PathVariable provider: String): MeResponse {
+        val enum = try {
+            ProviderLinkService.Provider.valueOf(provider.uppercase())
+        } catch (e: IllegalArgumentException) {
+            throw ApiException(HttpStatus.BAD_REQUEST, "Unknown provider: $provider")
+        }
+        return providerLink.unlink(principal(), enum)
+    }
 
     @Operation(summary = "История игр (список событий с итогами)")
     @GetMapping("/history")

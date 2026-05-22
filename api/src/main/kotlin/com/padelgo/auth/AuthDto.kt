@@ -96,6 +96,12 @@ data class MeResponse(
     val authProviders: AuthProvidersInfo = AuthProvidersInfo()
 )
 
+@Schema(description = "Ответ /api/me/auth/twitter/link/start — URL для редиректа на Twitter (linkUserId уже привязан к state)")
+data class OAuthLinkStartResponse(
+    @Schema(description = "URL на x.com/i/oauth2/authorize. Фронт делает window.location.href = url.")
+    val url: String,
+)
+
 @Schema(description = "Какие способы входа доступны юзеру")
 data class AuthProvidersInfo(
     @Schema(description = "true — привязан Telegram (логин через Telegram Login Widget)")
