@@ -17,12 +17,16 @@ class AuthService(
     private val encoder: PasswordEncoder,
     private val jwt: JwtService,
     private val emailVerification: EmailVerificationService,
+    private val disposableEmailChecker: DisposableEmailChecker,
 ) {
     private val rng = SecureRandom()
 
     @Transactional
     fun register(req: RegisterRequest): AuthResponse {
         val email = req.email.trim().lowercase()
+        if (disposableEmailChecker.isDisposable(email)) {
+            throw ApiException(HttpStatus.BAD_REQUEST, "Используйте, пожалуйста, постоянный email-адрес")
+        }
         if (users.findByEmailIgnoreCase(email) != null) throw ApiException(HttpStatus.CONFLICT, "Email already registered")
 
         val player = players.save(
@@ -134,6 +138,9 @@ class AuthService(
 
         var emailChanged = false
         req.email?.trim()?.lowercase()?.takeIf { it.isNotBlank() }?.let { email ->
+            if (disposableEmailChecker.isDisposable(email)) {
+                throw ApiException(HttpStatus.BAD_REQUEST, "Используйте, пожалуйста, постоянный email-адрес")
+            }
             val existing = users.findByEmailIgnoreCase(email)
             if (existing != null && existing.id != user.id) {
                 throw ApiException(HttpStatus.CONFLICT, "Email уже занят")
