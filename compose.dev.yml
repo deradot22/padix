@@ -28,8 +28,13 @@ services:
       SPRING_DATASOURCE_PASSWORD: padix
       APP_BOT_BASE_URL: http://bot:8081
       APP_INTERNAL_SECRET: ${APP_INTERNAL_SECRET:-dev-internal-secret-change-me}
-      # Базовый URL фронта — используется в письмах верификации (ссылка /verify-email).
+      # Базовый URL фронта — используется в письмах верификации и для Twitter callback.
       APP_PUBLIC_BASE_URL: ${APP_PUBLIC_BASE_URL:-http://localhost:8083}
+      # Публичный URL API — нужен для redirect_uri в Twitter (должен совпадать с настройкой
+      # в Twitter Developer Portal). В dev ходим через Vite proxy (тот же origin что и фронт)
+      # чтобы Twitter не требовал отдельной регистрации :8080. В Twitter App настрой
+      # callback URL: http://localhost:8083/api/auth/twitter/callback
+      APP_API_PUBLIC_BASE_URL: ${APP_API_PUBLIC_BASE_URL:-http://localhost:8083}
       # Resend SMTP. Если пустой — письма пишутся в логи api (см. ConsoleMailService).
       # Зарегистрироваться: https://resend.com/signup → API Keys
       RESEND_API_KEY: ${RESEND_API_KEY:-}

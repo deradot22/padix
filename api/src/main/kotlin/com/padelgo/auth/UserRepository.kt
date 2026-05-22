@@ -12,5 +12,6 @@ interface UserRepository : JpaRepository<UserAccount, UUID> {
     fun findByTelegramUserId(telegramUserId: Long): UserAccount?
     fun findByGoogleSub(googleSub: String): UserAccount?
     fun findByFacebookSub(facebookSub: String): UserAccount?
+    fun findByTwitterSub(twitterSub: String): UserAccount?
 }
 

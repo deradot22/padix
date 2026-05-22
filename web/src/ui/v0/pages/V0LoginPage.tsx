@@ -4,6 +4,7 @@ import { api, AuthConfig, setAdminToken, setToken, TelegramAuthPayload } from ".
 import { TelegramLoginButton } from "@/components/telegram-login-button";
 import { GoogleLoginButton } from "@/components/google-login-button";
 import { FacebookLoginButton } from "@/components/facebook-login-button";
+import { TwitterLoginButton } from "@/components/twitter-login-button";
 
 export function V0LoginPage(props: { onAuth: (me: any) => void }) {
   const nav = useNavigate();
@@ -103,7 +104,8 @@ export function V0LoginPage(props: { onAuth: (me: any) => void }) {
   const showTelegram = !!authConfig?.telegramBotUsername;
   const showGoogle = !!authConfig?.googleClientId;
   const showFacebook = !!authConfig?.facebookAppId;
-  const showAnyOAuth = showTelegram || showGoogle || showFacebook;
+  const showTwitter = !!authConfig?.twitterClientId;
+  const showAnyOAuth = showTelegram || showGoogle || showFacebook || showTwitter;
   const anyLoading = loading || tgLoading || googleLoading || fbLoading;
 
   return (
@@ -172,6 +174,7 @@ export function V0LoginPage(props: { onAuth: (me: any) => void }) {
                     />
                   )
                 ) : null}
+                {showTwitter ? <TwitterLoginButton /> : null}
                 {showTelegram && authConfig?.telegramBotUsername ? (
                   tgLoading ? (
                     <div className="text-sm text-muted-foreground">Входим через Telegram…</div>

@@ -71,9 +71,13 @@ app:
     client-secret: ${APP_TWITTER_CLIENT_SECRET:}
   internal:
     secret: ${APP_INTERNAL_SECRET:}
-  # Базовый URL фронта — используется при формировании ссылок в письмах верификации.
+  # Базовый URL фронта — используется при формировании ссылок в письмах верификации
+  # и для редиректа после Twitter OAuth callback.
   # В dev по-умолчанию 8083 (Vite через Docker). В проде задаётся через APP_PUBLIC_BASE_URL.
   public-base-url: ${APP_PUBLIC_BASE_URL:http://localhost:8083}
+  # Публичный URL самого API — нужен для Twitter callback (redirect_uri должен совпадать
+  # с настройкой в Twitter Developer Portal).
+  api-public-base-url: ${APP_API_PUBLIC_BASE_URL:http://localhost:8080}
   mail:
     # Адрес «От кого». Должен быть на верифицированном в Resend домене.
     from: ${APP_MAIL_FROM:Padix <noreply@padix.club>}

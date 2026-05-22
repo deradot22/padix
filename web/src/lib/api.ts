@@ -601,6 +601,11 @@ export const api = {
   /** Логин/регистрация через Facebook Login. Принимает user access_token. */
   loginViaFacebook: (accessToken: string) =>
     request<{ token: string }>("/api/auth/facebook", { method: "POST", body: JSON.stringify({ accessToken }) }),
+  /**
+   * URL для старта Twitter OAuth — браузер должен сделать window.location.href = это.
+   * Бэк 302-редиректит на x.com/authorize, потом вернётся на /auth/oauth-callback#token=...
+   */
+  twitterAuthStartUrl: () => `${API_BASE_URL}/api/auth/twitter/start`,
   updateAvatar: (avatarDataUrl: string | null) =>
     request<MeResponse>("/api/me/avatar", { method: "PATCH", body: JSON.stringify({ avatarDataUrl }) }),
   updateProfile: (payload: { name?: string; email?: string; password?: string; gender?: string; showWinProbability?: boolean }) =>

@@ -17,6 +17,7 @@ import { V0AdminFeedbackPage } from "./v0/pages/V0AdminFeedbackPage";
 import { V0FeedbackPage } from "./v0/pages/V0FeedbackPage";
 import { V0LandingPage } from "./v0/pages/V0LandingPage";
 import { V0VerifyEmailPage } from "./v0/pages/V0VerifyEmailPage";
+import { V0OAuthCallbackPage } from "./v0/pages/V0OAuthCallbackPage";
 import { MainLayout } from "@/components/main-layout";
 
 export function App() {
@@ -121,15 +122,13 @@ export function App() {
   }
 
   // Hard gate: если вошёл, но не прошёл тест — отправляем на /survey и прячем остальной сайт.
-  // /verify-email пропускаем — иначе юзер кликнувший по ссылке из письма до прохождения теста
-  // улетал бы на /survey и не подтверждал email.
+  // /verify-email и /auth/oauth-callback пропускаем — иначе юзер с email-ссылкой или OAuth-callback'ом
+  // улетал бы на /survey до того как мы успели обработать токен.
   useEffect(() => {
-    if (
-      me &&
-      !me.surveyCompleted &&
-      location.pathname !== "/survey" &&
-      location.pathname !== "/verify-email"
-    ) {
+    const exempt = location.pathname === "/survey"
+      || location.pathname === "/verify-email"
+      || location.pathname === "/auth/oauth-callback";
+    if (me && !me.surveyCompleted && !exempt) {
       navigate("/survey", { replace: true });
     }
   }, [location.pathname, me, navigate]);
@@ -184,6 +183,7 @@ export function App() {
           <Route path="events/:eventId" element={<V0EventPage me={me} meLoaded={meLoaded} />} />
           <Route path="feedback" element={<V0FeedbackPage me={me} meLoaded={meLoaded} />} />
           <Route path="verify-email" element={<V0VerifyEmailPage authed={authed} onVerified={refreshMeAfterVerify} />} />
+          <Route path="auth/oauth-callback" element={<V0OAuthCallbackPage onAuth={(m) => setMe(m)} />} />
           <Route path="admin" element={<V0AdminPage />} />
           <Route path="admin/feedback" element={<V0AdminFeedbackPage />} />
         </Route>

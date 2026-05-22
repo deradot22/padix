@@ -25,6 +25,7 @@ class AuthController(
     private val telegramAuth: TelegramAuthService,
     private val googleAuth: GoogleAuthService,
     private val facebookAuth: FacebookAuthService,
+    private val twitterAuth: TwitterAuthService,
     @org.springframework.beans.factory.annotation.Value("\${app.telegram.bot-username:}") private val telegramBotUsername: String,
     @org.springframework.beans.factory.annotation.Value("\${app.google.client-id:}") private val googleClientId: String,
     @org.springframework.beans.factory.annotation.Value("\${app.facebook.app-id:}") private val facebookAppId: String,
@@ -84,6 +85,33 @@ class AuthController(
     )
     @PostMapping("/facebook")
     fun facebook(@Valid @RequestBody req: FacebookAuthRequest): AuthResponse = facebookAuth.loginOrRegister(req.accessToken)
+
+    @Operation(
+        summary = "Старт Twitter/X OAuth — редирект на x.com/authorize",
+        description = "Браузер ходит на этот эндпойнт напрямую (`window.location = ...`). Бэк генерит " +
+            "state и PKCE, сохраняет в БД и 302-редиректит на Twitter."
+    )
+    @GetMapping("/twitter/start")
+    fun twitterStart(response: jakarta.servlet.http.HttpServletResponse) {
+        val url = twitterAuth.buildAuthorizeUrl()
+        response.sendRedirect(url)
+    }
+
+    @Operation(
+        summary = "Callback от Twitter/X после авторизации",
+        description = "Twitter сам редиректит сюда с ?code=&state=. Бэк exchange'ит code, получает " +
+            "профиль, делает login/register и 302-редиректит на фронт /auth/oauth-callback#token=<JWT>."
+    )
+    @GetMapping("/twitter/callback")
+    fun twitterCallback(
+        @org.springframework.web.bind.annotation.RequestParam(required = false) code: String?,
+        @org.springframework.web.bind.annotation.RequestParam(required = false) state: String?,
+        @org.springframework.web.bind.annotation.RequestParam(required = false) error: String?,
+        response: jakarta.servlet.http.HttpServletResponse,
+    ) {
+        val url = twitterAuth.handleCallback(code = code, state = state, errorParam = error)
+        response.sendRedirect(url)
+    }
 }
 
 @Tag(name = "Profile", description = "Профиль текущего авторизованного пользователя")

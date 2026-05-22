@@ -115,6 +115,12 @@ class UserAccount(
     @Column(name = "facebook_sub", length = 64, unique = true)
     var facebookSub: String? = null,
 
+    /**
+     * Twitter/X user ID. Стабилен, в отличие от @username. Получается из /2/users/me.
+     */
+    @Column(name = "twitter_sub", length = 64, unique = true)
+    var twitterSub: String? = null,
+
     @CreationTimestamp
     @Column(name = "created_at", nullable = false)
     var createdAt: Instant? = null
