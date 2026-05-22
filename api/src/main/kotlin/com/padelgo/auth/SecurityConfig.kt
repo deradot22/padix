@@ -39,6 +39,7 @@ import org.springframework.web.filter.OncePerRequestFilter
 class SecurityConfig(
     private val jwtService: JwtService,
     private val userRepo: UserRepository,
+    private val rateLimiter: RateLimiter,
     @Value("\${app.swagger.username}") private val swaggerUsername: String,
     @Value("\${app.swagger.password}") private val swaggerPassword: String
 ) {
@@ -97,7 +98,12 @@ class SecurityConfig(
             }
         }
 
-        http.addFilterBefore(JwtAuthFilter(jwtService), UsernamePasswordAuthenticationFilter::class.java)
+        // Rate-limit фильтр перед JWT чтобы не делать лишней работы (парсинг токена)
+        // если запрос всё равно будет отброшен по лимиту. Инстанцируем вручную (не bean),
+        // чтобы Spring Boot не зарегистрировал его в глобальной servlet-цепочке дважды.
+        val rateLimitFilter = RateLimitFilter(rateLimiter)
+        http.addFilterBefore(rateLimitFilter, UsernamePasswordAuthenticationFilter::class.java)
+        http.addFilterAfter(JwtAuthFilter(jwtService), RateLimitFilter::class.java)
         http.addFilterAfter(SurveyGateFilter(userRepo), JwtAuthFilter::class.java)
         return http.build()
     }
