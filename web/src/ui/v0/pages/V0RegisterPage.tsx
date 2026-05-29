@@ -92,7 +92,7 @@ export function V0RegisterPage(props: { onAuth: (me: any) => void }) {
     }
   }
 
-  const showTelegram = !!authConfig?.telegramBotUsername;
+  const showTelegram = !!authConfig?.telegramBotId;
   const showGoogle = !!authConfig?.googleClientId;
   const showFacebook = !!authConfig?.facebookAppId;
   const showTwitter = !!authConfig?.twitterClientId;
@@ -176,16 +176,11 @@ export function V0RegisterPage(props: { onAuth: (me: any) => void }) {
                     />
                   )
                 ) : null}
-                {showTelegram && authConfig?.telegramBotUsername ? (
-                  tgLoading ? (
-                    <div className="h-10 w-10 flex items-center justify-center text-xs text-muted-foreground">…</div>
-                  ) : (
-                    <TelegramLoginButton
-                      botUsername={authConfig.telegramBotUsername}
-                      onAuth={onTelegramAuth}
-                      size="large"
-                    />
-                  )
+                {showTelegram && authConfig?.telegramBotId ? (
+                  <TelegramLoginButton
+                    botId={authConfig.telegramBotId}
+                    botUsername={authConfig.telegramBotUsername ?? undefined}
+                  />
                 ) : null}
                 {showFacebook && authConfig?.facebookAppId ? (
                   fbLoading ? (
