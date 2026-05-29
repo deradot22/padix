@@ -27,6 +27,9 @@ class AuthController(
     private val facebookAuth: FacebookAuthService,
     private val twitterAuth: TwitterAuthService,
     @org.springframework.beans.factory.annotation.Value("\${app.telegram.bot-username:}") private val telegramBotUsername: String,
+    // bot_id — числовой ID бота (первая часть TELEGRAM_BOT_TOKEN до ':'). Нужен фронту для redirect-flow
+    // на oauth.telegram.org/auth?bot_id=... — это надёжнее iframe-виджета с попапами.
+    @org.springframework.beans.factory.annotation.Value("\${app.telegram.bot-token:}") private val telegramBotToken: String,
     @org.springframework.beans.factory.annotation.Value("\${app.google.client-id:}") private val googleClientId: String,
     @org.springframework.beans.factory.annotation.Value("\${app.facebook.app-id:}") private val facebookAppId: String,
     @org.springframework.beans.factory.annotation.Value("\${app.twitter.client-id:}") private val twitterClientId: String,
@@ -37,12 +40,19 @@ class AuthController(
             "понять, рендерить ли кнопки «Войти через Telegram/Google». Не требует авторизации."
     )
     @GetMapping("/config")
-    fun config(): AuthConfigResponse = AuthConfigResponse(
-        telegramBotUsername = telegramBotUsername.ifBlank { null },
-        googleClientId = googleClientId.ifBlank { null },
-        facebookAppId = facebookAppId.ifBlank { null },
-        twitterClientId = twitterClientId.ifBlank { null },
-    )
+    fun config(): AuthConfigResponse {
+        // Telegram bot_id — числовой префикс TELEGRAM_BOT_TOKEN до ':'.
+        // Нужен фронту для redirect-flow на oauth.telegram.org/auth?bot_id=...
+        // (вместо хрупкого iframe-виджета с попапами).
+        val botId = telegramBotToken.substringBefore(":").trim().toLongOrNull()
+        return AuthConfigResponse(
+            telegramBotUsername = telegramBotUsername.ifBlank { null },
+            telegramBotId = botId,
+            googleClientId = googleClientId.ifBlank { null },
+            facebookAppId = facebookAppId.ifBlank { null },
+            twitterClientId = twitterClientId.ifBlank { null },
+        )
+    }
 
     @Operation(summary = "Регистрация нового пользователя")
     @PostMapping("/register")

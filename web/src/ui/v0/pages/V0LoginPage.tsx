@@ -101,12 +101,13 @@ export function V0LoginPage(props: { onAuth: (me: any) => void }) {
     }
   }
 
-  const showTelegram = !!authConfig?.telegramBotUsername;
+  // Telegram теперь redirect-flow — нужен botId, а не только username.
+  const showTelegram = !!authConfig?.telegramBotId;
   const showGoogle = !!authConfig?.googleClientId;
   const showFacebook = !!authConfig?.facebookAppId;
   const showTwitter = !!authConfig?.twitterClientId;
   const showAnyOAuth = showTelegram || showGoogle || showFacebook || showTwitter;
-  const anyLoading = loading || tgLoading || googleLoading || fbLoading;
+  const anyLoading = loading || googleLoading || fbLoading; // tgLoading больше не нужен — redirect
 
   return (
     <div className="mx-auto max-w-5xl space-y-6">
@@ -164,16 +165,11 @@ export function V0LoginPage(props: { onAuth: (me: any) => void }) {
                     />
                   )
                 ) : null}
-                {showTelegram && authConfig?.telegramBotUsername ? (
-                  tgLoading ? (
-                    <div className="h-10 w-10 flex items-center justify-center text-xs text-muted-foreground">…</div>
-                  ) : (
-                    <TelegramLoginButton
-                      botUsername={authConfig.telegramBotUsername}
-                      onAuth={onTelegramAuth}
-                      size="large"
-                    />
-                  )
+                {showTelegram && authConfig?.telegramBotId ? (
+                  <TelegramLoginButton
+                    botId={authConfig.telegramBotId}
+                    botUsername={authConfig.telegramBotUsername ?? undefined}
+                  />
                 ) : null}
                 {showFacebook && authConfig?.facebookAppId ? (
                   fbLoading ? (

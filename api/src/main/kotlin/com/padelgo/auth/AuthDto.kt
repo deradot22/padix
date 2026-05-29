@@ -125,8 +125,10 @@ data class AuthProvidersInfo(
 
 @Schema(description = "Публичный конфиг авторизации — какие OAuth-кнопки рендерить на /login.")
 data class AuthConfigResponse(
-    @Schema(description = "@username бота для Telegram Login Widget. null — Telegram-логин выключен на этом сервере.")
+    @Schema(description = "@username бота для Telegram Login. null — Telegram-логин выключен на этом сервере.")
     val telegramBotUsername: String? = null,
+    @Schema(description = "Числовой ID бота (префикс токена до ':'). Используется для redirect-flow на oauth.telegram.org.")
+    val telegramBotId: Long? = null,
     @Schema(description = "Google OAuth2 Client ID. null — Google-логин выключен.")
     val googleClientId: String? = null,
     @Schema(description = "Facebook App ID. null — Facebook-логин выключен.")

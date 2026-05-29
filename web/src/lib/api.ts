@@ -153,8 +153,10 @@ export type MeResponse = {
 
 /** Публичный конфиг авторизации — какие OAuth-провайдеры доступны на сервере. */
 export type AuthConfig = {
-  /** @username бота для Telegram Login Widget. null — кнопка не показывается. */
+  /** @username бота для Telegram Login. null — кнопка не показывается. */
   telegramBotUsername: string | null;
+  /** Числовой ID бота (для redirect-flow на oauth.telegram.org). null — Telegram-логин выключен. */
+  telegramBotId: number | null;
   /** Google OAuth2 Client ID. null — кнопка не показывается. */
   googleClientId: string | null;
   /** Facebook App ID. null — кнопка не показывается. */

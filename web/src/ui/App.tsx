@@ -18,6 +18,7 @@ import { V0FeedbackPage } from "./v0/pages/V0FeedbackPage";
 import { V0LandingPage } from "./v0/pages/V0LandingPage";
 import { V0VerifyEmailPage } from "./v0/pages/V0VerifyEmailPage";
 import { V0OAuthCallbackPage } from "./v0/pages/V0OAuthCallbackPage";
+import { V0TelegramCallbackPage } from "./v0/pages/V0TelegramCallbackPage";
 import { MainLayout } from "@/components/main-layout";
 
 export function App() {
@@ -127,7 +128,8 @@ export function App() {
   useEffect(() => {
     const exempt = location.pathname === "/survey"
       || location.pathname === "/verify-email"
-      || location.pathname === "/auth/oauth-callback";
+      || location.pathname === "/auth/oauth-callback"
+      || location.pathname === "/auth/telegram-callback";
     if (me && !me.surveyCompleted && !exempt) {
       navigate("/survey", { replace: true });
     }
@@ -184,6 +186,7 @@ export function App() {
           <Route path="feedback" element={<V0FeedbackPage me={me} meLoaded={meLoaded} />} />
           <Route path="verify-email" element={<V0VerifyEmailPage authed={authed} onVerified={refreshMeAfterVerify} />} />
           <Route path="auth/oauth-callback" element={<V0OAuthCallbackPage onAuth={(m) => setMe(m)} />} />
+          <Route path="auth/telegram-callback" element={<V0TelegramCallbackPage onAuth={(m) => setMe(m)} />} />
           <Route path="admin" element={<V0AdminPage />} />
           <Route path="admin/feedback" element={<V0AdminFeedbackPage />} />
         </Route>

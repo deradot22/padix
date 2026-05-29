@@ -44,7 +44,7 @@ export function ConnectedAccountsSection(props: {
     twitter: props.me.authProviders?.twitter ?? false,
   };
   const available: Record<Provider, boolean> = {
-    telegram: !!authConfig?.telegramBotUsername,
+    telegram: !!authConfig?.telegramBotId,
     google: !!authConfig?.googleClientId,
     facebook: !!authConfig?.facebookAppId,
     twitter: !!authConfig?.twitterClientId,
@@ -199,11 +199,11 @@ export function ConnectedAccountsSection(props: {
                       text="Подключить Facebook"
                     />
                   ) : null}
-                  {p === "telegram" && authConfig.telegramBotUsername ? (
+                  {p === "telegram" && authConfig.telegramBotId ? (
                     <TelegramLoginButton
-                      botUsername={authConfig.telegramBotUsername}
-                      onAuth={handleLinkTelegram}
-                      size="large"
+                      botId={authConfig.telegramBotId}
+                      botUsername={authConfig.telegramBotUsername ?? undefined}
+                      mode="link"
                     />
                   ) : null}
                   <button
