@@ -28,6 +28,29 @@ services:
       SPRING_DATASOURCE_PASSWORD: padix
       APP_BOT_BASE_URL: http://bot:8081
       APP_INTERNAL_SECRET: ${APP_INTERNAL_SECRET:-dev-internal-secret-change-me}
+      # Базовый URL фронта — используется в письмах верификации и для Twitter callback.
+      APP_PUBLIC_BASE_URL: ${APP_PUBLIC_BASE_URL:-http://localhost:8083}
+      # Публичный URL API — нужен для redirect_uri в Twitter (должен совпадать с настройкой
+      # в Twitter Developer Portal). В dev ходим через Vite proxy (тот же origin что и фронт)
+      # чтобы Twitter не требовал отдельной регистрации :8080. В Twitter App настрой
+      # callback URL: http://localhost:8083/api/auth/twitter/callback
+      APP_API_PUBLIC_BASE_URL: ${APP_API_PUBLIC_BASE_URL:-http://localhost:8083}
+      # Resend SMTP. Если пустой — письма пишутся в логи api (см. ConsoleMailService).
+      # Зарегистрироваться: https://resend.com/signup → API Keys
+      RESEND_API_KEY: ${RESEND_API_KEY:-}
+      APP_MAIL_FROM: ${APP_MAIL_FROM:-Padix <onboarding@resend.dev>}
+      # Telegram Login Widget — тот же bot-token что и для нотификаций (используется для HMAC-проверки).
+      # Bot username нужен фронту чтобы отрисовать виджет. В BotFather: /setdomain → padix.club + localhost
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
+      APP_TELEGRAM_BOT_USERNAME: ${APP_TELEGRAM_BOT_USERNAME:-}
+      # Google Sign-In Client ID (получить на console.cloud.google.com). Пусто — кнопка не показывается.
+      APP_GOOGLE_CLIENT_ID: ${APP_GOOGLE_CLIENT_ID:-}
+      # Facebook Login (https://developers.facebook.com). Нужны и App ID, и App Secret.
+      APP_FACEBOOK_APP_ID: ${APP_FACEBOOK_APP_ID:-}
+      APP_FACEBOOK_APP_SECRET: ${APP_FACEBOOK_APP_SECRET:-}
+      # Twitter/X OAuth2 (https://developer.x.com). Нужны и Client ID, и Secret для exchange.
+      APP_TWITTER_CLIENT_ID: ${APP_TWITTER_CLIENT_ID:-}
+      APP_TWITTER_CLIENT_SECRET: ${APP_TWITTER_CLIENT_SECRET:-}
     ports:
       - "8080:8080"
 

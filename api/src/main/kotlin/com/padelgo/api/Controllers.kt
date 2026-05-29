@@ -356,7 +356,7 @@ class EventController(
             playerRepo.findAllById(submitterPlayerIds).associateBy { it.id!! }
         } else emptyMap()
         val submitterNameByUserId: Map<UUID, String> = submittersById.mapValues { (_, u) ->
-            u.playerId?.let { submitterPlayers[it]?.name } ?: u.email
+            u.playerId?.let { submitterPlayers[it]?.name } ?: u.email ?: "Пользователь"
         }
 
         val roundDtos = rounds.map { r ->

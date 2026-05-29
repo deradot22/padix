@@ -9,5 +9,9 @@ interface UserRepository : JpaRepository<UserAccount, UUID> {
     fun findAllByPlayerIdIn(playerIds: Collection<UUID>): List<UserAccount>
     fun findByPublicId(publicId: Long): UserAccount?
     fun findAllByIsFeedbackAdminTrue(): List<UserAccount>
+    fun findByTelegramUserId(telegramUserId: Long): UserAccount?
+    fun findByGoogleSub(googleSub: String): UserAccount?
+    fun findByFacebookSub(facebookSub: String): UserAccount?
+    fun findByTwitterSub(twitterSub: String): UserAccount?
 }
 

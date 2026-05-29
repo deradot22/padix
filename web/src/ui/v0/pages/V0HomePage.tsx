@@ -139,8 +139,8 @@ export function V0HomePage(props: { me: any }) {
       icon: Users,
       color: "text-primary",
     },
-    { label: "Игр сегодня", value: String(stats.gamesToday), icon: Gamepad2, color: "text-amber-400" },
-    { label: "Матчей за неделю", value: String(stats.gamesWeek), icon: TrendingUp, color: "text-emerald-400" },
+    { label: "Игр сегодня", value: String(stats.gamesToday), icon: Gamepad2, color: "text-amber-600 dark:text-amber-400" },
+    { label: "Матчей за неделю", value: String(stats.gamesWeek), icon: TrendingUp, color: "text-emerald-600 dark:text-emerald-400" },
   ];
 
   return (
@@ -285,10 +285,10 @@ export function V0HomePage(props: { me: any }) {
                       <div
                         className={`flex h-10 w-10 items-center justify-center rounded-lg border ${
                           rank === 1
-                            ? "border-amber-500/30 bg-amber-500/20 text-amber-400"
+                            ? "border-amber-500/30 bg-amber-500/20 text-amber-700 dark:text-amber-400"
                             : rank === 2
-                              ? "border-slate-400/30 bg-slate-400/20 text-slate-300"
-                              : "border-orange-500/30 bg-orange-500/20 text-orange-400"
+                              ? "border-slate-400/40 bg-slate-400/20 text-slate-700 dark:text-slate-300"
+                              : "border-orange-500/30 bg-orange-500/20 text-orange-700 dark:text-orange-400"
                         }`}
                       >
                         {rank === 1 ? <Trophy className="h-5 w-5" /> : <span className="font-bold">{rank}</span>}

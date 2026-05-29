@@ -47,6 +47,41 @@ app:
     password: ${APP_SWAGGER_PASSWORD:101css101}
   bot:
     base-url: ${APP_BOT_BASE_URL:}
+  telegram:
+    # Bot token из BotFather (тот же что использует bot-модуль).
+    # Используется для HMAC-проверки Telegram Login Widget. Если пусто — TG-логин выключен.
+    bot-token: ${TELEGRAM_BOT_TOKEN:}
+    # @username бота (без @) — нужен фронту чтобы отрисовать виджет логина.
+    # В BotFather: /setdomain → padix.club, /setdomain → localhost (для dev).
+    bot-username: ${APP_TELEGRAM_BOT_USERNAME:}
+  google:
+    # Google OAuth2 Client ID (получить на https://console.cloud.google.com/apis/credentials).
+    # Если пусто — кнопка Google на /login не показывается.
+    client-id: ${APP_GOOGLE_CLIENT_ID:}
+  facebook:
+    # Facebook App ID (https://developers.facebook.com → My Apps → app → Settings → Basic).
+    # App secret НЕ должен утечь — используется только бэком для debug_token.
+    # Если пусто — Facebook-логин выключен.
+    app-id: ${APP_FACEBOOK_APP_ID:}
+    app-secret: ${APP_FACEBOOK_APP_SECRET:}
+  twitter:
+    # Twitter/X OAuth2 Client ID (https://developer.x.com → Apps → app → User authentication settings).
+    # Если пусто — Twitter-логин выключен.
+    client-id: ${APP_TWITTER_CLIENT_ID:}
+    client-secret: ${APP_TWITTER_CLIENT_SECRET:}
   internal:
     secret: ${APP_INTERNAL_SECRET:}
+  # Базовый URL фронта — используется при формировании ссылок в письмах верификации
+  # и для редиректа после Twitter OAuth callback.
+  # В dev по-умолчанию 8083 (Vite через Docker). В проде задаётся через APP_PUBLIC_BASE_URL.
+  public-base-url: ${APP_PUBLIC_BASE_URL:http://localhost:8083}
+  # Публичный URL самого API — нужен для Twitter callback (redirect_uri должен совпадать
+  # с настройкой в Twitter Developer Portal).
+  api-public-base-url: ${APP_API_PUBLIC_BASE_URL:http://localhost:8080}
+  mail:
+    # Адрес «От кого». Должен быть на верифицированном в Resend домене.
+    from: ${APP_MAIL_FROM:Padix <noreply@padix.club>}
+    resend:
+      # API-ключ Resend. Если не задан — письма пишутся в логи (ConsoleMailService).
+      api-key: ${RESEND_API_KEY:}
 

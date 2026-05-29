@@ -82,9 +82,9 @@ export function RatingNotificationModal({
     : "У вас новый рейтинг!";
 
   const deltaColor = isUp
-    ? "text-emerald-400"
+    ? "text-emerald-700 dark:text-emerald-400"
     : isDown
-    ? "text-rose-400"
+    ? "text-rose-700 dark:text-rose-400"
     : "text-muted-foreground";
 
   const DeltaIcon = isUp ? ArrowUp : isDown ? ArrowDown : Minus;

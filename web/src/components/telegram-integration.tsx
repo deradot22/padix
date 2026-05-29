@@ -31,9 +31,9 @@ function chatTypeLabel(type: TelegramChat["chatType"]): string {
 }
 
 function ChatIcon({ type }: { type: TelegramChat["chatType"] }) {
-  if (type === "PRIVATE") return <MessageCircle className="h-4 w-4 text-sky-400" />;
-  if (type === "CHANNEL") return <Send className="h-4 w-4 text-sky-400" />;
-  return <UsersIcon className="h-4 w-4 text-sky-400" />;
+  if (type === "PRIVATE") return <MessageCircle className="h-4 w-4 text-sky-600 dark:text-sky-400" />;
+  if (type === "CHANNEL") return <Send className="h-4 w-4 text-sky-600 dark:text-sky-400" />;
+  return <UsersIcon className="h-4 w-4 text-sky-600 dark:text-sky-400" />;
 }
 
 function browserTimezone(): string {
@@ -160,7 +160,7 @@ export function TelegramIntegrationCard() {
       >
         <div className="flex items-center justify-between gap-2">
           <CardTitle className="flex items-center gap-2">
-            <Send className="h-5 w-5 text-sky-400" />
+            <Send className="h-5 w-5 text-sky-600 dark:text-sky-400" />
             Telegram
             {chats.length > 0 && (
               <span className="text-sm font-normal text-muted-foreground">({chats.length})</span>
@@ -495,7 +495,7 @@ function TelegramLinkModal(props: {
       <DialogContent className="sm:max-w-lg">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
-            <Send className="h-5 w-5 text-sky-400" />
+            <Send className="h-5 w-5 text-sky-600 dark:text-sky-400" />
             Привязка Telegram
           </DialogTitle>
           <DialogDescription>Выберите, куда вы хотите получать анонсы.</DialogDescription>
@@ -503,8 +503,8 @@ function TelegramLinkModal(props: {
 
         {linkedChat ? (
           <div className="space-y-3">
-            <div className="rounded-lg border border-emerald-500/30 bg-emerald-500/10 p-4 text-sm space-y-1">
-              <div className="flex items-center gap-2 font-medium text-emerald-300">
+            <div className="rounded-lg border border-emerald-500/40 dark:border-emerald-500/30 bg-emerald-500/10 p-4 text-sm space-y-1">
+              <div className="flex items-center gap-2 font-medium text-emerald-700 dark:text-emerald-300">
                 <Check className="h-4 w-4" />
                 Чат привязан
               </div>
@@ -581,7 +581,7 @@ function TelegramLinkModal(props: {
                         className="text-muted-foreground hover:text-foreground"
                         aria-label="Скопировать"
                       >
-                        {copied === "command" ? <Check className="h-4 w-4 text-emerald-400" /> : <Copy className="h-4 w-4" />}
+                        {copied === "command" ? <Check className="h-4 w-4 text-emerald-600 dark:text-emerald-400" /> : <Copy className="h-4 w-4" />}
                       </button>
                     </div>
                   </li>

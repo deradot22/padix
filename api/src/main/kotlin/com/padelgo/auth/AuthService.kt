@@ -15,13 +15,18 @@ class AuthService(
     private val users: UserRepository,
     private val players: PlayerRepository,
     private val encoder: PasswordEncoder,
-    private val jwt: JwtService
+    private val jwt: JwtService,
+    private val emailVerification: EmailVerificationService,
+    private val disposableEmailChecker: DisposableEmailChecker,
 ) {
     private val rng = SecureRandom()
 
     @Transactional
     fun register(req: RegisterRequest): AuthResponse {
         val email = req.email.trim().lowercase()
+        if (disposableEmailChecker.isDisposable(email)) {
+            throw ApiException(HttpStatus.BAD_REQUEST, "Используйте, пожалуйста, постоянный email-адрес")
+        }
         if (users.findByEmailIgnoreCase(email) != null) throw ApiException(HttpStatus.CONFLICT, "Email already registered")
 
         val player = players.save(
@@ -39,17 +44,66 @@ class AuthService(
                 passwordHash = encoder.encode(req.password),
                 playerId = player.id!!,
                 publicId = generatePublicId(),
-                gender = gender
+                gender = gender,
+                emailVerifiedAt = null,
             )
         )
+        // Письмо с верификацией. Регистрацию не валим если SMTP упал —
+        // юзер сможет нажать «выслать повторно» из настроек.
+        emailVerification.sendVerificationEmail(user, player.name, EmailVerificationPurpose.REGISTRATION)
         return AuthResponse(jwt.createToken(user.id!!, user.email, user.playerId!!, false))
+    }
+
+    /**
+     * Установить или сменить пароль.
+     *  - Если у юзера уже есть пароль (hasPassword) — currentPassword обязателен и должен совпадать.
+     *  - Если пароля нет (OAuth-only юзер) — currentPassword можно опустить.
+     * Минимальная длина — 6 символов.
+     */
+    @Transactional
+    fun setPassword(principal: JwtPrincipal, currentPassword: String?, newPassword: String) {
+        if (newPassword.length < 6) {
+            throw ApiException(HttpStatus.BAD_REQUEST, "Пароль должен быть не короче 6 символов")
+        }
+        val user = users.findById(principal.userId).orElseThrow { ApiException(HttpStatus.UNAUTHORIZED, "User not found") }
+        val existingHash = user.passwordHash
+        if (!existingHash.isNullOrBlank()) {
+            // У юзера уже есть пароль — требуем текущий
+            if (currentPassword.isNullOrBlank()) {
+                throw ApiException(HttpStatus.BAD_REQUEST, "Введите текущий пароль")
+            }
+            if (!encoder.matches(currentPassword, existingHash)) {
+                throw ApiException(HttpStatus.UNAUTHORIZED, "Текущий пароль неверный")
+            }
+        }
+        user.passwordHash = encoder.encode(newPassword)
+        users.save(user)
+    }
+
+    /**
+     * Повторная отправка письма верификации текущему юзеру.
+     * Старые активные токены деактивируются в [EmailVerificationService.sendVerificationEmail].
+     */
+    @Transactional
+    fun resendVerification(principal: JwtPrincipal) {
+        val user = users.findById(principal.userId).orElseThrow { ApiException(HttpStatus.UNAUTHORIZED, "User not found") }
+        if (user.disabled) throw ApiException(HttpStatus.FORBIDDEN, "Account disabled")
+        if (user.emailVerifiedAt != null) {
+            throw ApiException(HttpStatus.BAD_REQUEST, "Email already verified")
+        }
+        val player = players.findById(user.playerId!!).orElseThrow { ApiException(HttpStatus.UNAUTHORIZED, "Player not found") }
+        emailVerification.sendVerificationEmail(user, player.name, EmailVerificationPurpose.RESEND)
     }
 
     fun login(req: LoginRequest): AuthResponse {
         val email = req.email.trim().lowercase()
         val user = users.findByEmailIgnoreCase(email) ?: throw ApiException(HttpStatus.UNAUTHORIZED, "Неверный email или пароль")
         if (user.disabled) throw ApiException(HttpStatus.FORBIDDEN, "Аккаунт заблокирован")
-        if (!encoder.matches(req.password, user.passwordHash)) throw ApiException(HttpStatus.UNAUTHORIZED, "Неверный email или пароль")
+        // OAuth-only юзер (зарегался через Telegram/Google) — пароль не задавал, логин по паролю невозможен
+        // пока он не задаст пароль через настройки.
+        val hash = user.passwordHash
+            ?: throw ApiException(HttpStatus.UNAUTHORIZED, "Этот аккаунт зарегистрирован через внешний сервис. Войдите тем же способом или задайте пароль в настройках.")
+        if (!encoder.matches(req.password, hash)) throw ApiException(HttpStatus.UNAUTHORIZED, "Неверный email или пароль")
         return AuthResponse(jwt.createToken(user.id!!, user.email, user.playerId!!, false))
     }
 
@@ -71,7 +125,15 @@ class AuthService(
             calibrationMatchesRemaining = user.calibrationMatchesRemaining,
             avatarUrl = player.avatarUrl,
             gender = user.gender,
-            showWinProbability = user.showWinProbability
+            showWinProbability = user.showWinProbability,
+            emailVerified = user.emailVerifiedAt != null,
+            hasPassword = !user.passwordHash.isNullOrBlank(),
+            authProviders = AuthProvidersInfo(
+                telegram = user.telegramUserId != null,
+                google = user.googleSub != null,
+                facebook = user.facebookSub != null,
+                twitter = user.twitterSub != null,
+            ),
         )
     }
 
@@ -111,17 +173,26 @@ class AuthService(
             player.name = name
         }
 
+        var emailChanged = false
         req.email?.trim()?.lowercase()?.takeIf { it.isNotBlank() }?.let { email ->
+            if (disposableEmailChecker.isDisposable(email)) {
+                throw ApiException(HttpStatus.BAD_REQUEST, "Используйте, пожалуйста, постоянный email-адрес")
+            }
             val existing = users.findByEmailIgnoreCase(email)
             if (existing != null && existing.id != user.id) {
                 throw ApiException(HttpStatus.CONFLICT, "Email уже занят")
             }
-            user.email = email
+            if (user.email == null || !user.email!!.equals(email, ignoreCase = true)) {
+                user.email = email
+                // При смене email (или первой установке) сбрасываем подтверждение —
+                // новый адрес тоже надо подтвердить.
+                user.emailVerifiedAt = null
+                emailChanged = true
+            }
         }
 
-        req.password?.takeIf { it.isNotBlank() }?.let { password ->
-            user.passwordHash = encoder.encode(password)
-        }
+        // Смена пароля через /profile больше не поддерживается — используйте POST /api/me/auth/password
+        // (там требуется текущий пароль если он уже был задан). Поле req.password игнорируется.
 
         when {
             req.gender == null -> { /* no change */ }
@@ -134,6 +205,9 @@ class AuthService(
 
         players.save(player)
         users.save(user)
+        if (emailChanged) {
+            emailVerification.sendVerificationEmail(user, player.name, EmailVerificationPurpose.EMAIL_CHANGE)
+        }
         return me(principal)
     }
 

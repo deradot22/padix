@@ -13,15 +13,15 @@ import { PlayerTooltip } from "@/components/player-tooltip";
 const NTRP_LEVELS = ["1.0", "1.5", "2.0", "2.5", "3.0", "3.5", "4.0", "4.5", "5.0+"];
 
 const NTRP_COLORS: Record<string, string> = {
-  "1.0": "text-zinc-400",
-  "1.5": "text-zinc-400",
-  "2.0": "text-emerald-400",
-  "2.5": "text-emerald-400",
-  "3.0": "text-sky-400",
-  "3.5": "text-sky-400",
-  "4.0": "text-violet-400",
-  "4.5": "text-amber-400",
-  "5.0+": "text-rose-400",
+  "1.0": "text-zinc-600 dark:text-zinc-400",
+  "1.5": "text-zinc-600 dark:text-zinc-400",
+  "2.0": "text-emerald-700 dark:text-emerald-400",
+  "2.5": "text-emerald-700 dark:text-emerald-400",
+  "3.0": "text-sky-700 dark:text-sky-400",
+  "3.5": "text-sky-700 dark:text-sky-400",
+  "4.0": "text-violet-700 dark:text-violet-400",
+  "4.5": "text-amber-700 dark:text-amber-400",
+  "5.0+": "text-rose-700 dark:text-rose-400",
 };
 
 export function V0RatingPage(props: { authed: boolean; me?: { playerId?: string } | null }) {
@@ -129,9 +129,9 @@ export function V0RatingPage(props: { authed: boolean; me?: { playerId?: string 
   const scrollToMe = () => myRowRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
 
   const getRankStyle = (rank: number) => {
-    if (rank === 1) return "bg-amber-500/20 text-amber-400 border-amber-500/30";
-    if (rank === 2) return "bg-slate-400/20 text-slate-300 border-slate-400/30";
-    if (rank === 3) return "bg-orange-600/20 text-orange-400 border-orange-600/30";
+    if (rank === 1) return "bg-amber-500/20 text-amber-700 dark:text-amber-400 border-amber-500/40 dark:border-amber-500/30";
+    if (rank === 2) return "bg-slate-400/20 text-slate-700 dark:text-slate-300 border-slate-400/50 dark:border-slate-400/30";
+    if (rank === 3) return "bg-orange-600/20 text-orange-700 dark:text-orange-400 border-orange-600/40 dark:border-orange-600/30";
     return "bg-secondary text-muted-foreground border-border";
   };
 
@@ -237,7 +237,7 @@ export function V0RatingPage(props: { authed: boolean; me?: { playerId?: string 
             {isCalibrating(player) && isMe ? "—" : player.rating}
           </span>
           {isCalibrating(player) && !isMe && (
-            <span className="text-amber-500/80 ml-0.5" title="В калибровке">?</span>
+            <span className="text-amber-600 dark:text-amber-500/80 ml-0.5" title="В калибровке">?</span>
           )}
         </td>
         <td className="py-1.5 sm:py-2 pl-2 pr-4 sm:pl-3 sm:pr-6 align-middle text-right whitespace-nowrap">

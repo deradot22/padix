@@ -654,9 +654,9 @@ export function V0CreateEventPage(props: {
                 </div>
               </div>
 
-              <div className="flex gap-2 rounded-lg border border-amber-500/30 bg-amber-500/10 p-4 text-sm">
-                <Users className="h-5 w-5 text-amber-500 shrink-0" />
-                <p className="text-amber-200">
+              <div className="flex gap-2 rounded-lg border border-amber-500/40 dark:border-amber-500/30 bg-amber-500/10 p-4 text-sm">
+                <Users className="h-5 w-5 text-amber-600 dark:text-amber-500 shrink-0" />
+                <p className="text-amber-800 dark:text-amber-200">
                   <strong>Минимум {minPlayers} игроков</strong> требуется для старта игры
                 </p>
               </div>
@@ -805,7 +805,7 @@ export function V0CreateEventPage(props: {
               {telegramChats.length > 0 && (
                 <div className="rounded-lg border border-border bg-secondary/30 p-4 space-y-3">
                   <div className="flex items-center gap-2">
-                    <Send className="h-4 w-4 text-sky-400" />
+                    <Send className="h-4 w-4 text-sky-600 dark:text-sky-400" />
                     <div className="text-sm font-medium">Отправить анонс в Telegram</div>
                   </div>
                   <div className="space-y-2">
@@ -830,7 +830,7 @@ export function V0CreateEventPage(props: {
                               });
                             }}
                           />
-                          <Icon className="h-4 w-4 text-sky-400" />
+                          <Icon className="h-4 w-4 text-sky-600 dark:text-sky-400" />
                           <span className="text-sm flex-1 truncate">{chat.title}</span>
                         </label>
                       );

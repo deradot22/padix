@@ -119,8 +119,16 @@ export type BalancePreview = {
   shouldWarn: boolean;
 };
 
+export type AuthProvidersInfo = {
+  telegram: boolean;
+  google: boolean;
+  facebook: boolean;
+  twitter: boolean;
+};
+
 export type MeResponse = {
-  email: string;
+  /** Email юзера. null — у OAuth-only юзеров (например, зарегались только через Telegram). */
+  email: string | null;
   playerId: string;
   name: string;
   rating: number;
@@ -135,6 +143,35 @@ export type MeResponse = {
   gender?: string | null;
   /** Показывать шансы выигрыша в модале «Раунды». По умолчанию false. */
   showWinProbability: boolean;
+  /** true — email подтверждён по ссылке из письма. */
+  emailVerified: boolean;
+  /** true — у юзера задан пароль (можно входить email+password). */
+  hasPassword: boolean;
+  /** Какие OAuth-провайдеры привязаны. */
+  authProviders: AuthProvidersInfo;
+};
+
+/** Публичный конфиг авторизации — какие OAuth-провайдеры доступны на сервере. */
+export type AuthConfig = {
+  /** @username бота для Telegram Login Widget. null — кнопка не показывается. */
+  telegramBotUsername: string | null;
+  /** Google OAuth2 Client ID. null — кнопка не показывается. */
+  googleClientId: string | null;
+  /** Facebook App ID. null — кнопка не показывается. */
+  facebookAppId: string | null;
+  /** Twitter/X OAuth2 Client ID. null — кнопка не показывается. */
+  twitterClientId: string | null;
+};
+
+/** Payload от Telegram Login Widget (snake_case как присылает виджет). */
+export type TelegramAuthPayload = {
+  id: number;
+  first_name?: string;
+  last_name?: string;
+  username?: string;
+  photo_url?: string;
+  auth_date: number;
+  hash: string;
 };
 
 /** Категории тикетов обратной связи. */
@@ -214,7 +251,8 @@ export type FriendRequestItem = {
 
 export type AdminUser = {
   userId: string;
-  email: string;
+  /** null — у OAuth-only юзеров без привязанного email. */
+  email: string | null;
   publicId: string;
   name: string;
   rating: number;
@@ -546,6 +584,52 @@ export const api = {
       body: JSON.stringify({ email, password }),
     }),
   me: () => request<MeResponse>("/api/me"),
+  /** Подтвердить email по токену из ссылки в письме (публичный эндпойнт). */
+  verifyEmail: (token: string) =>
+    request<void>("/api/auth/verify-email", { method: "POST", body: JSON.stringify({ token }) }),
+  /** Запросить повторную отправку письма верификации (требует авторизации). */
+  resendVerification: () =>
+    request<void>("/api/me/resend-verification", { method: "POST" }),
+  /** Публичный конфиг — какие OAuth-провайдеры включены на сервере. */
+  authConfig: () => request<AuthConfig>("/api/auth/config"),
+  /** Логин/регистрация через Telegram Login Widget. Возвращает JWT. */
+  loginViaTelegram: (payload: TelegramAuthPayload) =>
+    request<{ token: string }>("/api/auth/telegram", { method: "POST", body: JSON.stringify(payload) }),
+  /** Логин/регистрация через Google Sign-In. Принимает ID-токен (credential от GIS). */
+  loginViaGoogle: (idToken: string) =>
+    request<{ token: string }>("/api/auth/google", { method: "POST", body: JSON.stringify({ idToken }) }),
+  /** Логин/регистрация через Facebook Login. Принимает user access_token. */
+  loginViaFacebook: (accessToken: string) =>
+    request<{ token: string }>("/api/auth/facebook", { method: "POST", body: JSON.stringify({ accessToken }) }),
+  /**
+   * URL для старта Twitter OAuth — браузер должен сделать window.location.href = это.
+   * Бэк 302-редиректит на x.com/authorize, потом вернётся на /auth/oauth-callback#token=...
+   */
+  twitterAuthStartUrl: () => `${API_BASE_URL}/api/auth/twitter/start`,
+  /** Привязать Google к текущему юзеру. Принимает ID-токен от GIS. */
+  linkGoogle: (idToken: string) =>
+    request<MeResponse>("/api/me/auth/google/link", { method: "POST", body: JSON.stringify({ idToken }) }),
+  /** Привязать Facebook к текущему юзеру. Принимает access_token от FB SDK. */
+  linkFacebook: (accessToken: string) =>
+    request<MeResponse>("/api/me/auth/facebook/link", { method: "POST", body: JSON.stringify({ accessToken }) }),
+  /** Привязать Telegram к текущему юзеру. */
+  linkTelegram: (payload: TelegramAuthPayload) =>
+    request<MeResponse>("/api/me/auth/telegram/link", { method: "POST", body: JSON.stringify(payload) }),
+  /** Получить URL для редиректа на Twitter (linkUserId уже зашит в state на бэке). */
+  linkTwitterStart: () =>
+    request<{ url: string }>("/api/me/auth/twitter/link/start", { method: "POST" }),
+  /** Отвязать провайдера. */
+  unlinkProvider: (provider: "telegram" | "google" | "facebook" | "twitter") =>
+    request<MeResponse>(`/api/me/auth/${provider}`, { method: "DELETE" }),
+  /**
+   * Установить или сменить пароль. Если у юзера уже есть пароль — currentPassword обязателен.
+   * Для OAuth-only юзеров — можно опустить (первая установка).
+   */
+  setPassword: (newPassword: string, currentPassword?: string | null) =>
+    request<MeResponse>("/api/me/auth/password", {
+      method: "POST",
+      body: JSON.stringify({ newPassword, currentPassword: currentPassword || null }),
+    }),
   updateAvatar: (avatarDataUrl: string | null) =>
     request<MeResponse>("/api/me/avatar", { method: "PATCH", body: JSON.stringify({ avatarDataUrl }) }),
   updateProfile: (payload: { name?: string; email?: string; password?: string; gender?: string; showWinProbability?: boolean }) =>

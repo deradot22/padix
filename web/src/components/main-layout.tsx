@@ -1,5 +1,7 @@
 import React from "react";
+import { useLocation } from "react-router-dom";
 import { Header } from "@/components/header";
+import { EmailVerificationBanner } from "@/components/email-verification-banner";
 
 export function MainLayout(props: {
   children: React.ReactNode;
@@ -7,9 +9,27 @@ export function MainLayout(props: {
   notificationCount: number;
   onRefreshNotifications: () => void | Promise<void>;
   onLogout: () => void;
+  /** Если authed=true и emailVerified=false — показываем баннер сверху. */
+  emailVerified?: boolean;
+  /** Email юзера для отображения в баннере. null/undefined — баннер не показывается. */
+  email?: string | null;
+  /** Колбэк для повторной отправки письма верификации. */
+  onResendVerification?: () => Promise<void>;
 }) {
+  const { pathname } = useLocation();
+  // На странице /verify-email сам сценарий — подтверждение, баннер избыточен.
+  const showBanner =
+    props.authed &&
+    props.emailVerified === false &&
+    props.email &&
+    props.onResendVerification &&
+    pathname !== "/verify-email";
+
   return (
     <div className="min-h-dvh bg-background">
+      {showBanner ? (
+        <EmailVerificationBanner email={props.email!} onResend={props.onResendVerification!} />
+      ) : null}
       <Header
         authed={props.authed}
         notificationCount={props.notificationCount}
@@ -20,4 +40,3 @@ export function MainLayout(props: {
     </div>
   );
 }
-

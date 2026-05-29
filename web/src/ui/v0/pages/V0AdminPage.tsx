@@ -56,7 +56,7 @@ export function V0AdminPage() {
   const filtered = useMemo(() => {
     const q = filter.trim().toLowerCase();
     if (!q) return users;
-    return users.filter((u) => [u.name, u.email, u.publicId].some((v) => v.toLowerCase().includes(q)));
+    return users.filter((u) => [u.name, u.email, u.publicId].some((v) => v?.toLowerCase().includes(q)));
   }, [users, filter]);
 
   function editFor(userId: string): EditState {
@@ -118,7 +118,7 @@ export function V0AdminPage() {
   }
 
   function isDeletedUser(user: AdminUser) {
-    return user.disabled && user.email.startsWith("deleted-");
+    return user.disabled && !!user.email?.startsWith("deleted-");
   }
 
   function openRestore(user: AdminUser) {
@@ -181,7 +181,7 @@ export function V0AdminPage() {
         disabled: createDisabled,
         calibrationEventsRemaining: parseInt(createCalibration, 10) || 0,
       });
-      setUsers((prev) => [...prev, created].sort((a, b) => a.email.localeCompare(b.email)));
+      setUsers((prev) => [...prev, created].sort((a, b) => (a.email ?? "").localeCompare(b.email ?? "")));
       setShowCreate(false);
       setCreateEmail("");
       setCreatePassword("");
@@ -490,7 +490,7 @@ export function V0AdminPage() {
                 <div className="space-y-1">
                   <Label>Email</Label>
                   <Input
-                    value={draft.email ?? user.email}
+                    value={draft.email ?? user.email ?? ""}
                     onChange={(e) => applyEdit(user.userId, { email: e.target.value })}
                   />
                 </div>

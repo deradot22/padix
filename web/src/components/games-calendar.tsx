@@ -159,7 +159,7 @@ export function GamesCalendar({ open, onOpenChange, onSelectDate, events, onMont
               className={cn(
                 "aspect-square sm:aspect-auto sm:min-h-12 sm:py-2 rounded-xl sm:rounded-lg flex flex-col items-center justify-center transition-all relative",
                 isToday
-                  ? "bg-primary/20 border-2 border-white/70 hover:bg-primary/25"
+                  ? "bg-primary/20 border-2 border-primary/70 dark:border-white/70 hover:bg-primary/25"
                   : hasGames
                   ? "bg-gradient-to-br from-primary/20 to-primary/10 border-2 border-primary/30 text-primary hover:bg-primary/30"
                   : "bg-secondary/40 border border-transparent hover:bg-secondary/60",

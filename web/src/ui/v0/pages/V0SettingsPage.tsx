@@ -8,6 +8,8 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useConfirm } from "@/components/ui/confirm-dialog";
 import { TelegramIntegrationCard } from "@/components/telegram-integration";
+import { ConnectedAccountsSection } from "@/components/connected-accounts-section";
+import { PasswordSection } from "@/components/password-section";
 import { User, Bell, ShieldCheck, Upload, Check, Send, ChevronLeft, ChevronRight, BellOff, BellRing, Repeat, Pause, Play, Trash2, Plus, Pencil } from "lucide-react";
 
 type SectionId = "profile" | "notifications" | "subscriptions" | "security";
@@ -107,7 +109,17 @@ export function V0SettingsPage(props: {
           )}
           {section === "notifications" && <NotificationsSection />}
           {section === "subscriptions" && <SubscriptionsSection />}
-          {section === "security" && <SecuritySection />}
+          {section === "security" && (
+            <div className="space-y-6">
+              {props.me ? (
+                <PasswordSection me={props.me} onMeUpdate={props.onMeUpdate ?? (() => {})} />
+              ) : null}
+              {props.me ? (
+                <ConnectedAccountsSection me={props.me} onMeUpdate={props.onMeUpdate ?? (() => {})} />
+              ) : null}
+              <SecuritySection />
+            </div>
+          )}
         </div>
       </div>
     </div>
@@ -171,7 +183,6 @@ function ProfileSection(props: {
   const [me, setMe] = useState<MeResponse | null>(props.me ?? null);
   const [name, setName] = useState(props.me?.name ?? "");
   const [email, setEmail] = useState(props.me?.email ?? "");
-  const [password, setPassword] = useState("");
   const [gender, setGender] = useState(props.me?.gender ?? "");
   const [avatar, setAvatar] = useState<string | null>(props.me?.avatarUrl ?? null);
   const [saving, setSaving] = useState(false);
@@ -193,10 +204,9 @@ function ProfileSection(props: {
     return (
       name.trim() !== (me.name ?? "") ||
       email.trim() !== (me.email ?? "") ||
-      gender !== (me.gender ?? "") ||
-      password.length > 0
+      gender !== (me.gender ?? "")
     );
-  }, [me, name, email, gender, password]);
+  }, [me, name, email, gender]);
 
   const persistAvatar = async (next: string | null) => {
     setAvatar(next);
@@ -216,10 +226,9 @@ function ProfileSection(props: {
     setError(null);
     setInfo(null);
     try {
-      const payload: { name?: string; email?: string; password?: string; gender?: string } = {};
+      const payload: { name?: string; email?: string; gender?: string } = {};
       if (name.trim() && name.trim() !== (me?.name ?? "")) payload.name = name.trim();
       if (email.trim() && email.trim() !== (me?.email ?? "")) payload.email = email.trim();
-      if (password) payload.password = password;
       if (gender !== (me?.gender ?? "")) payload.gender = gender;
       if (Object.keys(payload).length === 0) {
         setInfo("Нечего сохранять");
@@ -228,7 +237,6 @@ function ProfileSection(props: {
       const updated = await api.updateProfile(payload);
       setMe(updated);
       props.onMeUpdate?.(updated);
-      setPassword("");
       setInfo("Сохранено");
       window.setTimeout(() => setInfo(null), 1500);
     } catch (e: any) {
@@ -310,16 +318,7 @@ function ProfileSection(props: {
               autoComplete="email"
             />
           </div>
-          <div className="space-y-2">
-            <label className="text-sm font-medium">Новый пароль</label>
-            <Input
-              type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              placeholder="Оставьте пустым, чтобы не менять"
-              autoComplete="new-password"
-            />
-          </div>
+          {/* Смена пароля переехала в раздел «Безопасность» — теперь требует текущий пароль. */}
           <div className="space-y-2">
             <label className="text-sm font-medium">Пол</label>
             <Select value={gender || "_unset"} onValueChange={(v) => setGender(v === "_unset" ? "" : v)}>
@@ -366,7 +365,7 @@ function ProfileSection(props: {
             </div>
           )}
           {info && (
-            <div className="rounded-lg border border-emerald-500/30 bg-emerald-500/10 p-3 text-sm text-emerald-300 flex items-center gap-2">
+            <div className="rounded-lg border border-emerald-500/40 dark:border-emerald-500/30 bg-emerald-500/10 p-3 text-sm text-emerald-700 dark:text-emerald-300 flex items-center gap-2">
               <Check className="h-4 w-4" />
               {info}
             </div>
@@ -460,7 +459,7 @@ function NotificationsSection() {
         <CardContent>
           <div className="grid gap-3 sm:grid-cols-2">
             <ChannelButton
-              icon={<Send className="h-6 w-6 text-sky-400" />}
+              icon={<Send className="h-6 w-6 text-sky-600 dark:text-sky-400" />}
               title="Telegram"
               subtitle={
                 tgEnabled
@@ -509,13 +508,13 @@ function PersonalRemindersCard(props: {
     const hoursLabel =
       hours === 1 ? "за 1 час" : hours === 24 ? "за сутки" : `за ${hours} часов`;
     return (
-      <div className="rounded-lg border border-emerald-500/30 bg-emerald-500/10 p-4">
+      <div className="rounded-lg border border-emerald-500/40 dark:border-emerald-500/30 bg-emerald-500/10 p-4">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-start">
           <div className="flex items-start gap-3 flex-1 min-w-0">
-            <BellRing className="h-5 w-5 text-emerald-400 shrink-0 mt-0.5" />
+            <BellRing className="h-5 w-5 text-emerald-600 dark:text-emerald-400 shrink-0 mt-0.5" />
             <div className="min-w-0">
-              <div className="text-sm font-medium text-emerald-200">Личные напоминания включены</div>
-              <div className="text-xs text-emerald-200/80 mt-1">
+              <div className="text-sm font-medium text-emerald-800 dark:text-emerald-200">Личные напоминания включены</div>
+              <div className="text-xs text-emerald-800/80 dark:text-emerald-200/80 mt-1">
                 Бот пришлёт в личный чат напоминание {hoursLabel} до старта каждой игры,
                 в которую вы зарегистрированы.
               </div>
@@ -539,13 +538,13 @@ function PersonalRemindersCard(props: {
         : "Уведомления полностью выключены.";
 
   return (
-    <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 p-4">
+    <div className="rounded-lg border border-amber-500/40 dark:border-amber-500/30 bg-amber-500/10 p-4">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start">
         <div className="flex items-start gap-3 flex-1 min-w-0">
-          <BellOff className="h-5 w-5 text-amber-400 shrink-0 mt-0.5" />
+          <BellOff className="h-5 w-5 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
           <div className="min-w-0">
-            <div className="text-sm font-medium text-amber-200">Личные напоминания не настроены</div>
-            <div className="text-xs text-amber-200/80 mt-1">{reason}</div>
+            <div className="text-sm font-medium text-amber-800 dark:text-amber-200">Личные напоминания не настроены</div>
+            <div className="text-xs text-amber-800/80 dark:text-amber-200/80 mt-1">{reason}</div>
           </div>
         </div>
         <Button
@@ -586,7 +585,7 @@ function ChannelButton(props: {
         <div className="text-sm font-medium flex items-center gap-2">
           {props.title}
           {props.connected && (
-            <span className="inline-flex items-center gap-1 text-[10px] uppercase tracking-wide rounded-full bg-emerald-500/15 text-emerald-300 px-2 py-0.5">
+            <span className="inline-flex items-center gap-1 text-[10px] uppercase tracking-wide rounded-full bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 px-2 py-0.5">
               <Check className="h-3 w-3" />
               подключено
             </span>
@@ -744,7 +743,7 @@ function SubscriptionsSection() {
                         {!s.active && (
                           <>
                             <span>·</span>
-                            <span className="text-amber-300">На паузе</span>
+                            <span className="text-amber-700 dark:text-amber-300">На паузе</span>
                           </>
                         )}
                       </div>

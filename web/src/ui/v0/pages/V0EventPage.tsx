@@ -108,9 +108,13 @@ export function V0EventPage(props: { me: any; meLoaded?: boolean }) {
   const [balancePreview, setBalancePreview] = useState<BalancePreview | null>(null);
   const [switchingMode, setSwitchingMode] = useState(false);
   useEffect(() => {
-    modalOpenRef.current =
-      balanceModalOpen || editOpen || inviteOpen || roundsOpen || statsOpen || startPromptOpen || editScoresOpen || scorePadOpen;
-  }, [balanceModalOpen, editOpen, inviteOpen, roundsOpen, statsOpen, startPromptOpen, editScoresOpen, scorePadOpen]);
+    // Пауза polling'а ТОЛЬКО когда юзер реально что-то вводит/выбирает в форме:
+    // editOpen (форма редактирования игры), inviteOpen (поиск друзей),
+    // editScoresOpen (форма массовой правки счёта), scorePadOpen (открытая клавиатура).
+    // Чисто «смотровые» модалы (Раунды, статистика, balance preview, prompt) НЕ паузят polling —
+    // юзер хочет видеть live-обновления когда сам ничего не нажимает.
+    modalOpenRef.current = editOpen || inviteOpen || editScoresOpen || scorePadOpen;
+  }, [editOpen, inviteOpen, editScoresOpen, scorePadOpen]);
 
   const navigateAfterScore = (rounds: EventDetails["rounds"], savedMatchId: string) => {
     const currentIdx = rounds.findIndex((round) =>
@@ -488,16 +492,21 @@ export function V0EventPage(props: { me: any; meLoaded?: boolean }) {
     setScoreByMatch((prev) => {
       const next = { ...prev };
       rounds.flatMap((r) => r.matches).forEach((m) => {
-        if (next[m.id]) return;
         const points = m.score?.points;
         if (points) {
+          // Если API вернул итоговый счёт — синхронизируем локальный state, даже если уже была
+          // инициализационная заглушка {0:0}. Иначе при polling'е счёт от другого игрока
+          // не отображался у владельца — баг «зелёная обводка, а счёта нет».
           const a = points.teamAPoints ?? 0;
           const b = points.teamBPoints ?? 0;
           next[m.id] = { a, b };
           lastAutoSavedRef.current[m.id] = `${m.id}:${a},${b}`;
           return;
         }
-        next[m.id] = { a: 0, b: 0 };
+        // API ещё не имеет счёта — НЕ перезаписываем то что юзер мог уже набрать локально.
+        if (!next[m.id]) {
+          next[m.id] = { a: 0, b: 0 };
+        }
       });
       return next;
     });
@@ -643,7 +652,7 @@ export function V0EventPage(props: { me: any; meLoaded?: boolean }) {
                 Записано: <span className="text-foreground font-medium tabular-nums">{ev.registeredCount}/{ev.courtsCount * 4}</span>
               </div>
             </div>
-            <div className="rounded-lg border border-amber-500/30 bg-amber-500/5 p-3 text-sm text-amber-100">
+            <div className="rounded-lg border border-amber-500/40 dark:border-amber-500/30 bg-amber-500/10 dark:bg-amber-500/5 p-3 text-sm text-amber-900 dark:text-amber-100">
               Состав, раунды и счёт доступны только участникам игры и приглашённым.
               Попроси организатора пригласить тебя — приглашение придёт в раздел уведомлений.
             </div>
@@ -711,13 +720,13 @@ export function V0EventPage(props: { me: any; meLoaded?: boolean }) {
                     isAuthor ? (
                       <Link
                         to="/settings?tab=subscriptions"
-                        className="inline-flex items-center gap-1 rounded-md border border-sky-500/40 bg-sky-500/10 px-3 py-1 text-sm font-medium text-sky-300 hover:bg-sky-500/20 transition-colors"
+                        className="inline-flex items-center gap-1 rounded-md border border-sky-500/40 bg-sky-500/10 px-3 py-1 text-sm font-medium text-sky-700 dark:text-sky-300 hover:bg-sky-500/20 transition-colors"
                       >
                         <Repeat className="h-3.5 w-3.5" />
                         По подписке{e.seriesTitle ? `: ${e.seriesTitle}` : ""}
                       </Link>
                     ) : (
-                      <span className="inline-flex items-center gap-1 rounded-md border border-sky-500/30 bg-sky-500/5 px-3 py-1 text-sm font-medium text-sky-300/80">
+                      <span className="inline-flex items-center gap-1 rounded-md border border-sky-500/40 dark:border-sky-500/30 bg-sky-500/10 dark:bg-sky-500/5 px-3 py-1 text-sm font-medium text-sky-700/90 dark:text-sky-300/80">
                         <Repeat className="h-3.5 w-3.5" />
                         Регулярная{e.seriesTitle ? `: ${e.seriesTitle}` : ""}
                       </span>
@@ -1302,9 +1311,9 @@ export function V0EventPage(props: { me: any; meLoaded?: boolean }) {
                 <div className="flex justify-center pt-2">
                   <div className={cn(
                     "w-14 h-14 rounded-full flex items-center justify-center ring-1",
-                    balancePreview.severity === "LARGE" && "bg-rose-500/10 text-rose-400 ring-rose-500/30",
-                    balancePreview.severity === "MEDIUM" && "bg-amber-500/10 text-amber-300 ring-amber-500/30",
-                    balancePreview.severity === "SMALL" && "bg-emerald-500/10 text-emerald-300 ring-emerald-500/30",
+                    balancePreview.severity === "LARGE" && "bg-rose-500/10 text-rose-700 dark:text-rose-400 ring-rose-500/40 dark:ring-rose-500/30",
+                    balancePreview.severity === "MEDIUM" && "bg-amber-500/10 text-amber-700 dark:text-amber-300 ring-amber-500/40 dark:ring-amber-500/30",
+                    balancePreview.severity === "SMALL" && "bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 ring-emerald-500/40 dark:ring-emerald-500/30",
                   )}>
                     <AlertTriangle className="h-7 w-7" />
                   </div>
@@ -1318,9 +1327,9 @@ export function V0EventPage(props: { me: any; meLoaded?: boolean }) {
                       <>
                         Возможно{" "}
                         <span className={cn(
-                          balancePreview.severity === "LARGE" && "text-rose-400",
-                          balancePreview.severity === "MEDIUM" && "text-amber-300",
-                          balancePreview.severity === "SMALL" && "text-emerald-300",
+                          balancePreview.severity === "LARGE" && "text-rose-700 dark:text-rose-400",
+                          balancePreview.severity === "MEDIUM" && "text-amber-700 dark:text-amber-300",
+                          balancePreview.severity === "SMALL" && "text-emerald-700 dark:text-emerald-300",
                         )}>
                           {balancePreview.maxGoodRounds}
                         </span>{" "}
@@ -1462,9 +1471,9 @@ export function V0EventPage(props: { me: any; meLoaded?: boolean }) {
                   <span className="text-border">·</span>
                   <span className={cn(
                     "flex items-center gap-1",
-                    balancePreview.severity === "LARGE" && "text-rose-300",
-                    balancePreview.severity === "MEDIUM" && "text-amber-300",
-                    balancePreview.severity === "SMALL" && "text-emerald-300",
+                    balancePreview.severity === "LARGE" && "text-rose-700 dark:text-rose-300",
+                    balancePreview.severity === "MEDIUM" && "text-amber-700 dark:text-amber-300",
+                    balancePreview.severity === "SMALL" && "text-emerald-700 dark:text-emerald-300",
                   )}>
                     <Scale className="h-3.5 w-3.5" />
                     {balancePreview.maxGoodRounds} {roundWord(balancePreview.maxGoodRounds)}
@@ -1931,10 +1940,30 @@ export function V0EventPage(props: { me: any; meLoaded?: boolean }) {
                                   ? "Этот матч введёт его участник или организатор."
                                   : null
                               : null;
-                            const handleSelectTeam = (team: "A" | "B") => {
+                            const handleSelectTeam = async (team: "A" | "B") => {
                               if (!canEdit) return;
                               setActiveMatchId(m.id);
                               setActiveTeam(team);
+                              // Перед открытием клавиатуры — свежий refetch, чтобы не открывать ввод
+                              // если кто-то уже ввёл счёт пока юзер думал. Если матч стал FINISHED
+                              // или score?.points появился — скрываем клавиатуру и показываем актуальный счёт.
+                              if (eventId) {
+                                try {
+                                  const refreshed = await api.getEventDetails(eventId);
+                                  setData(refreshed);
+                                  const updatedMatch = refreshed.rounds
+                                    .flatMap((r) => r.matches)
+                                    .find((mm) => mm.id === m.id);
+                                  if (updatedMatch?.status === "FINISHED" || updatedMatch?.score?.points) {
+                                    // Кто-то уже ввёл — не открываем клавиатуру (info-баннер уйдёт сам через 4 сек).
+                                    setScorePadOpen(false);
+                                    setInfo("Счёт уже введён другим участником");
+                                    return;
+                                  }
+                                } catch {
+                                  /* сеть умерла — продолжаем оптимистично, submit поймает 409 если что */
+                                }
+                              }
                               setScorePadOpen(true);
                             };
                             return (

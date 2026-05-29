@@ -39,6 +39,7 @@ import org.springframework.web.filter.OncePerRequestFilter
 class SecurityConfig(
     private val jwtService: JwtService,
     private val userRepo: UserRepository,
+    private val rateLimiter: RateLimiter,
     @Value("\${app.swagger.username}") private val swaggerUsername: String,
     @Value("\${app.swagger.password}") private val swaggerPassword: String
 ) {
@@ -97,7 +98,12 @@ class SecurityConfig(
             }
         }
 
-        http.addFilterBefore(JwtAuthFilter(jwtService), UsernamePasswordAuthenticationFilter::class.java)
+        // Rate-limit фильтр перед JWT чтобы не делать лишней работы (парсинг токена)
+        // если запрос всё равно будет отброшен по лимиту. Инстанцируем вручную (не bean),
+        // чтобы Spring Boot не зарегистрировал его в глобальной servlet-цепочке дважды.
+        val rateLimitFilter = RateLimitFilter(rateLimiter)
+        http.addFilterBefore(rateLimitFilter, UsernamePasswordAuthenticationFilter::class.java)
+        http.addFilterAfter(JwtAuthFilter(jwtService), RateLimitFilter::class.java)
         http.addFilterAfter(SurveyGateFilter(userRepo), JwtAuthFilter::class.java)
         return http.build()
     }
@@ -111,12 +117,25 @@ class SecurityConfig(
             "https://www.padix.club",
             "http://localhost:5173",
             "http://localhost:8081",
-            "http://localhost:8083"
+            "http://localhost:8083",
+            // Локальный dev через hosts-трюк: padix.club → 127.0.0.1, чтобы Telegram-бот
+            // использовал один и тот же домен в проде и в локалке.
+            "http://padix.club:8083",
+            "http://www.padix.club:8083"
         )
         // Patterns (allowedOriginPatterns supports wildcards, allowedOrigins does not).
-        // Covers Cloudflare Pages preview deployments (<hash>.padix.pages.dev).
+        // Покрывает:
+        //  - Cloudflare Pages preview (<hash>.padix.pages.dev)
+        //  - lvh.me / nip.io — публичные DNS на 127.0.0.1, нужны для dev-тестов
+        //    Telegram Login Widget (он не принимает "localhost" как домен бота)
+        //  - ngrok-туннели
         config.allowedOriginPatterns = listOf(
-            "https://*.padix.pages.dev"
+            "https://*.padix.pages.dev",
+            "http://*.lvh.me:*",
+            "http://lvh.me:*",
+            "http://*.nip.io:*",
+            "https://*.ngrok-free.app",
+            "https://*.ngrok.io"
         )
         config.allowedMethods = listOf("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS")
         config.allowedHeaders = listOf("*")

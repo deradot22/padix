@@ -19,11 +19,21 @@ class UserAccount(
     @Column(name = "id", nullable = false)
     var id: UUID? = null,
 
-    @Column(name = "email", nullable = false, unique = true)
-    var email: String = "",
+    /**
+     * Email юзера. Nullable: при регистрации через Telegram email может отсутствовать —
+     * Telegram такое поле не отдаёт. Юзер может добавить email позже через /settings,
+     * это потребует подтверждения по ссылке.
+     */
+    @Column(name = "email", nullable = true, unique = true)
+    var email: String? = null,
 
-    @Column(name = "password_hash", nullable = false)
-    var passwordHash: String = "",
+    /**
+     * Bcrypt-хэш пароля. Nullable для OAuth-only юзеров (зарегались через Telegram/Google
+     * и пароль не задавали). Логин по паролю для таких аккаунтов невозможен пока юзер
+     * не задаст пароль через настройки.
+     */
+    @Column(name = "password_hash", nullable = true)
+    var passwordHash: String? = null,
 
     @Column(name = "player_id", nullable = false, unique = true)
     var playerId: UUID? = null,
@@ -67,6 +77,49 @@ class UserAccount(
      */
     @Column(name = "is_feedback_admin", nullable = false)
     var isFeedbackAdmin: Boolean = false,
+
+    /**
+     * Когда email был подтверждён по ссылке. null — email не подтверждён.
+     * Существующим аккаунтам выставляется now() в миграции V37, чтобы текущие юзеры
+     * не получали баннер «подтвердите email».
+     */
+    @Column(name = "email_verified_at")
+    var emailVerifiedAt: Instant? = null,
+
+    /**
+     * Числовой ID пользователя в Telegram. Используется для логина через Telegram Login Widget.
+     * Отдельно от существующего telegram_chat.chat_id, который хранит куда слать нотификации
+     * (может быть группа или канал).
+     */
+    @Column(name = "telegram_user_id", unique = true)
+    var telegramUserId: Long? = null,
+
+    /** @username в Telegram (если у юзера выставлен). */
+    @Column(name = "telegram_username", length = 64)
+    var telegramUsername: String? = null,
+
+    /** URL аватара из Telegram (если у юзера выставлен public profile photo). */
+    @Column(name = "telegram_photo_url", length = 512)
+    var telegramPhotoUrl: String? = null,
+
+    /**
+     * Google subject ID — стабильный уникальный идентификатор юзера в Google. Не меняется
+     * при смене email/имени в Google-аккаунте. Из claim `sub` ID-токена при логине через Google.
+     */
+    @Column(name = "google_sub", length = 255, unique = true)
+    var googleSub: String? = null,
+
+    /**
+     * Facebook user ID (т.н. ASID). Уникальный per-app, не меняется. Получается из /me?fields=id.
+     */
+    @Column(name = "facebook_sub", length = 64, unique = true)
+    var facebookSub: String? = null,
+
+    /**
+     * Twitter/X user ID. Стабилен, в отличие от @username. Получается из /2/users/me.
+     */
+    @Column(name = "twitter_sub", length = 64, unique = true)
+    var twitterSub: String? = null,
 
     @CreationTimestamp
     @Column(name = "created_at", nullable = false)

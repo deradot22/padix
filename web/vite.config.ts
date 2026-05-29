@@ -14,6 +14,12 @@ export default defineConfig({
   },
   server: {
     port: 5173,
+    // Для dev-тестов OAuth-провайдеров (Telegram Login Widget не принимает localhost
+    // как домен бота) — разрешаем альтернативы:
+    //   - padix.club — если прописали в hosts на 127.0.0.1, то же доменное имя что в проде
+    //   - lvh.me/nip.io — публично резолвятся в 127.0.0.1, не требуют hosts
+    //   - ngrok — туннели наружу
+    allowedHosts: ["localhost", "padix.club", "www.padix.club", ".lvh.me", "lvh.me", ".nip.io", ".ngrok-free.app", ".ngrok.io"],
     proxy: {
       '/api': {
         target: process.env.API_TARGET ?? 'http://localhost:8080',
