@@ -45,6 +45,8 @@ dependencies {
     implementation("com.bucket4j:bucket4j-core:8.10.1")
 
     testImplementation("org.springframework.boot:spring-boot-starter-test")
+    // Котлин-friendly обёртка над Mockito (whenever/any() без проблем с null-safety).
+    testImplementation("org.mockito.kotlin:mockito-kotlin:5.4.0")
 }
 
 tasks.withType<KotlinCompile> {
