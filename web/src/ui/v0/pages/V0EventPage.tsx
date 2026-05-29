@@ -108,9 +108,13 @@ export function V0EventPage(props: { me: any; meLoaded?: boolean }) {
   const [balancePreview, setBalancePreview] = useState<BalancePreview | null>(null);
   const [switchingMode, setSwitchingMode] = useState(false);
   useEffect(() => {
-    modalOpenRef.current =
-      balanceModalOpen || editOpen || inviteOpen || roundsOpen || statsOpen || startPromptOpen || editScoresOpen || scorePadOpen;
-  }, [balanceModalOpen, editOpen, inviteOpen, roundsOpen, statsOpen, startPromptOpen, editScoresOpen, scorePadOpen]);
+    // Пауза polling'а ТОЛЬКО когда юзер реально что-то вводит/выбирает в форме:
+    // editOpen (форма редактирования игры), inviteOpen (поиск друзей),
+    // editScoresOpen (форма массовой правки счёта), scorePadOpen (открытая клавиатура).
+    // Чисто «смотровые» модалы (Раунды, статистика, balance preview, prompt) НЕ паузят polling —
+    // юзер хочет видеть live-обновления когда сам ничего не нажимает.
+    modalOpenRef.current = editOpen || inviteOpen || editScoresOpen || scorePadOpen;
+  }, [editOpen, inviteOpen, editScoresOpen, scorePadOpen]);
 
   const navigateAfterScore = (rounds: EventDetails["rounds"], savedMatchId: string) => {
     const currentIdx = rounds.findIndex((round) =>
@@ -488,16 +492,21 @@ export function V0EventPage(props: { me: any; meLoaded?: boolean }) {
     setScoreByMatch((prev) => {
       const next = { ...prev };
       rounds.flatMap((r) => r.matches).forEach((m) => {
-        if (next[m.id]) return;
         const points = m.score?.points;
         if (points) {
+          // Если API вернул итоговый счёт — синхронизируем локальный state, даже если уже была
+          // инициализационная заглушка {0:0}. Иначе при polling'е счёт от другого игрока
+          // не отображался у владельца — баг «зелёная обводка, а счёта нет».
           const a = points.teamAPoints ?? 0;
           const b = points.teamBPoints ?? 0;
           next[m.id] = { a, b };
           lastAutoSavedRef.current[m.id] = `${m.id}:${a},${b}`;
           return;
         }
-        next[m.id] = { a: 0, b: 0 };
+        // API ещё не имеет счёта — НЕ перезаписываем то что юзер мог уже набрать локально.
+        if (!next[m.id]) {
+          next[m.id] = { a: 0, b: 0 };
+        }
       });
       return next;
     });
@@ -1931,10 +1940,30 @@ export function V0EventPage(props: { me: any; meLoaded?: boolean }) {
                                   ? "Этот матч введёт его участник или организатор."
                                   : null
                               : null;
-                            const handleSelectTeam = (team: "A" | "B") => {
+                            const handleSelectTeam = async (team: "A" | "B") => {
                               if (!canEdit) return;
                               setActiveMatchId(m.id);
                               setActiveTeam(team);
+                              // Перед открытием клавиатуры — свежий refetch, чтобы не открывать ввод
+                              // если кто-то уже ввёл счёт пока юзер думал. Если матч стал FINISHED
+                              // или score?.points появился — скрываем клавиатуру и показываем актуальный счёт.
+                              if (eventId) {
+                                try {
+                                  const refreshed = await api.getEventDetails(eventId);
+                                  setData(refreshed);
+                                  const updatedMatch = refreshed.rounds
+                                    .flatMap((r) => r.matches)
+                                    .find((mm) => mm.id === m.id);
+                                  if (updatedMatch?.status === "FINISHED" || updatedMatch?.score?.points) {
+                                    // Кто-то уже ввёл — не открываем клавиатуру (info-баннер уйдёт сам через 4 сек).
+                                    setScorePadOpen(false);
+                                    setInfo("Счёт уже введён другим участником");
+                                    return;
+                                  }
+                                } catch {
+                                  /* сеть умерла — продолжаем оптимистично, submit поймает 409 если что */
+                                }
+                              }
                               setScorePadOpen(true);
                             };
                             return (
