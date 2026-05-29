@@ -163,10 +163,10 @@ export function V0RegisterPage(props: { onAuth: (me: any) => void }) {
                 <span className="text-xs uppercase tracking-wide text-muted-foreground">или</span>
                 <div className="h-px flex-1 bg-border" />
               </div>
-              <div className="flex flex-col items-center gap-3">
+              <div className="flex flex-row items-center justify-center gap-3 flex-wrap">
                 {showGoogle && authConfig?.googleClientId ? (
                   googleLoading ? (
-                    <div className="text-sm text-muted-foreground">Создаём аккаунт через Google…</div>
+                    <div className="h-10 w-10 flex items-center justify-center text-xs text-muted-foreground">…</div>
                   ) : (
                     <GoogleLoginButton
                       clientId={authConfig.googleClientId}
@@ -176,21 +176,9 @@ export function V0RegisterPage(props: { onAuth: (me: any) => void }) {
                     />
                   )
                 ) : null}
-                {showFacebook && authConfig?.facebookAppId ? (
-                  fbLoading ? (
-                    <div className="text-sm text-muted-foreground">Создаём аккаунт через Facebook…</div>
-                  ) : (
-                    <FacebookLoginButton
-                      appId={authConfig.facebookAppId}
-                      onAuth={onFacebookAuth}
-                      text="Зарегистрироваться через Facebook"
-                    />
-                  )
-                ) : null}
-                {showTwitter ? <TwitterLoginButton text="Зарегистрироваться через X" /> : null}
                 {showTelegram && authConfig?.telegramBotUsername ? (
                   tgLoading ? (
-                    <div className="text-sm text-muted-foreground">Создаём аккаунт через Telegram…</div>
+                    <div className="h-10 w-10 flex items-center justify-center text-xs text-muted-foreground">…</div>
                   ) : (
                     <TelegramLoginButton
                       botUsername={authConfig.telegramBotUsername}
@@ -199,6 +187,17 @@ export function V0RegisterPage(props: { onAuth: (me: any) => void }) {
                     />
                   )
                 ) : null}
+                {showFacebook && authConfig?.facebookAppId ? (
+                  fbLoading ? (
+                    <div className="h-10 w-10 flex items-center justify-center text-xs text-muted-foreground">…</div>
+                  ) : (
+                    <FacebookLoginButton
+                      appId={authConfig.facebookAppId}
+                      onAuth={onFacebookAuth}
+                    />
+                  )
+                ) : null}
+                {showTwitter ? <TwitterLoginButton /> : null}
               </div>
               {showTelegram ? (
                 <div className="text-xs text-muted-foreground text-center">

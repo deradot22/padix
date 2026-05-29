@@ -1,5 +1,6 @@
 package com.padelgo.auth
 
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties
 import com.fasterxml.jackson.annotation.JsonProperty
 import com.fasterxml.jackson.databind.ObjectMapper
 import com.padelgo.api.ApiException
@@ -203,10 +204,15 @@ data class FacebookVerifyInfo(
     val email: String?,
 )
 
+// Все Facebook DTO с @JsonIgnoreProperties — Graph API часто кладёт extra поля
+// (например `scopes`, `user_id`, `application`, `metadata`), а мы декодим лишь подмножество.
+
+@JsonIgnoreProperties(ignoreUnknown = true)
 private data class FacebookDebugTokenResponse(
     val data: FacebookDebugData? = null,
 )
 
+@JsonIgnoreProperties(ignoreUnknown = true)
 private data class FacebookDebugData(
     @JsonProperty("app_id") val appId: String? = null,
     @JsonProperty("is_valid") val isValid: Boolean? = null,
@@ -214,6 +220,7 @@ private data class FacebookDebugData(
     @JsonProperty("expires_at") val expiresAt: Long? = null,
 )
 
+@JsonIgnoreProperties(ignoreUnknown = true)
 private data class FacebookProfile(
     val id: String = "",
     val email: String? = null,
@@ -222,10 +229,12 @@ private data class FacebookProfile(
     val picture: FacebookPicture? = null,
 )
 
+@JsonIgnoreProperties(ignoreUnknown = true)
 private data class FacebookPicture(
     val data: FacebookPictureData? = null,
 )
 
+@JsonIgnoreProperties(ignoreUnknown = true)
 private data class FacebookPictureData(
     val url: String? = null,
 )

@@ -1,5 +1,6 @@
 package com.padelgo.auth
 
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties
 import com.fasterxml.jackson.annotation.JsonProperty
 import com.fasterxml.jackson.databind.ObjectMapper
 import com.padelgo.api.ApiException
@@ -142,6 +143,7 @@ class GoogleAuthService(
         val claims = try {
             mapper.readValue(responseBody, GoogleTokenClaims::class.java)
         } catch (e: Exception) {
+            log.warn("[GOOGLE-AUTH] failed to parse tokeninfo response: {} body={}", e.message, responseBody)
             throw ApiException(HttpStatus.UNAUTHORIZED, "Malformed Google token response")
         }
 
@@ -189,7 +191,12 @@ data class GoogleVerifyInfo(
     val emailVerified: Boolean,
 )
 
-/** Подмножество claim'ов, которое возвращает tokeninfo endpoint. */
+/**
+ * Подмножество claim'ов, которое возвращает tokeninfo endpoint.
+ * `@JsonIgnoreProperties` обязательно — Google возвращает много служебных полей
+ * (`azp`, `iat`, `nonce`, `jti`, `at_hash`, `locale`, ...), без этого Jackson падает.
+ */
+@JsonIgnoreProperties(ignoreUnknown = true)
 private data class GoogleTokenClaims(
     @JsonProperty("sub") val sub: String = "",
     @JsonProperty("aud") val aud: String? = null,

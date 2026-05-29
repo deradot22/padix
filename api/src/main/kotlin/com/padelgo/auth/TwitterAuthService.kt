@@ -1,5 +1,6 @@
 package com.padelgo.auth
 
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties
 import com.fasterxml.jackson.annotation.JsonProperty
 import com.fasterxml.jackson.databind.ObjectMapper
 import com.padelgo.api.ApiException
@@ -260,6 +261,10 @@ class TwitterAuthService(
     }
 }
 
+// @JsonIgnoreProperties по той же причине что в Google/Facebook — Twitter может вернуть
+// extra поля (rate-limit метаданные, includes, errors-меньшие и т.п.).
+
+@JsonIgnoreProperties(ignoreUnknown = true)
 private data class TwitterTokenResponse(
     @JsonProperty("access_token") val accessToken: String = "",
     @JsonProperty("token_type") val tokenType: String? = null,
@@ -268,10 +273,12 @@ private data class TwitterTokenResponse(
     val scope: String? = null,
 )
 
+@JsonIgnoreProperties(ignoreUnknown = true)
 private data class TwitterUserResponse(
     val data: TwitterUserData? = null,
 )
 
+@JsonIgnoreProperties(ignoreUnknown = true)
 private data class TwitterUserData(
     val id: String? = null,
     val name: String? = null,
