@@ -26,6 +26,7 @@ class AuthController(
     private val googleAuth: GoogleAuthService,
     private val facebookAuth: FacebookAuthService,
     private val twitterAuth: TwitterAuthService,
+    private val telegramBotLogin: TelegramBotLoginService,
     @org.springframework.beans.factory.annotation.Value("\${app.telegram.bot-username:}") private val telegramBotUsername: String,
     // bot_id — числовой ID бота (первая часть TELEGRAM_BOT_TOKEN до ':'). Нужен фронту для redirect-flow
     // на oauth.telegram.org/auth?bot_id=... — это надёжнее iframe-виджета с попапами.
@@ -95,6 +96,33 @@ class AuthController(
     )
     @PostMapping("/facebook")
     fun facebook(@Valid @RequestBody req: FacebookAuthRequest): AuthResponse = facebookAuth.loginOrRegister(req.accessToken)
+
+    @Operation(
+        summary = "Старт Telegram-логина через бота",
+        description = "Создаёт одноразовый токен и возвращает deep-link `t.me/<bot>?start=auth_<token>`. " +
+            "Фронт открывает deep-link → юзер тапает Start в боте → бот шлёт inline-кнопки подтверждения. " +
+            "После подтверждения фронт обменивает токен на JWT через /bot-login/complete."
+    )
+    @PostMapping("/telegram/bot-login/start")
+    fun telegramBotLoginStart(): BotLoginStartResult = telegramBotLogin.start()
+
+    @Operation(
+        summary = "Статус токена для бот-логина (polling)",
+        description = "Возвращает PENDING (ждём бота) / AWAITING_APPROVAL (юзер в боте, ждём кнопки) / " +
+            "APPROVED (можно обменивать на JWT) / REJECTED / EXPIRED. Полить раз в 1-2 сек."
+    )
+    @GetMapping("/telegram/bot-login/status")
+    fun telegramBotLoginStatus(@org.springframework.web.bind.annotation.RequestParam token: String): BotLoginStatus =
+        telegramBotLogin.status(token)
+
+    @Operation(
+        summary = "Завершить бот-логин и получить JWT",
+        description = "Только после того как status=APPROVED. Создаёт нового юзера если telegramUserId " +
+            "не привязан, иначе логинит существующего. Опц. поля name/email используются для нового юзера."
+    )
+    @PostMapping("/telegram/bot-login/complete")
+    fun telegramBotLoginComplete(@RequestBody req: BotLoginCompleteRequest): AuthResponse =
+        telegramBotLogin.complete(req)
 
     @Operation(
         summary = "Старт Twitter/X OAuth — редирект на x.com/authorize",
