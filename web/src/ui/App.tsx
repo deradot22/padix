@@ -60,6 +60,31 @@ export function App() {
     return () => { cancelled = true; };
   }, []);
 
+  // Listener для popup-based OAuth (Telegram-popup): когда popup-окно ставит padix_token
+  // в localStorage, storage-event срабатывает в этом (parent) окне → подтягиваем me и редиректим.
+  useEffect(() => {
+    const onStorage = async (e: StorageEvent) => {
+      if (e.key !== "padix_token") return;
+      if (!e.newValue) {
+        // Logout в другой вкладке → сбрасываем тут
+        setMe(null);
+        return;
+      }
+      try {
+        const m = await api.me();
+        setMe(m);
+        // Если popup залогинил на /login странице — увезём в приложение.
+        if (location.pathname === "/login" || location.pathname === "/register") {
+          navigate(m.surveyCompleted ? "/" : "/survey", { replace: true });
+        }
+      } catch {
+        /* ignore — токен мог быть невалидным */
+      }
+    };
+    window.addEventListener("storage", onStorage);
+    return () => window.removeEventListener("storage", onStorage);
+  }, [location.pathname, navigate]);
+
   async function refreshNotifications() {
     if (!me) {
       setNotificationCount(0);

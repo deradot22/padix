@@ -41,21 +41,27 @@ export function V0TelegramCallbackPage(props: { onAuth: (me: MeResponse) => void
     // Чистим hash чтобы payload не светился в адресной строке
     window.history.replaceState(null, "", "/auth/telegram-callback");
 
+    // Эта страница может открываться двумя способами:
+    //  - В popup-окне (window.opener — родительская страница /login или /settings)
+    //  - Full-page redirect (window.opener отсутствует или === window)
+    // В popup'е после логина мы закрываемся — opener подхватит новый токен через storage-event.
+    // В redirect-режиме делаем обычную навигацию.
+    const inPopup = !!window.opener && window.opener !== window;
+
     let cancelled = false;
     if (isLink) {
-      // Привязка — юзер уже авторизован, дёргаем /api/me/auth/telegram/link
       api
         .linkTelegram(payload)
         .then((me) => {
           if (cancelled) return;
           props.onAuth(me);
-          nav("/settings?tab=security", { replace: true });
+          if (inPopup) window.close();
+          else nav("/settings?tab=security", { replace: true });
         })
         .catch((e: any) => {
           if (!cancelled) setError(e?.message ?? "Не удалось привязать Telegram");
         });
     } else {
-      // Логин или регистрация
       api
         .loginViaTelegram(payload)
         .then(async ({ token }) => {
@@ -64,7 +70,8 @@ export function V0TelegramCallbackPage(props: { onAuth: (me: MeResponse) => void
           const me = await api.me();
           if (cancelled) return;
           props.onAuth(me);
-          nav(me.surveyCompleted ? "/" : "/survey", { replace: true });
+          if (inPopup) window.close();
+          else nav(me.surveyCompleted ? "/" : "/survey", { replace: true });
         })
         .catch((e: any) => {
           if (!cancelled) setError(e?.message ?? "Не удалось войти через Telegram");

@@ -32,7 +32,33 @@ export function TelegramLoginButton(props: {
     const linkSuffix = props.mode === "link" ? "?link=true" : "";
     const returnTo = `${origin}/auth/telegram-callback${linkSuffix}`;
     const url = `https://oauth.telegram.org/auth?bot_id=${props.botId}&origin=${encodeURIComponent(origin)}&return_to=${encodeURIComponent(returnTo)}&request_access=write`;
-    window.location.href = url;
+
+    // Сначала пробуем popup — если у юзера активная Telegram Web сессия в этом браузере,
+    // OAuth сразу скажет «Confirm?» и завершится без ввода телефона.
+    // Popup открывается из синхронного onClick handler → не блокируется большинством браузеров.
+    const popup = window.open(
+      url,
+      "telegram_oauth",
+      "width=550,height=600,resizable=yes,scrollbars=yes",
+    );
+
+    if (!popup || popup.closed) {
+      // Popup заблокирован браузером — fallback на full-page redirect.
+      window.location.href = url;
+      return;
+    }
+
+    // Поллим закрытие popup'а. Callback-страница сама закроется после login API.
+    // Когда закрылся — opener (этот window) узнаёт о новом токене через `storage` event
+    // в App.tsx и обновляет me.
+    const timer = window.setInterval(() => {
+      if (popup.closed) {
+        window.clearInterval(timer);
+        // Если popup закрылся БЕЗ установки токена (юзер закрыл вручную) — ничего не делаем.
+        // Если ТОКЕН появился — App.tsx уже обновил me через storage-event, остаётся
+        // лишь убедиться что мы на правильной странице.
+      }
+    }, 500);
   };
 
   return (
