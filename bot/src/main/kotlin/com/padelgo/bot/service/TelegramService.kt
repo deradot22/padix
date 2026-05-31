@@ -809,8 +809,11 @@ class TelegramService(
                 var pinnedMsgId: Long? = null
                 if (pinAfterSend) {
                     val chatInternalId = chat.id
-                    if (chatInternalId != null) {
-                        unpinPreviousAnnouncementsInChat(chat.chatId, chatInternalId)
+                    if (chatInternalId != null && recordForEventId != null) {
+                        // Снимаем только наш собственный прежний pin (для случая ре-анонса того же
+                        // события). Pin'ы ДРУГИХ событий (других подписок) не трогаем — у каждой
+                        // подписки/игры может быть свой закреплённый анонс одновременно.
+                        unpinPreviousPinForEventInChat(recordForEventId, chat.chatId, chatInternalId)
                     }
                     try {
                         client.pinChatMessage(chat.chatId, sent.messageId, disableNotification = true)
@@ -837,9 +840,15 @@ class TelegramService(
         return posted
     }
 
-    /** Снимает все ранее закреплённые анонсы Padix в этом чате и обнуляет pinned_message_id. */
-    private fun unpinPreviousAnnouncementsInChat(telegramChatId: Long, internalChatId: UUID) {
-        val previous = postRepo.findAllByTelegramChatIdAndPinnedMessageIdIsNotNull(internalChatId)
+    /**
+     * Снимает ранее закреплённый pin ЭТОГО ЖЕ события в этом чате (для случая re-pin
+     * при ре-анонсе того же event'а — например после редактирования).
+     * Pin'ы ДРУГИХ событий (других подписок) не трогаются — у каждой подписки/игры
+     * может быть свой закреплённый анонс одновременно (раньше был баг: при материализации
+     * новой серии снимались pin'ы всех прежних анонсов в чате).
+     */
+    private fun unpinPreviousPinForEventInChat(eventId: UUID, telegramChatId: Long, internalChatId: UUID) {
+        val previous = postRepo.findAllByEventIdAndTelegramChatIdAndPinnedMessageIdIsNotNull(eventId, internalChatId)
         for (prev in previous) {
             val prevMsgId = prev.pinnedMessageId ?: continue
             try {

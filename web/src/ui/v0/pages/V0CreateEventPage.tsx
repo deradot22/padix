@@ -103,9 +103,11 @@ export function V0CreateEventPage(props: {
         setMaterializeMode(s.materializeMode ?? "HOURS_BEFORE");
         setSeriesReminderHours(s.reminderHours ?? null);
         setSeriesPinAnnouncement(s.pinAnnouncement ?? null);
-        if (s.targetChatIds && s.targetChatIds.length > 0) {
-          setSelectedTgChatIds(new Set(s.targetChatIds));
-        }
+        // При редактировании отражаем РОВНО то, что сохранено: если пользователь раньше
+        // выбрал конкретные группы — показываем их; если targetChatIds пуст (старые серии
+        // на legacy-fallback «все группы») — НИЧЕГО не пред-выбираем, пусть пользователь
+        // отметит явно, иначе всегда казалось «галки на все» и не было способа их снять.
+        setSelectedTgChatIds(new Set(s.targetChatIds ?? []));
         setGameMode(s.pairingMode === "BALANCED" ? "balanced" : "round_robin");
       } catch (e: any) {
         setError(e?.message ?? "Не удалось загрузить подписку");

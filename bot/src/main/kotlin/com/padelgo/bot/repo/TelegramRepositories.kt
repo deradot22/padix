@@ -28,8 +28,11 @@ interface TelegramChatRepository : JpaRepository<TelegramChat, UUID> {
 interface EventTelegramPostRepository : JpaRepository<EventTelegramPost, UUID> {
     fun findAllByEventId(eventId: UUID): List<EventTelegramPost>
 
-    /** Все ранее закреплённые посты в этом telegram-чате (для unpin при новом анонсе). */
+    /** Все ранее закреплённые посты в этом telegram-чате (legacy: для unpin при новом анонсе). */
     fun findAllByTelegramChatIdAndPinnedMessageIdIsNotNull(telegramChatId: UUID): List<EventTelegramPost>
+
+    /** Ранее закреплённый pin КОНКРЕТНОГО события в этом telegram-чате (для re-pin при ре-анонсе того же события — без сноса pin'ов других подписок). */
+    fun findAllByEventIdAndTelegramChatIdAndPinnedMessageIdIsNotNull(eventId: UUID, telegramChatId: UUID): List<EventTelegramPost>
 }
 
 interface BotEventSeriesRepository : org.springframework.data.jpa.repository.JpaRepository<com.padelgo.bot.domain.BotEventSeries, UUID>
