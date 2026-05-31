@@ -603,6 +603,31 @@ export const api = {
   /** Логин/регистрация через Facebook Login. Принимает user access_token. */
   loginViaFacebook: (accessToken: string) =>
     request<{ token: string }>("/api/auth/facebook", { method: "POST", body: JSON.stringify({ accessToken }) }),
+
+  // Telegram login через бота — современный flow без OAuth-формы с телефоном.
+  // Фронт зовёт start → получает {token, deepLink} → открывает deepLink → поллит status →
+  // когда APPROVED шлёт complete с опц. полями и получает JWT.
+  /** Создать одноразовый токен, получить deep-link на бота. */
+  telegramBotLoginStart: () =>
+    request<{ token: string; deepLink: string; botUsername: string }>(
+      "/api/auth/telegram/bot-login/start",
+      { method: "POST" },
+    ),
+  /** Поллить статус: PENDING → AWAITING_APPROVAL → APPROVED / REJECTED / EXPIRED. */
+  telegramBotLoginStatus: (token: string) =>
+    request<{
+      status: "PENDING" | "AWAITING_APPROVAL" | "APPROVED" | "REJECTED" | "EXPIRED";
+      telegramName: string | null;
+      telegramUsername: string | null;
+      photoUrl: string | null;
+      existingUser: boolean | null;
+    }>(`/api/auth/telegram/bot-login/status?token=${encodeURIComponent(token)}`),
+  /** Обменять APPROVED-токен на JWT (создаёт юзера если нового). */
+  telegramBotLoginComplete: (token: string, name?: string | null, email?: string | null) =>
+    request<{ token: string }>("/api/auth/telegram/bot-login/complete", {
+      method: "POST",
+      body: JSON.stringify({ token, name: name || null, email: email || null }),
+    }),
   /**
    * URL для старта Twitter OAuth — браузер должен сделать window.location.href = это.
    * Бэк 302-редиректит на x.com/authorize, потом вернётся на /auth/oauth-callback#token=...

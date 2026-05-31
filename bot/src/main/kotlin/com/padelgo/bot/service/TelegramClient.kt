@@ -58,7 +58,8 @@ data class TgUser(
     val id: Long,
     @JsonProperty("is_bot") val isBot: Boolean = false,
     @JsonProperty("first_name") val firstName: String? = null,
-    val username: String? = null
+    @JsonProperty("last_name") val lastName: String? = null,
+    val username: String? = null,
 )
 
 @JsonIgnoreProperties(ignoreUnknown = true)
@@ -89,7 +90,17 @@ data class TgMessage(
 data class TgUpdate(
     @JsonProperty("update_id") val updateId: Long,
     val message: TgMessage? = null,
-    @JsonProperty("channel_post") val channelPost: TgMessage? = null
+    @JsonProperty("channel_post") val channelPost: TgMessage? = null,
+    @JsonProperty("callback_query") val callbackQuery: TgCallbackQuery? = null,
+)
+
+@JsonIgnoreProperties(ignoreUnknown = true)
+data class TgCallbackQuery(
+    val id: String,
+    val from: TgUser,
+    val message: TgMessage? = null,
+    /** Свободная строка которую мы прислали в callback_data inline-кнопки. */
+    val data: String? = null,
 )
 
 @JsonIgnoreProperties(ignoreUnknown = true)
@@ -124,7 +135,8 @@ class TelegramClient(
     }
 
     fun getUpdates(offset: Long, timeoutSeconds: Int): List<TgUpdate> {
-        val allowed = java.net.URLEncoder.encode("[\"message\",\"channel_post\"]", "UTF-8")
+        // callback_query — для inline-кнопок подтверждения бот-логина (V42).
+        val allowed = java.net.URLEncoder.encode("[\"message\",\"channel_post\",\"callback_query\"]", "UTF-8")
         val url = "${baseUrl()}/getUpdates?offset=$offset&timeout=$timeoutSeconds&allowed_updates=$allowed"
         val resp = restClient.get()
             .uri(url)
@@ -207,6 +219,26 @@ class TelegramClient(
             throw TelegramApiException("sendMessage to $chatId failed: ${resp.description}", resp.errorCode)
         }
         return resp.result
+    }
+
+    /**
+     * Подтвердить получение callback_query. Telegram требует это в течение ~30 сек,
+     * иначе у юзера в чате крутится индикатор. Можно передать popup-текст для тоста.
+     */
+    fun answerCallbackQuery(callbackQueryId: String, text: String? = null) {
+        if (props.dryRun) return
+        val body = mutableMapOf<String, Any>("callback_query_id" to callbackQueryId)
+        if (text != null) body["text"] = text
+        val resp = restClient.post()
+            .uri("${baseUrl()}/answerCallbackQuery")
+            .contentType(MediaType.APPLICATION_JSON)
+            .body(body)
+            .retrieve()
+            .body<TgResponse<Any>>()
+            ?: throw TelegramApiException("answerCallbackQuery: empty response")
+        if (!resp.ok) {
+            log.warn("answerCallbackQuery failed: {}", resp.description)
+        }
     }
 
     /**
@@ -306,5 +338,15 @@ object TelegramInlineKeyboard {
         "inline_keyboard" to listOf(
             listOf(mapOf("text" to text, "url" to url))
         )
+    )
+
+    /**
+     * Кнопки с `callback_data` — при тапе Telegram шлёт боту callback_query.
+     * Принимает список «рядов»: каждый ряд — список (text, data) пар.
+     */
+    fun callbackKeyboard(rows: List<List<Pair<String, String>>>): Map<String, Any> = mapOf(
+        "inline_keyboard" to rows.map { row ->
+            row.map { (text, data) -> mapOf("text" to text, "callback_data" to data) }
+        }
     )
 }
