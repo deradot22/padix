@@ -1,6 +1,7 @@
 package com.padelgo.bot.api
 
 import com.padelgo.bot.service.LinkTokenInfo
+import com.padelgo.bot.service.RepinUpcomingResult
 import com.padelgo.bot.service.TelegramChatInfo
 import com.padelgo.bot.service.TelegramService
 import com.padelgo.bot.service.TelegramUserSettingsInfo
@@ -143,6 +144,15 @@ class TelegramController(
         )
         return TelegramSettingsResponse.from(updated)
     }
+
+    /**
+     * Backfill: закрепляет анонсы всех будущих игр, у которых есть запись в
+     * event_telegram_post без pin (pinned_message_id null). Идемпотентно.
+     * Аутентификация — через `X-Internal-Secret` (InternalAuthFilter), как все
+     * `/api/telegram/*`. `X-User-Id` не требуется — глобальная операция.
+     */
+    @PostMapping("/admin/repin-upcoming")
+    fun repinUpcoming(): RepinUpcomingResult = service.repinAllUpcoming()
 
     @PatchMapping("/chats/{chatId}/preferences")
     fun updateChatPreferences(

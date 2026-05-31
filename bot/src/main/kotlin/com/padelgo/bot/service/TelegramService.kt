@@ -99,6 +99,13 @@ data class TelegramCancellationOriginalPost(
     val pinnedMessageId: Long?
 )
 
+/** Результат backfill-операции `repinAllUpcoming`. */
+data class RepinUpcomingResult(
+    val pinned: Int,
+    val skipped: Int,
+    val reorderedChats: Int,
+)
+
 @Service
 class TelegramService(
     private val client: TelegramClient,
@@ -945,6 +952,55 @@ class TelegramService(
                 log.warn("cleanupPastPins post {} failed: {}", post.id, e.message)
             }
         }
+    }
+
+    /**
+     * Backfill: для всех ОТКРЫТЫХ будущих игр, у которых есть запись event_telegram_post
+     * без pin (pinned_message_id null), делаем pin (тихо: `disable_notification=true`,
+     * а служебное «Bot pinned a message» бот удалит сам в handleUpdate). После —
+     * пересортировка по дате в каждом затронутом чате. Идемпотентно: уже-закреплённые
+     * посты пропускаются. Прошедшие игры тоже пропускаются (их разруливает cleanupPastPins).
+     */
+    @Transactional
+    fun repinAllUpcoming(): RepinUpcomingResult {
+        if (!client.isConfigured()) return RepinUpcomingResult(0, 0, 0)
+        val now = Instant.now()
+        var pinned = 0
+        var skipped = 0
+        val touchedChats = mutableSetOf<Pair<Long, UUID>>()
+        for (post in postRepo.findAll()) {
+            try {
+                if (post.pinnedMessageId != null) { skipped++; continue }
+                val eventId = post.eventId ?: continue
+                val event = eventRepo.findById(eventId).orElse(null) ?: continue
+                val tz = event.seriesId?.let { sid ->
+                    seriesRepo.findById(sid).orElse(null)?.timezone?.let { runCatching { ZoneId.of(it) }.getOrNull() }
+                } ?: ZoneId.of("UTC")
+                val endInstant = LocalDateTime.of(event.date, event.endTime).atZone(tz).toInstant()
+                if (endInstant.isBefore(now)) { skipped++; continue }
+                val chatInternalId = post.telegramChatId ?: continue
+                val tgChat = chatRepo.findById(chatInternalId).orElse(null) ?: continue
+                try {
+                    client.pinChatMessage(tgChat.chatId, post.messageId, disableNotification = true)
+                    post.pinnedMessageId = post.messageId
+                    postRepo.save(post)
+                    pinned++
+                    touchedChats.add(tgChat.chatId to chatInternalId)
+                    log.info("Backfill pinned event {} msg {} in chat {}", eventId, post.messageId, tgChat.chatId)
+                } catch (e: Exception) {
+                    log.warn("Backfill pin {} chat {} failed: {}", post.messageId, tgChat.chatId, e.message)
+                    skipped++
+                }
+            } catch (e: Exception) {
+                log.warn("repinAllUpcoming post {}: {}", post.id, e.message)
+                skipped++
+            }
+        }
+        for ((tgId, internalId) in touchedChats) {
+            try { reorderPinsByDate(tgId, internalId) } catch (_: Exception) { /* нестрашно */ }
+        }
+        log.info("repinAllUpcoming done: pinned={} skipped={} chats={}", pinned, skipped, touchedChats.size)
+        return RepinUpcomingResult(pinned = pinned, skipped = skipped, reorderedChats = touchedChats.size)
     }
 
     /**
