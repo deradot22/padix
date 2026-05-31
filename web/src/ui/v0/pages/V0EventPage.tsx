@@ -249,6 +249,15 @@ export function V0EventPage(props: { me: any; meLoaded?: boolean }) {
     if (!current) return;
     const key = `${activeMatchId}:${current.a},${current.b}`;
     if (lastAutoSavedRef.current[activeMatchId] === key) return;
+    // Не плодим пустые {0,0} черновики: если оба нуля и на бэке черновика ещё нет —
+    // сохранять нечего. Иначе бы автотаймер засорял БД нулями при простом открытии модала
+    // (а handleSelectTeam раньше падал на этом конфликт-чеке).
+    if (current.a === 0 && current.b === 0) {
+      const matchInData = data?.rounds
+        ?.flatMap((r) => r.matches)
+        .find((mm) => mm.id === activeMatchId);
+      if (!matchInData?.score?.points) return;
+    }
     const timer = setTimeout(() => saveDraftIfNeeded(activeMatchId, current.a, current.b), 700);
     return () => clearTimeout(timer);
   }, [eventId, activeMatchId, scoreByMatch, data?.event, data?.isAuthor]);
