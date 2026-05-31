@@ -151,6 +151,13 @@ data class GoogleAuthRequest(
     val idToken: String
 )
 
+@Schema(description = "Подтверждение привязки Telegram по ссылке из письма")
+data class ConfirmTelegramLinkRequest(
+    @field:NotBlank
+    @Schema(description = "Сырой confirm-токен из URL")
+    val confirm: String,
+)
+
 @Schema(description = "Access token от Facebook JS SDK после FB.login()")
 data class FacebookAuthRequest(
     @field:NotBlank

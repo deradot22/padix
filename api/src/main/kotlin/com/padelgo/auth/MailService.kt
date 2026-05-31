@@ -22,6 +22,12 @@ import org.springframework.web.client.RestClient
  */
 interface MailService {
     fun sendEmailVerification(toEmail: String, toName: String, verifyUrl: String)
+
+    /**
+     * Подтверждение привязки Telegram к существующему email-аккаунту.
+     * Шлётся когда юзер на bot-login форме вбил email который уже в БД.
+     */
+    fun sendTelegramLinkConfirmation(toEmail: String, toName: String, telegramName: String, confirmUrl: String)
 }
 
 @Configuration
@@ -53,6 +59,18 @@ class ConsoleMailService : MailService {
             toEmail, toName, verifyUrl,
         )
     }
+
+    override fun sendTelegramLinkConfirmation(
+        toEmail: String,
+        toName: String,
+        telegramName: String,
+        confirmUrl: String,
+    ) {
+        log.info(
+            "[MAIL/CONSOLE] Telegram link confirmation for {} ({}) - linking TG account '{}'. URL:\n  {}",
+            toEmail, toName, telegramName, confirmUrl,
+        )
+    }
 }
 
 class ResendMailService(
@@ -67,12 +85,39 @@ class ResendMailService(
 
     override fun sendEmailVerification(toEmail: String, toName: String, verifyUrl: String) {
         val safeName = toName.ifBlank { "игрок" }
+        send(
+            toEmail = toEmail,
+            subject = "Подтвердите email · Padix",
+            html = verifyEmailHtml(safeName, verifyUrl),
+            text = verifyEmailText(safeName, verifyUrl),
+            kind = "verification",
+        )
+    }
+
+    override fun sendTelegramLinkConfirmation(
+        toEmail: String,
+        toName: String,
+        telegramName: String,
+        confirmUrl: String,
+    ) {
+        val safeName = toName.ifBlank { "игрок" }
+        val safeTg = telegramName.ifBlank { "пользователь Telegram" }
+        send(
+            toEmail = toEmail,
+            subject = "Привязать Telegram к Padix?",
+            html = tgLinkHtml(safeName, safeTg, confirmUrl),
+            text = tgLinkText(safeName, safeTg, confirmUrl),
+            kind = "tg-link",
+        )
+    }
+
+    private fun send(toEmail: String, subject: String, html: String, text: String, kind: String) {
         val payload = mapOf(
             "from" to from,
             "to" to listOf(toEmail),
-            "subject" to "Подтвердите email · Padix",
-            "html" to verifyEmailHtml(safeName, verifyUrl),
-            "text" to verifyEmailText(safeName, verifyUrl),
+            "subject" to subject,
+            "html" to html,
+            "text" to text,
         )
         try {
             val response = client.post()
@@ -83,16 +128,12 @@ class ResendMailService(
                 .retrieve()
                 .toEntity(String::class.java)
             if (response.statusCode.is2xxSuccessful) {
-                log.info("[MAIL/RESEND] sent verification to {} (response={})", toEmail, response.statusCode)
+                log.info("[MAIL/RESEND] sent {} to {} (response={})", kind, toEmail, response.statusCode)
             } else {
-                log.warn(
-                    "[MAIL/RESEND] non-2xx response when sending to {}: status={} body={}",
-                    toEmail, response.statusCode, response.body,
-                )
+                log.warn("[MAIL/RESEND] non-2xx sending {} to {}: status={} body={}", kind, toEmail, response.statusCode, response.body)
             }
         } catch (e: Exception) {
-            // Не валим регистрацию из-за упавшего письма — юзер сможет сам нажать «выслать ещё раз».
-            log.error("[MAIL/RESEND] failed to send verification to {}", toEmail, e)
+            log.error("[MAIL/RESEND] failed to send {} to {}", kind, toEmail, e)
         }
     }
 
@@ -122,5 +163,40 @@ class ResendMailService(
         $link
 
         Ссылка действует 24 часа. Если ты не регистрировался — просто проигнорируй это письмо.
+    """.trimIndent()
+
+    private fun tgLinkHtml(name: String, telegramName: String, link: String): String = """
+        <!doctype html>
+        <html lang="ru">
+        <body style="font-family: -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif; background:#0b0b0c; color:#e7e7ea; padding:32px;">
+          <table role="presentation" cellspacing="0" cellpadding="0" border="0" style="max-width:560px; margin:0 auto; background:#141417; border-radius:12px; padding:32px;">
+            <tr><td>
+              <h1 style="margin:0 0 12px; font-size:22px;">Привет, $name 👋</h1>
+              <p style="margin:0 0 16px; color:#a8a8b3;">
+                Telegram-аккаунт <b>$telegramName</b> запросил привязку к твоему профилю Padix.
+                Если это ты — подтверди, чтобы войти в Padix через Telegram в будущем.
+              </p>
+              <p style="margin:24px 0;">
+                <a href="$link" style="display:inline-block; background:#22c55e; color:#0b0b0c; padding:12px 24px; border-radius:8px; font-weight:600; text-decoration:none;">Привязать Telegram</a>
+              </p>
+              <p style="margin:16px 0 0; color:#7a7a85; font-size:12px;">
+                Ссылка действует 30 минут. <b>Если это не ты — просто проигнорируй это письмо</b>,
+                никаких изменений в твоём аккаунте без клика по ссылке не произойдёт.
+              </p>
+              <p style="margin:24px 0 0; color:#7a7a85; font-size:12px; word-break:break-all;">$link</p>
+            </td></tr>
+          </table>
+        </body>
+        </html>
+    """.trimIndent()
+
+    private fun tgLinkText(name: String, telegramName: String, link: String): String = """
+        Привет, $name!
+
+        Telegram-аккаунт «$telegramName» запросил привязку к твоему Padix-профилю.
+        Подтверди по ссылке (действует 30 минут):
+        $link
+
+        Если это не ты — просто проигнорируй письмо.
     """.trimIndent()
 }

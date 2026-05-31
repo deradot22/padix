@@ -622,11 +622,24 @@ export const api = {
       photoUrl: string | null;
       existingUser: boolean | null;
     }>(`/api/auth/telegram/bot-login/status?token=${encodeURIComponent(token)}`),
-  /** Обменять APPROVED-токен на JWT (создаёт юзера если нового). */
+  /**
+   * Обменять APPROVED-токен на JWT (создаёт юзера если нового).
+   * Если email совпал с существующим аккаунтом — возвращает {awaitingEmailConfirm: {emailSentTo}}
+   * вместо token, на email юзера ушло письмо с confirm-link.
+   */
   telegramBotLoginComplete: (token: string, name?: string | null, email?: string | null) =>
-    request<{ token: string }>("/api/auth/telegram/bot-login/complete", {
+    request<{ token: string | null; awaitingEmailConfirm: { emailSentTo: string } | null }>(
+      "/api/auth/telegram/bot-login/complete",
+      {
+        method: "POST",
+        body: JSON.stringify({ token, name: name || null, email: email || null }),
+      },
+    ),
+  /** Подтвердить привязку Telegram по сырому confirm-токену из URL письма. */
+  telegramBotLoginConfirmLink: (confirm: string) =>
+    request<{ token: string }>("/api/auth/telegram/bot-login/confirm-link", {
       method: "POST",
-      body: JSON.stringify({ token, name: name || null, email: email || null }),
+      body: JSON.stringify({ confirm }),
     }),
   /**
    * URL для старта Twitter OAuth — браузер должен сделать window.location.href = это.
