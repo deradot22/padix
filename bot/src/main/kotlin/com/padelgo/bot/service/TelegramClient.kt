@@ -78,7 +78,6 @@ data class TgChat(
 }
 
 @JsonIgnoreProperties(ignoreUnknown = true)
-@JsonIgnoreProperties(ignoreUnknown = true)
 data class TgMessage(
     @JsonProperty("message_id") val messageId: Long,
     val from: TgUser? = null,
