@@ -72,5 +72,29 @@ class ApiExceptionHandler {
                     path = req.requestURI
                 )
             )
+
+    /**
+     * Падения уникальных индексов в БД (email collision и т.п.). Без этого handler'а Spring
+     * Security ловит исключение и мапит в 401 "Unauthorized" — очень мутно для юзера.
+     */
+    @ExceptionHandler(org.springframework.dao.DataIntegrityViolationException::class)
+    fun handleDataIntegrity(
+        ex: org.springframework.dao.DataIntegrityViolationException,
+        req: HttpServletRequest,
+    ): ResponseEntity<ErrorResponse> {
+        val root = ex.mostSpecificCause.message.orEmpty()
+        val pretty = when {
+            root.contains("users_email_key", ignoreCase = true) -> "Этот email уже зарегистрирован"
+            root.contains("uk_users_telegram_user_id", ignoreCase = true) -> "Этот Telegram уже привязан к другому аккаунту"
+            root.contains("uk_users_google_sub", ignoreCase = true) -> "Этот Google уже привязан к другому аккаунту"
+            root.contains("uk_users_facebook_sub", ignoreCase = true) -> "Этот Facebook уже привязан к другому аккаунту"
+            root.contains("uk_users_twitter_sub", ignoreCase = true) -> "Этот Twitter уже привязан к другому аккаунту"
+            root.contains("players_name_key", ignoreCase = true) -> "Игрок с таким именем уже есть"
+            else -> "Не удалось сохранить — конфликт данных"
+        }
+        return ResponseEntity.status(HttpStatus.CONFLICT).body(
+            ErrorResponse(409, "Conflict", pretty, req.requestURI),
+        )
+    }
 }
 

@@ -162,6 +162,17 @@ class TelegramBotLoginService(
         }
 
         // 2) Новый юзер — создаём аккаунт с данными от Telegram + опц. поля от фронта.
+        val email = req.email?.trim()?.lowercase()?.ifBlank { null }
+        // Если юзер задал email, который УЖЕ есть у другого аккаунта — это его старый email-аккаунт.
+        // Просим залогиниться обычным способом и потом привязать Telegram через настройки.
+        // Если просто создать дубль — будет DB-нарушение и Spring мапнёт в 401 "Unauthorized" (мутно).
+        if (email != null && users.findByEmailIgnoreCase(email) != null) {
+            throw ApiException(
+                HttpStatus.CONFLICT,
+                "Этот email уже зарегистрирован. Войдите паролем и привяжите Telegram в Настройках, " +
+                    "либо завершите регистрацию без email — добавите его позже.",
+            )
+        }
         val displayName = req.name?.trim()?.ifBlank { null }
             ?: listOfNotNull(tok.firstName?.trim()?.ifBlank { null }, tok.lastName?.trim()?.ifBlank { null })
                 .joinToString(" ").ifBlank { null }
