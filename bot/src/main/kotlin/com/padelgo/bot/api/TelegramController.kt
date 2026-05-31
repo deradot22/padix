@@ -148,8 +148,8 @@ class TelegramController(
     /**
      * Backfill: закрепляет анонсы всех будущих игр, у которых есть запись в
      * event_telegram_post без pin (pinned_message_id null). Идемпотентно.
-     * Аутентификация — через `X-Internal-Secret` (InternalAuthFilter), как все
-     * `/api/telegram/*`. `X-User-Id` не требуется — глобальная операция.
+     * Аутентификация — через `X-Internal-Secret` (InternalAuthFilter), как и
+     * остальные эндпоинты этого контроллера. `X-User-Id` не требуется — глобальная операция.
      */
     @PostMapping("/admin/repin-upcoming")
     fun repinUpcoming(): RepinUpcomingResult = service.repinAllUpcoming()
