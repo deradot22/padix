@@ -905,8 +905,11 @@ class TelegramService(
             val startInstant = LocalDateTime.of(event.date, event.startTime).atZone(tz).toInstant()
             if (startInstant.isBefore(now.minus(Duration.ofHours(12)))) return@mapNotNull null
             PinItem(msgId, startInstant)
-        }.sortedBy { it.startInstant }
+        }.sortedByDescending { it.startInstant }
         if (items.size < 2) return
+        // Идём от далёкого к ближнему: ближайшая по дате игра окажется ПОСЛЕДНИМ pin'ом
+        // → Telegram покажет её в шапке сверху. Раньше был sortedBy ASC и порядок был
+        // обратный — самой свежей в шапке оказывалась самая дальняя игра.
         for (item in items) {
             try {
                 client.unpinChatMessage(telegramChatId, item.msgId)
@@ -967,7 +970,6 @@ class TelegramService(
         val now = Instant.now()
         var pinned = 0
         var skipped = 0
-        val touchedChats = mutableSetOf<Pair<Long, UUID>>()
         for (post in postRepo.findAll()) {
             try {
                 if (post.pinnedMessageId != null) { skipped++; continue }
@@ -985,7 +987,6 @@ class TelegramService(
                     post.pinnedMessageId = post.messageId
                     postRepo.save(post)
                     pinned++
-                    touchedChats.add(tgChat.chatId to chatInternalId)
                     log.info("Backfill pinned event {} msg {} in chat {}", eventId, post.messageId, tgChat.chatId)
                 } catch (e: Exception) {
                     log.warn("Backfill pin {} chat {} failed: {}", post.messageId, tgChat.chatId, e.message)
@@ -996,11 +997,21 @@ class TelegramService(
                 skipped++
             }
         }
-        for ((tgId, internalId) in touchedChats) {
-            try { reorderPinsByDate(tgId, internalId) } catch (_: Exception) { /* нестрашно */ }
+        // Перепинить по дате ВСЕ чаты с pin'ами (а не только те, где добавили новый):
+        // иначе при повторном вызове изменения сортировки не подхватятся для существующих pin'ов.
+        val allPinnedChatIds = postRepo.findAllByPinnedMessageIdIsNotNull()
+            .mapNotNull { it.telegramChatId }
+            .toSet()
+        var reorderedCount = 0
+        for (chatInternalId in allPinnedChatIds) {
+            val tgChat = chatRepo.findById(chatInternalId).orElse(null) ?: continue
+            try {
+                reorderPinsByDate(tgChat.chatId, chatInternalId)
+                reorderedCount++
+            } catch (_: Exception) { /* нестрашно */ }
         }
-        log.info("repinAllUpcoming done: pinned={} skipped={} chats={}", pinned, skipped, touchedChats.size)
-        return RepinUpcomingResult(pinned = pinned, skipped = skipped, reorderedChats = touchedChats.size)
+        log.info("repinAllUpcoming done: pinned={} skipped={} chats={}", pinned, skipped, reorderedCount)
+        return RepinUpcomingResult(pinned = pinned, skipped = skipped, reorderedChats = reorderedCount)
     }
 
     /**
