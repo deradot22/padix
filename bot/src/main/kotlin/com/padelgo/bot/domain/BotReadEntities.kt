@@ -80,7 +80,12 @@ class BotEventSeries(
     var reminderHours: Int? = null,
 
     @Column(name = "pin_announcement")
-    var pinAnnouncement: Boolean? = null
+    var pinAnnouncement: Boolean? = null,
+
+    /** Таймзона серии — для расчёта «игра уже прошла» в cleanupPastPins/reorderPinsByDate.
+     *  Может отсутствовать → fallback на UTC. Bot читает event_series read-only, миграции в api. */
+    @Column(name = "timezone")
+    var timezone: String? = null
 )
 
 @Entity
