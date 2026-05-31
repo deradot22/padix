@@ -28,8 +28,9 @@ export function V0LandingPage() {
   ];
 
   return (
-    <div className="min-h-dvh bg-background flex items-center justify-center px-4 py-8">
-      <div className="w-full max-w-2xl space-y-8">
+    <div className="min-h-dvh bg-background flex flex-col items-center px-4 py-8">
+      <div className="flex flex-1 w-full max-w-2xl items-center justify-center">
+       <div className="w-full space-y-8">
         {/* Hero Section */}
         <div className="text-center space-y-4">
           <Badge className="mb-4 bg-primary/20 text-primary border-primary/30 border inline-flex">
@@ -77,7 +78,18 @@ export function V0LandingPage() {
             </Link>
           </Button>
         </div>
+       </div>
       </div>
+
+      <footer className="mt-8 flex flex-wrap items-center justify-center gap-x-4 gap-y-2 text-xs text-muted-foreground">
+        <Link to="/privacy" className="hover:text-foreground transition-colors">
+          Privacy Policy
+        </Link>
+        <span aria-hidden>·</span>
+        <Link to="/terms" className="hover:text-foreground transition-colors">
+          Terms &amp; Conditions
+        </Link>
+      </footer>
     </div>
   );
 }
