@@ -905,11 +905,13 @@ class TelegramService(
             val startInstant = LocalDateTime.of(event.date, event.startTime).atZone(tz).toInstant()
             if (startInstant.isBefore(now.minus(Duration.ofHours(12)))) return@mapNotNull null
             PinItem(msgId, startInstant)
-        }.sortedByDescending { it.startInstant }
+        }.sortedBy { it.startInstant }
         if (items.size < 2) return
-        // Идём от далёкого к ближнему: ближайшая по дате игра окажется ПОСЛЕДНИМ pin'ом
-        // → Telegram покажет её в шапке сверху. Раньше был sortedBy ASC и порядок был
-        // обратный — самой свежей в шапке оказывалась самая дальняя игра.
+        // Идём от ближнего к далёкому: ближайшая по дате игра пинится ПЕРВОЙ, т.е.
+        // становится самым ранним по времени pin'ом. В Telegram полный список pinned
+        // упорядочен по времени pin-операций (старейший pin сверху), поэтому
+        // ближайшая игра окажется ПЕРВОЙ при скролле сверху-вниз — что нужно.
+        // (Шапка чата отдельно показывает самый свежий pin = самую дальнюю игру.)
         for (item in items) {
             try {
                 client.unpinChatMessage(telegramChatId, item.msgId)
