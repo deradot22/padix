@@ -109,7 +109,8 @@ class TelegramService(
     private val userRepo: BotUserRepository,
     private val seriesRepo: com.padelgo.bot.repo.BotEventSeriesRepository,
     private val eventRepo: com.padelgo.bot.repo.BotEventRepository,
-    private val regRepo: com.padelgo.bot.repo.BotRegistrationRepository
+    private val regRepo: com.padelgo.bot.repo.BotRegistrationRepository,
+    private val authTokenRepo: com.padelgo.bot.domain.BotTelegramAuthTokenRepository,
 ) {
     private val log = LoggerFactory.getLogger(TelegramService::class.java)
     private val random = SecureRandom()
@@ -247,6 +248,18 @@ class TelegramService(
 
     @Transactional
     fun handleUpdate(update: TgUpdate) {
+        // 1) Inline-кнопки бот-логина — отдельный путь без message.
+        update.callbackQuery?.let { cb ->
+            val data = cb.data.orEmpty()
+            if (data.startsWith("padix_auth:")) {
+                handleAuthCallback(cb, data)
+            } else {
+                // Неизвестный callback — отвечаем чтобы спиннер у юзера не висел.
+                runCatching { client.answerCallbackQuery(cb.id) }
+            }
+            return
+        }
+
         val message = update.message ?: update.channelPost ?: return
         val text = message.text?.trim() ?: return
         val chat = message.chat
@@ -272,6 +285,13 @@ class TelegramService(
         val payload = parts.getOrNull(1)?.trim().orEmpty()
         val chat = message.chat
         val fromName = message.from?.firstName ?: chat.firstName ?: "друг"
+
+        // Бот-логин: токен с префиксом "auth_" — отдельный поток (заполняем данные юзера
+        // и шлём inline-кнопки подтверждения вместо привязки чата).
+        if (payload.startsWith("auth_")) {
+            handleAuthStart(payload.removePrefix("auth_"), message)
+            return
+        }
 
         if (payload.isBlank()) {
             replySafely(
@@ -327,6 +347,117 @@ class TelegramService(
                 chat.id,
                 "Токен недействителен или истёк. Сгенерируйте новый в Padix."
             )
+        }
+    }
+
+    /**
+     * Бот-логин шаг 1 («auth_»): юзер открыл бота через deep-link с auth-токеном.
+     * Заполняем данные юзера в таблице и шлём inline-кнопки подтверждения.
+     */
+    @Transactional
+    private fun handleAuthStart(token: String, message: TgMessage) {
+        val chat = message.chat
+        val from = message.from
+        if (from == null) {
+            replySafely(chat.id, "Не удалось определить вашего пользователя. Попробуйте ещё раз.")
+            return
+        }
+        val tok = authTokenRepo.findById(token).orElse(null)
+        if (tok == null) {
+            replySafely(chat.id, "Токен входа не найден. Откройте Padix и начните вход заново.")
+            return
+        }
+        if (tok.expiresAt.isBefore(Instant.now())) {
+            replySafely(chat.id, "⌛ Токен истёк (живёт 5 минут). Откройте Padix и начните вход заново.")
+            return
+        }
+        if (tok.status == "APPROVED" || tok.status == "REJECTED" || tok.consumedAt != null) {
+            replySafely(chat.id, "Этот токен уже использован. Откройте Padix и начните вход заново.")
+            return
+        }
+
+        tok.telegramUserId = from.id
+        tok.telegramUsername = from.username
+        tok.firstName = from.firstName
+        tok.lastName = from.lastName
+        tok.status = "AWAITING_APPROVAL"
+        authTokenRepo.save(tok)
+
+        val displayName = listOfNotNull(from.firstName, from.lastName).joinToString(" ").ifBlank {
+            from.username ?: "Пользователь"
+        }
+        val text = "🔐 <b>Вход в Padix</b>\n\n" +
+            "Сайт padix.club хочет войти как <b>${escapeHtml(displayName)}</b>" +
+            (from.username?.let { " (@${escapeHtml(it)})" } ?: "") + ".\n\n" +
+            "Подтвердить?"
+
+        val markup = TelegramInlineKeyboard.callbackKeyboard(
+            listOf(
+                listOf(
+                    "✅ Войти" to "padix_auth:yes:$token",
+                    "❌ Отмена" to "padix_auth:no:$token",
+                )
+            )
+        )
+        client.sendMessage(chat.id, text, replyMarkup = markup)
+    }
+
+    /** Бот-логин шаг 2: юзер нажал inline-кнопку. */
+    @Transactional
+    private fun handleAuthCallback(cb: TgCallbackQuery, data: String) {
+        // Формат: padix_auth:yes:<token>  |  padix_auth:no:<token>
+        val parts = data.split(":")
+        if (parts.size != 3) {
+            runCatching { client.answerCallbackQuery(cb.id, "Некорректный запрос") }
+            return
+        }
+        val action = parts[1]
+        val token = parts[2]
+        val tok = authTokenRepo.findById(token).orElse(null)
+        if (tok == null) {
+            runCatching { client.answerCallbackQuery(cb.id, "Токен не найден") }
+            return
+        }
+        if (tok.expiresAt.isBefore(Instant.now())) {
+            runCatching { client.answerCallbackQuery(cb.id, "Токен истёк") }
+            return
+        }
+        // Защита от подмены: callback мог прийти от другого юзера через переслав сообщение.
+        // Сверяем что from.id из callback совпадает с тем, кому изначально предложили логин.
+        if (tok.telegramUserId != null && tok.telegramUserId != cb.from.id) {
+            runCatching { client.answerCallbackQuery(cb.id, "Это не ваш запрос на вход") }
+            return
+        }
+
+        val now = Instant.now()
+        val newText: String
+        val tooltipText: String
+        when (action) {
+            "yes" -> {
+                tok.status = "APPROVED"
+                tok.approvedAt = now
+                authTokenRepo.save(tok)
+                newText = "✅ <b>Вход подтверждён</b>\n\nВернитесь на padix.club — вы уже залогинены."
+                tooltipText = "Готово"
+            }
+            "no" -> {
+                tok.status = "REJECTED"
+                authTokenRepo.save(tok)
+                newText = "❌ <b>Вход отменён</b>\n\nЕсли это были не вы — игнорируйте."
+                tooltipText = "Отменено"
+            }
+            else -> {
+                runCatching { client.answerCallbackQuery(cb.id, "Неизвестное действие") }
+                return
+            }
+        }
+
+        runCatching { client.answerCallbackQuery(cb.id, tooltipText) }
+        val msg = cb.message
+        if (msg != null) {
+            runCatching {
+                client.editMessageText(msg.chat.id, msg.messageId, newText)
+            }
         }
     }
 
