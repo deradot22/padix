@@ -33,6 +33,9 @@ interface EventTelegramPostRepository : JpaRepository<EventTelegramPost, UUID> {
 
     /** Ранее закреплённый pin КОНКРЕТНОГО события в этом telegram-чате (для re-pin при ре-анонсе того же события — без сноса pin'ов других подписок). */
     fun findAllByEventIdAndTelegramChatIdAndPinnedMessageIdIsNotNull(eventId: UUID, telegramChatId: UUID): List<EventTelegramPost>
+
+    /** Все посты, у которых есть pin (для cron-задачи: снимать pin прошедших игр). */
+    fun findAllByPinnedMessageIdIsNotNull(): List<EventTelegramPost>
 }
 
 interface BotEventSeriesRepository : org.springframework.data.jpa.repository.JpaRepository<com.padelgo.bot.domain.BotEventSeries, UUID>
