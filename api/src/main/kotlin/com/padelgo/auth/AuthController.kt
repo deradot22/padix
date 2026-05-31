@@ -118,11 +118,22 @@ class AuthController(
     @Operation(
         summary = "Завершить бот-логин и получить JWT",
         description = "Только после того как status=APPROVED. Создаёт нового юзера если telegramUserId " +
-            "не привязан, иначе логинит существующего. Опц. поля name/email используются для нового юзера."
+            "не привязан, иначе логинит существующего. Опц. поля name/email используются для нового юзера. " +
+            "Если email уже занят — НЕ возвращает JWT, а высылает confirm-link на email и возвращает " +
+            "awaitingEmailConfirm.emailSentTo (маскированный)."
     )
     @PostMapping("/telegram/bot-login/complete")
-    fun telegramBotLoginComplete(@RequestBody req: BotLoginCompleteRequest): AuthResponse =
+    fun telegramBotLoginComplete(@RequestBody req: BotLoginCompleteRequest): BotLoginCompleteResponse =
         telegramBotLogin.complete(req)
+
+    @Operation(
+        summary = "Подтвердить привязку Telegram к существующему аккаунту по ссылке из email",
+        description = "Юзер кликает по ссылке /auth/telegram-link-confirm?confirm=... из письма. " +
+            "Фронт шлёт сюда confirm-токен → бэк линкует TG к существующему аккаунту → JWT."
+    )
+    @PostMapping("/telegram/bot-login/confirm-link")
+    fun telegramBotLoginConfirmLink(@RequestBody req: ConfirmTelegramLinkRequest): AuthResponse =
+        telegramBotLogin.confirmEmailLink(req.confirm)
 
     @Operation(
         summary = "Старт Twitter/X OAuth — редирект на x.com/authorize",

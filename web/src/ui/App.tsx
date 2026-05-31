@@ -20,6 +20,7 @@ import { V0VerifyEmailPage } from "./v0/pages/V0VerifyEmailPage";
 import { V0OAuthCallbackPage } from "./v0/pages/V0OAuthCallbackPage";
 import { V0TelegramCallbackPage } from "./v0/pages/V0TelegramCallbackPage";
 import { V0TelegramBotLoginPage } from "./v0/pages/V0TelegramBotLoginPage";
+import { V0TelegramLinkConfirmPage } from "./v0/pages/V0TelegramLinkConfirmPage";
 import { V0PrivacyPage } from "./v0/pages/V0PrivacyPage";
 import { V0TermsPage } from "./v0/pages/V0TermsPage";
 import { MainLayout } from "@/components/main-layout";
@@ -159,6 +160,7 @@ export function App() {
       || location.pathname === "/auth/oauth-callback"
       || location.pathname === "/auth/telegram-callback"
       || location.pathname === "/auth/telegram-login"
+      || location.pathname === "/auth/telegram-link-confirm"
       || location.pathname === "/privacy"
       || location.pathname === "/terms";
     if (me && !me.surveyCompleted && !exempt) {
@@ -219,6 +221,7 @@ export function App() {
           <Route path="auth/oauth-callback" element={<V0OAuthCallbackPage onAuth={(m) => setMe(m)} />} />
           <Route path="auth/telegram-callback" element={<V0TelegramCallbackPage onAuth={(m) => setMe(m)} />} />
           <Route path="auth/telegram-login" element={<V0TelegramBotLoginPage onAuth={(m) => setMe(m)} />} />
+          <Route path="auth/telegram-link-confirm" element={<V0TelegramLinkConfirmPage onAuth={(m) => setMe(m)} />} />
           <Route path="admin" element={<V0AdminPage />} />
           <Route path="admin/feedback" element={<V0AdminFeedbackPage />} />
           <Route path="privacy" element={<V0PrivacyPage />} />

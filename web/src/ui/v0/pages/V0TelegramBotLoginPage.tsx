@@ -1,6 +1,6 @@
 import { FormEvent, useEffect, useRef, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
-import { Loader2, CheckCircle2, XCircle, ExternalLink } from "lucide-react";
+import { Loader2, CheckCircle2, XCircle, ExternalLink, Mail } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -39,6 +39,8 @@ export function V0TelegramBotLoginPage(props: { onAuth: (me: MeResponse) => void
   const [email, setEmail] = useState("");
   const [gender, setGender] = useState<string>("");
   const completedRef = useRef(false);
+  // Когда юзер ввёл email который уже зарегистрирован — бэк прислал confirm-link на почту.
+  const [emailConfirmSent, setEmailConfirmSent] = useState<string | null>(null);
 
   // Поллинг.
   useEffect(() => {
@@ -91,11 +93,14 @@ export function V0TelegramBotLoginPage(props: { onAuth: (me: MeResponse) => void
     setCompleting(true);
     setError(null);
     try {
-      const { token: jwt } = await api.telegramBotLoginComplete(token);
-      setToken(jwt?.trim() || null);
-      const me = await api.me();
-      props.onAuth(me);
-      nav(me.surveyCompleted ? "/" : "/survey", { replace: true });
+      const r = await api.telegramBotLoginComplete(token);
+      // existing user — JWT приходит сразу, без email-collision сценария.
+      if (r.token) {
+        setToken(r.token.trim() || null);
+        const me = await api.me();
+        props.onAuth(me);
+        nav(me.surveyCompleted ? "/" : "/survey", { replace: true });
+      }
     } catch (e: any) {
       setError(e?.message ?? "Не удалось завершить вход");
       setCompleting(false);
@@ -112,23 +117,30 @@ export function V0TelegramBotLoginPage(props: { onAuth: (me: MeResponse) => void
     setCompleting(true);
     setError(null);
     try {
-      const { token: jwt } = await api.telegramBotLoginComplete(
+      const r = await api.telegramBotLoginComplete(
         token,
         name.trim(),
         email.trim() || null,
       );
-      setToken(jwt?.trim() || null);
-      // Сохраним пол через updateProfile отдельным запросом — completeEndpoint не принимает gender.
-      if (gender) {
-        try {
-          await api.updateProfile({ gender });
-        } catch {
-          /* не критично */
-        }
+      if (r.awaitingEmailConfirm) {
+        // Email уже занят → бэк послал confirm-link на этот email. Переключаем UI.
+        setEmailConfirmSent(r.awaitingEmailConfirm.emailSentTo);
+        setCompleting(false);
+        return;
       }
-      const me = await api.me();
-      props.onAuth(me);
-      nav(me.surveyCompleted ? "/" : "/survey", { replace: true });
+      if (r.token) {
+        setToken(r.token.trim() || null);
+        if (gender) {
+          try {
+            await api.updateProfile({ gender });
+          } catch {
+            /* не критично */
+          }
+        }
+        const me = await api.me();
+        props.onAuth(me);
+        nav(me.surveyCompleted ? "/" : "/survey", { replace: true });
+      }
     } catch (e: any) {
       setError(e?.message ?? "Не удалось завершить регистрацию");
       setCompleting(false);
@@ -155,7 +167,25 @@ export function V0TelegramBotLoginPage(props: { onAuth: (me: MeResponse) => void
     <div className="mx-auto max-w-md py-12">
       <Card>
         <CardContent className="px-6 py-10 sm:px-10">
-          {error ? (
+          {emailConfirmSent ? (
+            <div className="flex flex-col items-center gap-4 text-center">
+              <Mail className="h-12 w-12 text-primary" />
+              <div className="text-lg font-semibold">Проверь почту</div>
+              <div className="text-sm text-muted-foreground">
+                Этот email уже зарегистрирован в Padix. Чтобы убедиться что это твой аккаунт,
+                мы отправили подтверждение на <span className="font-mono">{emailConfirmSent}</span>.
+              </div>
+              <div className="text-sm text-muted-foreground">
+                Открой почту и нажми «Привязать Telegram» в письме — потом вернись сюда залогиненным.
+              </div>
+              <div className="text-xs text-muted-foreground">
+                Не нашёл письмо? Проверь спам или попробуй с другим email.
+              </div>
+              <Button variant="outline" onClick={() => setEmailConfirmSent(null)}>
+                Изменить email
+              </Button>
+            </div>
+          ) : error ? (
             <div className="flex flex-col items-center gap-4 text-center">
               <XCircle className="h-12 w-12 text-rose-500" />
               <div className="text-lg font-semibold">Не получилось</div>

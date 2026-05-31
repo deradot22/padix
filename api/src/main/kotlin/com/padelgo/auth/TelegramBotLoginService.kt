@@ -34,7 +34,9 @@ class TelegramBotLoginService(
     private val users: UserRepository,
     private val players: PlayerRepository,
     private val jwt: JwtService,
+    private val mail: MailService,
     @Value("\${app.telegram.bot-username:}") private val botUsername: String,
+    @Value("\${app.public-base-url:http://localhost:8083}") private val publicBaseUrl: String,
 ) {
     private val log = LoggerFactory.getLogger(TelegramBotLoginService::class.java)
     private val rng = SecureRandom()
@@ -135,9 +137,9 @@ class TelegramBotLoginService(
         )
     }
 
-    /** Шаг 6 (complete): обмен токена на JWT. Создаёт юзера если его нет. */
+    /** Шаг 6 (complete): обмен токена на JWT, ИЛИ отправка email-confirm письма при коллизии. */
     @Transactional
-    fun complete(req: BotLoginCompleteRequest): AuthResponse {
+    fun complete(req: BotLoginCompleteRequest): BotLoginCompleteResponse {
         val tok = tokenRepo.findById(req.token).orElseThrow {
             ApiException(HttpStatus.NOT_FOUND, "Token not found")
         }
@@ -158,10 +160,19 @@ class TelegramBotLoginService(
         if (existing != null) {
             tok.consumedAt = Instant.now()
             tokenRepo.save(tok)
-            return AuthResponse(jwt.createToken(existing.id!!, existing.email, existing.playerId!!, false))
+            return BotLoginCompleteResponse(token = jwt.createToken(existing.id!!, existing.email, existing.playerId!!, false))
         }
 
-        // 2) Новый юзер — создаём аккаунт с данными от Telegram + опц. поля от фронта.
+        // 2) Email-collision flow: если юзер задал email который УЖЕ есть в БД, не блокируем
+        // и не создаём дубль — шлём confirm-link на email. Это защита от хищения аккаунта:
+        // мы не верим что юзер владеет email'ом, только владелец почтового ящика сможет открыть письмо.
+        val email = req.email?.trim()?.lowercase()?.ifBlank { null }
+        if (email != null) {
+            val existingByEmail = users.findByEmailIgnoreCase(email)
+            if (existingByEmail != null) {
+                return sendEmailConfirmAndAbort(tok, existingByEmail, email)
+            }
+        }
         val displayName = req.name?.trim()?.ifBlank { null }
             ?: listOfNotNull(tok.firstName?.trim()?.ifBlank { null }, tok.lastName?.trim()?.ifBlank { null })
                 .joinToString(" ").ifBlank { null }
@@ -190,7 +201,112 @@ class TelegramBotLoginService(
         )
         tok.consumedAt = Instant.now()
         tokenRepo.save(tok)
+        return BotLoginCompleteResponse(token = jwt.createToken(user.id!!, user.email, user.playerId!!, false))
+    }
+
+    /**
+     * Email-collision flow: меняем статус токена, генерим короткий confirm-секрет,
+     * шлём письмо с link'ом /auth/telegram-link-confirm?confirm=<секрет>.
+     * Возвращаем фронту маркер «ждём подтверждения».
+     */
+    private fun sendEmailConfirmAndAbort(
+        tok: TelegramAuthToken,
+        existingUser: UserAccount,
+        email: String,
+    ): BotLoginCompleteResponse {
+        val rawConfirm = randomToken()
+        tok.emailConfirmTokenHash = sha256(rawConfirm)
+        tok.emailConfirmTargetUserId = existingUser.id
+        tok.emailConfirmSentTo = email
+        tok.status = TelegramAuthTokenStatus.AWAITING_EMAIL_CONFIRM.name
+        // Чуть продлеваем токен — юзер должен успеть открыть почту.
+        tok.expiresAt = Instant.now().plus(30, ChronoUnit.MINUTES)
+        tokenRepo.save(tok)
+
+        val confirmUrl = "${publicBaseUrl.trimEnd('/')}/auth/telegram-link-confirm?confirm=$rawConfirm"
+        val telegramDisplay = listOfNotNull(tok.firstName?.trim()?.ifBlank { null }, tok.lastName?.trim()?.ifBlank { null })
+            .joinToString(" ")
+            .ifBlank { tok.telegramUsername ?: "новый Telegram" }
+        val recipientName = players.findById(existingUser.playerId!!).orElse(null)?.name ?: "игрок"
+
+        try {
+            mail.sendTelegramLinkConfirmation(email, recipientName, telegramDisplay, confirmUrl)
+        } catch (e: Exception) {
+            log.error("Failed to send tg-link confirmation to $email", e)
+        }
+
+        return BotLoginCompleteResponse(
+            awaitingEmailConfirm = AwaitingEmailConfirmInfo(
+                emailSentTo = maskEmail(email),
+            ),
+        )
+    }
+
+    /**
+     * Шаг 7 (опц.): юзер кликнул по ссылке в письме. Линкуем Telegram к существующему юзеру,
+     * выдаём JWT.
+     */
+    @Transactional
+    fun confirmEmailLink(rawConfirm: String): AuthResponse {
+        if (rawConfirm.isBlank()) throw ApiException(HttpStatus.BAD_REQUEST, "Confirm token required")
+        val tok = tokenRepo.findByEmailConfirmTokenHash(sha256(rawConfirm))
+            ?: throw ApiException(HttpStatus.BAD_REQUEST, "Ссылка не найдена или уже использована")
+        if (tok.consumedAt != null) {
+            throw ApiException(HttpStatus.CONFLICT, "Ссылка уже использована")
+        }
+        if (tok.status != TelegramAuthTokenStatus.AWAITING_EMAIL_CONFIRM.name) {
+            throw ApiException(HttpStatus.CONFLICT, "Эта ссылка больше не действительна (статус=${tok.status})")
+        }
+        if (tok.expiresAt.isBefore(Instant.now())) {
+            throw ApiException(HttpStatus.GONE, "Ссылка истекла")
+        }
+        val tgUserId = tok.telegramUserId
+            ?: throw ApiException(HttpStatus.CONFLICT, "Нет данных Telegram")
+        val targetUserId = tok.emailConfirmTargetUserId
+            ?: throw ApiException(HttpStatus.CONFLICT, "Нет целевого аккаунта для привязки")
+
+        val user = users.findById(targetUserId).orElseThrow {
+            ApiException(HttpStatus.NOT_FOUND, "Целевой аккаунт не найден")
+        }
+
+        // Кто-то мог за это время уже привязать другой Telegram к этому аккаунту, либо этот же
+        // telegram_user_id мог быть привязан к другому аккаунту. Проверим.
+        if (user.telegramUserId != null && user.telegramUserId != tgUserId) {
+            throw ApiException(HttpStatus.CONFLICT, "К этому аккаунту уже привязан другой Telegram")
+        }
+        val takenBy = users.findByTelegramUserId(tgUserId)
+        if (takenBy != null && takenBy.id != user.id) {
+            throw ApiException(HttpStatus.CONFLICT, "Этот Telegram уже привязан к другому аккаунту")
+        }
+
+        user.telegramUserId = tgUserId
+        user.telegramUsername = tok.telegramUsername ?: user.telegramUsername
+        user.telegramPhotoUrl = tok.photoUrl ?: user.telegramPhotoUrl
+        // Раз юзер открыл письмо — фактически подтвердил владение email'ом.
+        if (user.emailVerifiedAt == null) user.emailVerifiedAt = Instant.now()
+        users.save(user)
+
+        tok.consumedAt = Instant.now()
+        tokenRepo.save(tok)
+
         return AuthResponse(jwt.createToken(user.id!!, user.email, user.playerId!!, false))
+    }
+
+    /** "alex@gmail.com" → "a***@g***.com" — для UI «письмо отправлено на ...» без полного раскрытия. */
+    private fun maskEmail(email: String): String {
+        val parts = email.split("@", limit = 2)
+        if (parts.size != 2) return email
+        val (local, domain) = parts
+        val maskedLocal = if (local.length <= 2) local else local.first() + "***"
+        val domainParts = domain.split(".")
+        val maskedDomain = if (domainParts.first().length <= 1) domain
+        else domainParts.first().first() + "***." + domainParts.drop(1).joinToString(".")
+        return "$maskedLocal@$maskedDomain"
+    }
+
+    private fun sha256(s: String): String {
+        val md = java.security.MessageDigest.getInstance("SHA-256")
+        return md.digest(s.toByteArray(Charsets.UTF_8)).joinToString("") { "%02x".format(it) }
     }
 
     private fun randomToken(): String {
@@ -242,4 +358,18 @@ data class BotLoginCompleteRequest(
     val name: String?,
     /** Опциональный email — юзер может задать сразу или пропустить и добавить позже. */
     val email: String?,
+)
+
+/**
+ * Результат /complete: либо JWT (новый юзер создан или существующий по telegram_user_id залогинен),
+ * либо awaitingEmailConfirm если фронт должен показать «проверь почту».
+ */
+data class BotLoginCompleteResponse(
+    val token: String? = null,
+    val awaitingEmailConfirm: AwaitingEmailConfirmInfo? = null,
+)
+
+data class AwaitingEmailConfirmInfo(
+    /** Маскированный email типа "a***@g***.com" для отображения юзеру. */
+    val emailSentTo: String,
 )

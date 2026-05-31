@@ -19,7 +19,17 @@ import java.time.Instant
  *  REJECTED → юзер тапнул «Отмена» или бот отверг.
  *  EXPIRES → не использован за 5 минут.
  */
-enum class TelegramAuthTokenStatus { PENDING, AWAITING_APPROVAL, APPROVED, REJECTED }
+enum class TelegramAuthTokenStatus {
+    PENDING,
+    AWAITING_APPROVAL,
+    APPROVED,
+    /**
+     * Юзер на /complete вбил email, который уже есть у другого юзера. Шлём ему confirm-link
+     * на этот email; он кликает → линкуем Telegram к существующему аккаунту → JWT.
+     */
+    AWAITING_EMAIL_CONFIRM,
+    REJECTED,
+}
 
 @Entity
 @Table(name = "telegram_auth_token")
@@ -55,6 +65,18 @@ class TelegramAuthToken(
     @Column(name = "consumed_at")
     var consumedAt: Instant? = null,
 
+    /** SHA-256 хэш короткого confirm-секрета (сырой шлётся в URL письма). */
+    @Column(name = "email_confirm_token_hash", length = 64)
+    var emailConfirmTokenHash: String? = null,
+
+    /** Кому привязать Telegram при успешном confirm'е (UUID существующего юзера). */
+    @Column(name = "email_confirm_target_user_id")
+    var emailConfirmTargetUserId: java.util.UUID? = null,
+
+    /** На какой email мы отправили подтверждение (для отображения «письмо отправлено на ...»). */
+    @Column(name = "email_confirm_sent_to", length = 255)
+    var emailConfirmSentTo: String? = null,
+
     @CreationTimestamp
     @Column(name = "created_at", nullable = false)
     var createdAt: Instant? = null,
@@ -62,6 +84,8 @@ class TelegramAuthToken(
 
 interface TelegramAuthTokenRepository : JpaRepository<TelegramAuthToken, String> {
     @Modifying
-    @Query("update TelegramAuthToken t set t.status = 'REJECTED' where t.expiresAt < :now and t.status in ('PENDING','AWAITING_APPROVAL')")
+    @Query("update TelegramAuthToken t set t.status = 'REJECTED' where t.expiresAt < :now and t.status in ('PENDING','AWAITING_APPROVAL','AWAITING_EMAIL_CONFIRM')")
     fun expireOld(now: Instant): Int
+
+    fun findByEmailConfirmTokenHash(hash: String): TelegramAuthToken?
 }
