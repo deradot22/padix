@@ -1945,8 +1945,9 @@ export function V0EventPage(props: { me: any; meLoaded?: boolean }) {
                               setActiveMatchId(m.id);
                               setActiveTeam(team);
                               // Перед открытием клавиатуры — свежий refetch, чтобы не открывать ввод
-                              // если кто-то уже ввёл счёт пока юзер думал. Если матч стал FINISHED
-                              // или score?.points появился — скрываем клавиатуру и показываем актуальный счёт.
+                              // если кто-то уже ввёл счёт пока юзер думал. Бэйлим ТОЛЬКО на финальный
+                              // счёт (FINISHED или submittedByUserId), но не на draft — иначе автосейвленный
+                              // драфт {0,0} блокировал бы повторное открытие клавиатуры.
                               if (eventId) {
                                 try {
                                   const refreshed = await api.getEventDetails(eventId);
@@ -1954,7 +1955,7 @@ export function V0EventPage(props: { me: any; meLoaded?: boolean }) {
                                   const updatedMatch = refreshed.rounds
                                     .flatMap((r) => r.matches)
                                     .find((mm) => mm.id === m.id);
-                                  if (updatedMatch?.status === "FINISHED" || updatedMatch?.score?.points) {
+                                  if (updatedMatch && hasFinalScore(updatedMatch)) {
                                     // Кто-то уже ввёл — не открываем клавиатуру (info-баннер уйдёт сам через 4 сек).
                                     setScorePadOpen(false);
                                     setInfo("Счёт уже введён другим участником");
