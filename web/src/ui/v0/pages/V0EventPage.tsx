@@ -1949,32 +1949,31 @@ export function V0EventPage(props: { me: any; meLoaded?: boolean }) {
                                   ? "Этот матч введёт его участник или организатор."
                                   : null
                               : null;
-                            const handleSelectTeam = async (team: "A" | "B") => {
+                            const handleSelectTeam = (team: "A" | "B") => {
                               if (!canEdit) return;
+                              // Открываем клавиатуру МГНОВЕННО — без ожидания сети. Раньше тут был
+                              // блокирующий await getEventDetails (~1-2с), из-за чего ввод подвисал.
+                              // Свежесть данных и так держит polling (5с). Anti-conflict проверку
+                              // делаем оптимистично в фоне: если выяснится, что счёт уже финализирован
+                              // другим участником — клавиатуру схлопнем и покажем баннер. В худшем
+                              // случае submitScore вернёт 409, а .catch ниже уже это обрабатывает.
                               setActiveMatchId(m.id);
                               setActiveTeam(team);
-                              // Перед открытием клавиатуры — свежий refetch, чтобы не открывать ввод
-                              // если кто-то уже ввёл счёт пока юзер думал. Бэйлим ТОЛЬКО на финальный
-                              // счёт (FINISHED или submittedByUserId), но не на draft — иначе автосейвленный
-                              // драфт {0,0} блокировал бы повторное открытие клавиатуры.
+                              setScorePadOpen(true);
                               if (eventId) {
-                                try {
-                                  const refreshed = await api.getEventDetails(eventId);
+                                api.getEventDetails(eventId).then((refreshed) => {
                                   setData(refreshed);
                                   const updatedMatch = refreshed.rounds
                                     .flatMap((r) => r.matches)
                                     .find((mm) => mm.id === m.id);
                                   if (updatedMatch && hasFinalScore(updatedMatch)) {
-                                    // Кто-то уже ввёл — не открываем клавиатуру (info-баннер уйдёт сам через 4 сек).
                                     setScorePadOpen(false);
                                     setInfo("Счёт уже введён другим участником");
-                                    return;
                                   }
-                                } catch {
+                                }).catch(() => {
                                   /* сеть умерла — продолжаем оптимистично, submit поймает 409 если что */
-                                }
+                                });
                               }
-                              setScorePadOpen(true);
                             };
                             return (
                               <div
