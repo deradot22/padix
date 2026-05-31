@@ -78,12 +78,15 @@ data class TgChat(
 }
 
 @JsonIgnoreProperties(ignoreUnknown = true)
+@JsonIgnoreProperties(ignoreUnknown = true)
 data class TgMessage(
     @JsonProperty("message_id") val messageId: Long,
     val from: TgUser? = null,
     val chat: TgChat,
     val date: Long = 0,
-    val text: String? = null
+    val text: String? = null,
+    /** Служебное сообщение «X закрепил сообщение» — присутствует если апдейт про закреп. */
+    @JsonProperty("pinned_message") val pinnedMessage: TgMessage? = null,
 )
 
 @JsonIgnoreProperties(ignoreUnknown = true)
@@ -117,6 +120,7 @@ class TelegramClient(
     private val props: TelegramProps
 ) {
     private val log = LoggerFactory.getLogger(TelegramClient::class.java)
+    @Volatile private var cachedBotId: Long? = null
 
     fun isConfigured(): Boolean = props.enabled && props.botToken.isNotBlank()
 
@@ -131,8 +135,12 @@ class TelegramClient(
         if (!resp.ok || resp.result == null) {
             throw TelegramApiException("getMe failed: ${resp.description}", resp.errorCode)
         }
+        cachedBotId = resp.result.id
         return resp.result
     }
+
+    /** id нашего бота (кэш после первого getMe). null до startup. */
+    fun botId(): Long? = cachedBotId
 
     fun getUpdates(offset: Long, timeoutSeconds: Int): List<TgUpdate> {
         // callback_query — для inline-кнопок подтверждения бот-логина (V42).
@@ -282,6 +290,27 @@ class TelegramClient(
             ?: throw TelegramApiException("$method: empty response")
         if (!resp.ok || resp.result == null) {
             throw TelegramApiException("$method to $chatId failed: ${resp.description}", resp.errorCode)
+        }
+    }
+
+    /**
+     * Удалить сообщение в чате. Best-effort: возвращает false (не кидает) если Telegram
+     * отказал (например, прошло > 48ч или нет прав). Используется чтобы убрать служебное
+     * сообщение «Bot pinned a message», которое Telegram автоматически вставляет при pin.
+     */
+    fun deleteMessage(chatId: Long, messageId: Long): Boolean {
+        if (props.dryRun) return false
+        return try {
+            val resp = restClient.post()
+                .uri("${baseUrl()}/deleteMessage")
+                .contentType(MediaType.APPLICATION_JSON)
+                .body(mapOf("chat_id" to chatId, "message_id" to messageId))
+                .retrieve()
+                .body<TgResponse<Any>>()
+            resp?.ok == true
+        } catch (e: Exception) {
+            log.debug("deleteMessage chat={} msg={} failed: {}", chatId, messageId, e.message)
+            false
         }
     }
 

@@ -48,6 +48,7 @@ export function V0CreateEventPage(props: {
   const [pointsPerPlayer, setPointsPerPlayer] = useState(6);
   const [visibility, setVisibility] = useState<EventVisibility>("PUBLIC");
   const [loading, setLoading] = useState(false);
+  const [initialLoading, setInitialLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   const [gameMode, setGameMode] = useState<"round_robin" | "balanced">("round_robin");
@@ -56,63 +57,62 @@ export function V0CreateEventPage(props: {
   const [telegramChats, setTelegramChats] = useState<TelegramChat[]>([]);
   const [selectedTgChatIds, setSelectedTgChatIds] = useState<Set<string>>(new Set());
 
+  // Initial-загрузка: параллельно тянем telegram-чаты и (если редактируем) серию,
+  // и только когда оба готовы — снимаем initialLoading и показываем форму.
+  // Без этого «Отправить анонс в Telegram» подгружался позже самой формы; плюс был
+  // race между TG-эффектом (set всех) и series-эффектом (set сохранённого).
   useEffect(() => {
+    let cancelled = false;
     (async () => {
       try {
-        const status = await api.getTelegramStatus();
-        if (!status.enabled) return;
-        const list = await api.getTelegramChats();
-        // Личный чат автора в анонсе не нужен — он сам создаёт игру и про неё знает.
-        // Личные напоминания о собственных играх (если автор зарегистрирован участником)
-        // придут отдельно по reminder-cron.
-        const groupOnly = list.filter((c) => c.chatType !== "PRIVATE");
+        const [tgStatus, tgList, series] = await Promise.all([
+          api.getTelegramStatus().catch(() => null),
+          api.getTelegramChats().catch(() => [] as TelegramChat[]),
+          editSeriesId ? api.getEventSeries(editSeriesId) : Promise.resolve(null),
+        ]);
+        if (cancelled) return;
+
+        const groupOnly = (tgStatus?.enabled ? tgList : []).filter((c) => c.chatType !== "PRIVATE");
         setTelegramChats(groupOnly);
-        setSelectedTgChatIds(new Set(groupOnly.map((c) => c.id)));
-      } catch {
-        // тихо — фича опциональная
+
+        if (series && editSeriesId) {
+          // Редактируем существующую серию: заполняем поля её данными.
+          setTitle(series.title);
+          setDaysOfWeek(new Set(series.daysOfWeek.split(",").map((d) => d.trim()).filter(Boolean)));
+          const [sh, sm] = series.startTime.slice(0, 5).split(":");
+          const [eh, em] = series.endTime.slice(0, 5).split(":");
+          setStartHour(sh); setStartMinute(sm);
+          setEndHour(eh); setEndMinute(em);
+          setCourts(series.courtsCount);
+          setPointsPerPlayer(series.pointsPerPlayerPerMatch);
+          setVisibility(series.visibility);
+          setMaterializeHoursBefore(series.materializeHoursBefore);
+          const matH = parseInt(series.materializeAtTime?.slice(0, 2) ?? "9", 10);
+          if (!Number.isNaN(matH)) setMaterializeAtHour(matH);
+          setMaterializeMode(series.materializeMode ?? "HOURS_BEFORE");
+          setSeriesReminderHours(series.reminderHours ?? null);
+          setSeriesPinAnnouncement(series.pinAnnouncement ?? null);
+          // Галки чатов = ровно сохранённое (пусто → ничего не выбрано).
+          setSelectedTgChatIds(new Set(series.targetChatIds ?? []));
+          setGameMode(series.pairingMode === "BALANCED" ? "balanced" : "round_robin");
+        } else {
+          // Создание новой игры/серии: по умолчанию выбираем все доступные группы.
+          setSelectedTgChatIds(new Set(groupOnly.map((c) => c.id)));
+        }
+      } catch (e: any) {
+        if (!cancelled) setError(e?.message ?? "Не удалось загрузить");
+      } finally {
+        if (!cancelled) setInitialLoading(false);
       }
     })();
-  }, []);
+    return () => { cancelled = true; };
+  }, [editSeriesId]);
 
   useEffect(() => {
     if (!props.meLoaded) return;
     if (!props.me) nav("/login");
     else if (!props.me.surveyCompleted) nav("/survey");
   }, [props.me, props.meLoaded, nav]);
-
-  // Edit-режим: подгружаем серию и заполняем форму её данными.
-  useEffect(() => {
-    if (!editSeriesId) return;
-    let cancelled = false;
-    (async () => {
-      try {
-        const s = await api.getEventSeries(editSeriesId);
-        if (cancelled) return;
-        setTitle(s.title);
-        setDaysOfWeek(new Set(s.daysOfWeek.split(",").map((d) => d.trim()).filter(Boolean)));
-        const [sh, sm] = s.startTime.slice(0, 5).split(":");
-        const [eh, em] = s.endTime.slice(0, 5).split(":");
-        setStartHour(sh); setStartMinute(sm);
-        setEndHour(eh); setEndMinute(em);
-        setCourts(s.courtsCount);
-        setPointsPerPlayer(s.pointsPerPlayerPerMatch);
-        setVisibility(s.visibility);
-        setMaterializeHoursBefore(s.materializeHoursBefore);
-        const matH = parseInt(s.materializeAtTime?.slice(0, 2) ?? "9", 10);
-        if (!Number.isNaN(matH)) setMaterializeAtHour(matH);
-        setMaterializeMode(s.materializeMode ?? "HOURS_BEFORE");
-        setSeriesReminderHours(s.reminderHours ?? null);
-        setSeriesPinAnnouncement(s.pinAnnouncement ?? null);
-        if (s.targetChatIds && s.targetChatIds.length > 0) {
-          setSelectedTgChatIds(new Set(s.targetChatIds));
-        }
-        setGameMode(s.pairingMode === "BALANCED" ? "balanced" : "round_robin");
-      } catch (e: any) {
-        setError(e?.message ?? "Не удалось загрузить подписку");
-      }
-    })();
-    return () => { cancelled = true; };
-  }, [editSeriesId]);
 
   useEffect(() => {
     setPairingMode(gameMode === "balanced" ? "BALANCED" : "ROUND_ROBIN");
@@ -246,6 +246,16 @@ export function V0CreateEventPage(props: {
     } finally {
       setLoading(false);
     }
+  }
+
+  if (initialLoading) {
+    return (
+      <TooltipProvider>
+        <div className="mx-auto max-w-3xl py-16 text-center text-sm text-muted-foreground">
+          Загрузка…
+        </div>
+      </TooltipProvider>
+    );
   }
 
   return (
@@ -840,7 +850,7 @@ export function V0CreateEventPage(props: {
               )}
 
               <div className="flex gap-3 pt-4">
-                <Button variant="outline" className="flex-1 h-12 bg-transparent" type="button" onClick={() => nav("/games")} disabled={loading}>
+                <Button variant="outline" className="flex-1 h-12 bg-transparent" type="button" onClick={() => nav(isEditing ? "/settings?tab=subscriptions" : "/games")} disabled={loading}>
                   Отменить
                 </Button>
                 <Button className="flex-1 h-12 bg-primary text-primary-foreground" size="lg" disabled={loading}>

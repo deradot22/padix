@@ -23,6 +23,7 @@ import java.security.SecureRandom
 import java.time.Duration
 import java.time.Instant
 import java.time.LocalDate
+import java.time.LocalDateTime
 import java.time.LocalTime
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
@@ -261,6 +262,16 @@ class TelegramService(
         }
 
         val message = update.message ?: update.channelPost ?: return
+
+        // Служебное сообщение «X закрепил сообщение» — Telegram автоматически вставляет его
+        // в чат при каждом pin. Если pin сделан НАШИМ ботом (re-pin для сортировки, или
+        // обычный pin анонса), мы это служебное сообщение тут же удаляем — чтобы в чате
+        // не светилось «Bot pinned a message».
+        if (message.pinnedMessage != null && message.from?.id != null && message.from.id == client.botId()) {
+            runCatching { client.deleteMessage(message.chat.id, message.messageId) }
+            return
+        }
+
         val text = message.text?.trim() ?: return
         val chat = message.chat
         val chatType = parseChatType(chat.type)
@@ -809,8 +820,11 @@ class TelegramService(
                 var pinnedMsgId: Long? = null
                 if (pinAfterSend) {
                     val chatInternalId = chat.id
-                    if (chatInternalId != null) {
-                        unpinPreviousAnnouncementsInChat(chat.chatId, chatInternalId)
+                    if (chatInternalId != null && recordForEventId != null) {
+                        // Снимаем только наш собственный прежний pin (для случая ре-анонса того же
+                        // события). Pin'ы ДРУГИХ событий (других подписок) не трогаем — у каждой
+                        // подписки/игры может быть свой закреплённый анонс одновременно.
+                        unpinPreviousPinForEventInChat(recordForEventId, chat.chatId, chatInternalId)
                     }
                     try {
                         client.pinChatMessage(chat.chatId, sent.messageId, disableNotification = true)
@@ -829,6 +843,11 @@ class TelegramService(
                         )
                     )
                 }
+                // После закрепа пересортируем pin'ы в чате по дате игры. Служебные
+                // «Bot pinned a message» от re-pin удалит handleUpdate при поллинге.
+                if (pinnedMsgId != null) {
+                    chat.id?.let { reorderPinsByDate(chat.chatId, it) }
+                }
                 posted++
             } catch (e: Exception) {
                 log.warn("Failed to post to chat {}: {}", chat.chatId, e.message)
@@ -837,9 +856,15 @@ class TelegramService(
         return posted
     }
 
-    /** Снимает все ранее закреплённые анонсы Padix в этом чате и обнуляет pinned_message_id. */
-    private fun unpinPreviousAnnouncementsInChat(telegramChatId: Long, internalChatId: UUID) {
-        val previous = postRepo.findAllByTelegramChatIdAndPinnedMessageIdIsNotNull(internalChatId)
+    /**
+     * Снимает ранее закреплённый pin ЭТОГО ЖЕ события в этом чате (для случая re-pin
+     * при ре-анонсе того же event'а — например после редактирования).
+     * Pin'ы ДРУГИХ событий (других подписок) не трогаются — у каждой подписки/игры
+     * может быть свой закреплённый анонс одновременно (раньше был баг: при материализации
+     * новой серии снимались pin'ы всех прежних анонсов в чате).
+     */
+    private fun unpinPreviousPinForEventInChat(eventId: UUID, telegramChatId: Long, internalChatId: UUID) {
+        val previous = postRepo.findAllByEventIdAndTelegramChatIdAndPinnedMessageIdIsNotNull(eventId, internalChatId)
         for (prev in previous) {
             val prevMsgId = prev.pinnedMessageId ?: continue
             try {
@@ -849,6 +874,76 @@ class TelegramService(
             }
             prev.pinnedMessageId = null
             postRepo.save(prev)
+        }
+    }
+
+    /**
+     * Перепинит все ОТКРЫТЫЕ будущие закреплённые события в чате в хронологическом
+     * порядке (от далёкого к ближнему). После операции pin ближайшей по дате игры
+     * будет «последним» пиннингом → Telegram покажет её в шапке pinned-сообщений
+     * сверху. Служебные сообщения «Bot pinned a message» от unpin/pin удаляются
+     * в `handleUpdate` (см. фильтр по `pinnedMessage != null` и `from.id == botId`).
+     */
+    private fun reorderPinsByDate(telegramChatId: Long, internalChatId: UUID) {
+        val pinned = postRepo.findAllByTelegramChatIdAndPinnedMessageIdIsNotNull(internalChatId)
+        if (pinned.size < 2) return
+        val now = Instant.now()
+        data class PinItem(val msgId: Long, val startInstant: Instant)
+        val items = pinned.mapNotNull { post ->
+            val msgId = post.pinnedMessageId ?: return@mapNotNull null
+            val event = post.eventId?.let { eventRepo.findById(it).orElse(null) } ?: return@mapNotNull null
+            val tz = event.seriesId?.let { sid ->
+                seriesRepo.findById(sid).orElse(null)?.timezone?.let { runCatching { ZoneId.of(it) }.getOrNull() }
+            } ?: ZoneId.of("UTC")
+            val startInstant = LocalDateTime.of(event.date, event.startTime).atZone(tz).toInstant()
+            if (startInstant.isBefore(now.minus(Duration.ofHours(12)))) return@mapNotNull null
+            PinItem(msgId, startInstant)
+        }.sortedBy { it.startInstant }
+        if (items.size < 2) return
+        for (item in items) {
+            try {
+                client.unpinChatMessage(telegramChatId, item.msgId)
+                client.pinChatMessage(telegramChatId, item.msgId, disableNotification = true)
+            } catch (e: Exception) {
+                log.warn("Reorder pin {} in chat {} failed: {}", item.msgId, telegramChatId, e.message)
+            }
+        }
+    }
+
+    /**
+     * Раз в час: снимаем pin тех событий, у которых end-time уже прошёл (с учётом
+     * таймзоны серии, для одиночных событий — UTC). Закреплёнными должны быть только
+     * актуальные/будущие игры.
+     */
+    @Scheduled(cron = "0 7 * * * *")
+    @Transactional
+    fun cleanupPastPins() {
+        if (!client.isConfigured()) return
+        val pinned = postRepo.findAllByPinnedMessageIdIsNotNull()
+        if (pinned.isEmpty()) return
+        val now = Instant.now()
+        for (post in pinned) {
+            try {
+                val event = post.eventId?.let { eventRepo.findById(it).orElse(null) } ?: continue
+                val tz = event.seriesId?.let { sid ->
+                    seriesRepo.findById(sid).orElse(null)?.timezone?.let { runCatching { ZoneId.of(it) }.getOrNull() }
+                } ?: ZoneId.of("UTC")
+                val endInstant = LocalDateTime.of(event.date, event.endTime).atZone(tz).toInstant()
+                if (endInstant.isAfter(now)) continue
+                val chatInternalId = post.telegramChatId ?: continue
+                val tgChat = chatRepo.findById(chatInternalId).orElse(null) ?: continue
+                val msgId = post.pinnedMessageId ?: continue
+                try {
+                    client.unpinChatMessage(tgChat.chatId, msgId)
+                } catch (e: Exception) {
+                    log.warn("Cleanup unpin {} in chat {} failed: {}", msgId, tgChat.chatId, e.message)
+                }
+                post.pinnedMessageId = null
+                postRepo.save(post)
+                log.info("Auto-unpinned past event {} pin {} in chat {}", post.eventId, msgId, tgChat.chatId)
+            } catch (e: Exception) {
+                log.warn("cleanupPastPins post {} failed: {}", post.id, e.message)
+            }
         }
     }
 
