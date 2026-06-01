@@ -32,7 +32,8 @@ data class TelegramProps(
 
 @Configuration
 class TelegramConfig {
-    @Bean
+    @Bean(name = ["telegramRestClient"])
+    @org.springframework.context.annotation.Primary
     fun telegramRestClient(props: TelegramProps): RestClient {
         val readTimeout = Duration.ofSeconds(props.pollingTimeoutSeconds.toLong() + 30)
         val http = HttpClient.newBuilder()
@@ -232,10 +233,11 @@ class TelegramClient(
      * Подтвердить получение callback_query. Telegram требует это в течение ~30 сек,
      * иначе у юзера в чате крутится индикатор. Можно передать popup-текст для тоста.
      */
-    fun answerCallbackQuery(callbackQueryId: String, text: String? = null) {
+    fun answerCallbackQuery(callbackQueryId: String, text: String? = null, showAlert: Boolean = false) {
         if (props.dryRun) return
         val body = mutableMapOf<String, Any>("callback_query_id" to callbackQueryId)
         if (text != null) body["text"] = text
+        if (showAlert) body["show_alert"] = true
         val resp = restClient.post()
             .uri("${baseUrl()}/answerCallbackQuery")
             .contentType(MediaType.APPLICATION_JSON)
@@ -375,6 +377,24 @@ object TelegramInlineKeyboard {
     fun callbackKeyboard(rows: List<List<Pair<String, String>>>): Map<String, Any> = mapOf(
         "inline_keyboard" to rows.map { row ->
             row.map { (text, data) -> mapOf("text" to text, "callback_data" to data) }
+        }
+    )
+
+    /** Универсальная кнопка — либо `url`, либо `callbackData`. Передавать ровно одно. */
+    sealed class Btn {
+        data class Url(val text: String, val url: String) : Btn()
+        data class Callback(val text: String, val data: String) : Btn()
+    }
+
+    /** Произвольная клавиатура из mix'а url-кнопок и callback-кнопок. */
+    fun mixedKeyboard(rows: List<List<Btn>>): Map<String, Any> = mapOf(
+        "inline_keyboard" to rows.map { row ->
+            row.map { btn ->
+                when (btn) {
+                    is Btn.Url -> mapOf("text" to btn.text, "url" to btn.url)
+                    is Btn.Callback -> mapOf("text" to btn.text, "callback_data" to btn.data)
+                }
+            }
         }
     )
 }

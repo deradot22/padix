@@ -119,6 +119,7 @@ class TelegramService(
     private val eventRepo: com.padelgo.bot.repo.BotEventRepository,
     private val regRepo: com.padelgo.bot.repo.BotRegistrationRepository,
     private val authTokenRepo: com.padelgo.bot.domain.BotTelegramAuthTokenRepository,
+    private val apiClient: ApiClient,
 ) {
     private val log = LoggerFactory.getLogger(TelegramService::class.java)
     private val random = SecureRandom()
@@ -256,14 +257,16 @@ class TelegramService(
 
     @Transactional
     fun handleUpdate(update: TgUpdate) {
-        // 1) Inline-кнопки бот-логина — отдельный путь без message.
+        // 1) Inline-кнопки — отдельный путь без message.
         update.callbackQuery?.let { cb ->
             val data = cb.data.orEmpty()
-            if (data.startsWith("padix_auth:")) {
-                handleAuthCallback(cb, data)
-            } else {
-                // Неизвестный callback — отвечаем чтобы спиннер у юзера не висел.
-                runCatching { client.answerCallbackQuery(cb.id) }
+            when {
+                data.startsWith("padix_auth:") -> handleAuthCallback(cb, data)
+                data.startsWith("reg:") -> handleRegisterCallback(cb, data)
+                else -> {
+                    // Неизвестный callback — отвечаем чтобы спиннер у юзера не висел.
+                    runCatching { client.answerCallbackQuery(cb.id) }
+                }
             }
             return
         }
@@ -420,6 +423,34 @@ class TelegramService(
         client.sendMessage(chat.id, text, replyMarkup = markup)
     }
 
+    /**
+     * Inline-кнопка «📝 Зарегистрироваться» из CREATED-анонса. Формат `reg:<eventId>`.
+     * Идём в api `/api/internal/bot/register-user` с tg user id и event id; api по
+     * `users.telegram_user_id` находит padix-юзера и регистрирует.
+     *
+     * Сам бот сообщения с CTA не меняет — после регистрации api вызовет
+     * notifyRosterChanged, и бот через `handleRosterChanged` отредактирует исходное
+     * CREATED-сообщение (счётчик 2/4 → 3/4).
+     */
+    private fun handleRegisterCallback(cb: TgCallbackQuery, data: String) {
+        val rawEventId = data.removePrefix("reg:")
+        val eventId = runCatching { UUID.fromString(rawEventId) }.getOrNull()
+        if (eventId == null) {
+            runCatching { client.answerCallbackQuery(cb.id, "Некорректная игра") }
+            return
+        }
+        val result = apiClient.registerUser(cb.from.id, eventId)
+        runCatching {
+            // Для NOT_LINKED показываем alert (модальный popup) с инструкцией.
+            // Остальное (OK/ALREADY/FULL/...) — обычный тост сверху.
+            client.answerCallbackQuery(
+                callbackQueryId = cb.id,
+                text = result.message,
+                showAlert = result.status == "NOT_LINKED"
+            )
+        }
+    }
+
     /** Бот-логин шаг 2: юзер нажал inline-кнопку. */
     @Transactional
     private fun handleAuthCallback(cb: TgCallbackQuery, data: String) {
@@ -544,7 +575,7 @@ class TelegramService(
             .filter { it.chatType != TelegramChatType.PRIVATE.name }
         if (chats.isEmpty()) return 0
 
-        val cta = cta(eventId, "📝 Зарегистрироваться")
+        val cta = registerCta(eventId)
         val text = renderEventCreated(event, registeredCount) + cta.textSuffix
         // Закрепляем анонс только если включено. Приоритет: per-series override → глобальный.
         // Перед pin снимаем предыдущий pin Padix в каждом чате.
@@ -587,7 +618,7 @@ class TelegramService(
         val posts = postRepo.findAllByEventId(eventId)
         if (posts.isNotEmpty()) {
             val chatById = chatRepo.findAllByUserIdOrderByLinkedAtAsc(ownerUserId).associateBy { it.id!! }
-            val ctaCreated = cta(eventId, "📝 Зарегистрироваться")
+            val ctaCreated = registerCta(eventId)
             val text = renderEventCreated(fullEvent, registered) + ctaCreated.textSuffix
             for (post in posts) {
                 val chat = chatById[post.telegramChatId] ?: continue
@@ -703,7 +734,7 @@ class TelegramService(
         val posts = postRepo.findAllByEventId(eventId)
         if (posts.isNotEmpty()) {
             val chatById = chatRepo.findAllByUserIdOrderByLinkedAtAsc(ownerUserId).associateBy { it.id!! }
-            val ctaData = cta(eventId, "📝 Зарегистрироваться")
+            val ctaData = registerCta(eventId)
             val text = renderEventCreated(event, newCount) + ctaData.textSuffix
             for (post in posts) {
                 val chat = chatById[post.telegramChatId] ?: continue
@@ -1030,6 +1061,29 @@ class TelegramService(
             Cta(TelegramInlineKeyboard.urlButton(buttonText, url), "")
         } else {
             Cta(null, "\n\n$url")
+        }
+    }
+
+    /**
+     * CTA для CREATED/edit-постов: «📝 Зарегистрироваться» как callback_data
+     * (бот сам регистрирует юзера, не открывая сайт) + «🔍 Игра» как URL для тех,
+     * кто хочет посмотреть детали в браузере. Если url не публичный (localhost) —
+     * показываем только callback-кнопку и кладём ссылку текстом.
+     */
+    private fun registerCta(eventId: UUID): Cta {
+        val url = eventUrl(eventId)
+        val callbackBtn = TelegramInlineKeyboard.Btn.Callback("📝 Зарегистрироваться", "reg:$eventId")
+        return if (isPublicHttpUrl(url)) {
+            val markup = TelegramInlineKeyboard.mixedKeyboard(listOf(
+                listOf(
+                    callbackBtn,
+                    TelegramInlineKeyboard.Btn.Url("🔍 Игра", url)
+                )
+            ))
+            Cta(markup, "")
+        } else {
+            val markup = TelegramInlineKeyboard.mixedKeyboard(listOf(listOf(callbackBtn)))
+            Cta(markup, "\n\n$url")
         }
     }
 

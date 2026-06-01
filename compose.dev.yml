@@ -70,6 +70,7 @@ services:
       TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
       APP_TELEGRAM_BOT_USERNAME: ${APP_TELEGRAM_BOT_USERNAME:-padix_dev_bot}
       APP_PUBLIC_BASE_URL: ${APP_PUBLIC_BASE_URL:-http://localhost:8083}
+      APP_API_BASE_URL: ${APP_API_BASE_URL:-http://api:8080}
       APP_INTERNAL_SECRET: ${APP_INTERNAL_SECRET:-dev-internal-secret-change-me}
     ports:
       # 8081 на хосте занят локальным Expo; используем 8084 для дебага.

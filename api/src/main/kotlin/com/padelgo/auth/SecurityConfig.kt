@@ -41,7 +41,8 @@ class SecurityConfig(
     private val userRepo: UserRepository,
     private val rateLimiter: RateLimiter,
     @Value("\${app.swagger.username}") private val swaggerUsername: String,
-    @Value("\${app.swagger.password}") private val swaggerPassword: String
+    @Value("\${app.swagger.password}") private val swaggerPassword: String,
+    @Value("\${app.internal.secret:}") private val internalSecret: String
 ) {
     @Bean
     fun passwordEncoder(): PasswordEncoder = BCryptPasswordEncoder()
@@ -104,6 +105,9 @@ class SecurityConfig(
         val rateLimitFilter = RateLimitFilter(rateLimiter)
         http.addFilterBefore(rateLimitFilter, UsernamePasswordAuthenticationFilter::class.java)
         http.addFilterAfter(JwtAuthFilter(jwtService), RateLimitFilter::class.java)
+        // InternalAuthFilter работает только на /api/internal/** (shouldNotFilter)
+        // и валидирует X-Internal-Secret — используется bot → api направлением.
+        http.addFilterAfter(InternalAuthFilter(internalSecret), JwtAuthFilter::class.java)
         http.addFilterAfter(SurveyGateFilter(userRepo), JwtAuthFilter::class.java)
         return http.build()
     }
