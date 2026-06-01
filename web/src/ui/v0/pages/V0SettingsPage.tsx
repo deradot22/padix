@@ -4,25 +4,27 @@ import { api, EventSeries, MeResponse, TelegramChat, TelegramSettings, TelegramS
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useConfirm } from "@/components/ui/confirm-dialog";
 import { TelegramIntegrationCard } from "@/components/telegram-integration";
 import { ConnectedAccountsSection } from "@/components/connected-accounts-section";
 import { PasswordSection } from "@/components/password-section";
-import { User, Bell, ShieldCheck, Upload, Check, Send, ChevronLeft, ChevronRight, BellOff, BellRing, Repeat, Pause, Play, Trash2, Plus, Pencil } from "lucide-react";
+import { User, Bell, Link2, ShieldCheck, Upload, Check, Send, ChevronLeft, ChevronRight, BellOff, BellRing, Repeat, Pause, Play, Trash2, Plus, Pencil } from "lucide-react";
 
-type SectionId = "profile" | "notifications" | "subscriptions" | "security";
+type SectionId = "profile" | "notifications" | "subscriptions" | "integrations" | "security";
 
 const SECTIONS: { id: SectionId; label: string; icon: typeof User }[] = [
   { id: "profile", label: "Профиль", icon: User },
   { id: "notifications", label: "Уведомления", icon: Bell },
   { id: "subscriptions", label: "Подписки", icon: Repeat },
+  { id: "integrations", label: "Интеграции", icon: Link2 },
   { id: "security", label: "Безопасность", icon: ShieldCheck },
 ];
 
 function isSectionId(v: string | null): v is SectionId {
-  return v === "profile" || v === "notifications" || v === "subscriptions" || v === "security";
+  return v === "profile" || v === "notifications" || v === "subscriptions" || v === "integrations" || v === "security";
 }
 
 export function V0SettingsPage(props: {
@@ -109,15 +111,18 @@ export function V0SettingsPage(props: {
           )}
           {section === "notifications" && <NotificationsSection />}
           {section === "subscriptions" && <SubscriptionsSection />}
+          {section === "integrations" && (
+            <div className="space-y-6">
+              {props.me ? (
+                <ConnectedAccountsSection me={props.me} onMeUpdate={props.onMeUpdate ?? (() => {})} />
+              ) : null}
+            </div>
+          )}
           {section === "security" && (
             <div className="space-y-6">
               {props.me ? (
                 <PasswordSection me={props.me} onMeUpdate={props.onMeUpdate ?? (() => {})} />
               ) : null}
-              {props.me ? (
-                <ConnectedAccountsSection me={props.me} onMeUpdate={props.onMeUpdate ?? (() => {})} />
-              ) : null}
-              <SecuritySection />
             </div>
           )}
         </div>
@@ -181,32 +186,17 @@ function ProfileSection(props: {
   onMeUpdate?: (me: MeResponse) => void;
 }) {
   const [me, setMe] = useState<MeResponse | null>(props.me ?? null);
-  const [name, setName] = useState(props.me?.name ?? "");
-  const [email, setEmail] = useState(props.me?.email ?? "");
-  const [gender, setGender] = useState(props.me?.gender ?? "");
   const [avatar, setAvatar] = useState<string | null>(props.me?.avatarUrl ?? null);
-  const [saving, setSaving] = useState(false);
-  const [info, setInfo] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [info, setInfo] = useState<string | null>(null);
+  const [editOpen, setEditOpen] = useState(false);
 
   useEffect(() => {
     if (props.me) {
       setMe(props.me);
-      setName(props.me.name ?? "");
-      setEmail(props.me.email ?? "");
-      setGender(props.me.gender ?? "");
       setAvatar(props.me.avatarUrl ?? null);
     }
   }, [props.me]);
-
-  const dirty = useMemo(() => {
-    if (!me) return false;
-    return (
-      name.trim() !== (me.name ?? "") ||
-      email.trim() !== (me.email ?? "") ||
-      gender !== (me.gender ?? "")
-    );
-  }, [me, name, email, gender]);
 
   const persistAvatar = async (next: string | null) => {
     setAvatar(next);
@@ -221,42 +211,30 @@ function ProfileSection(props: {
     }
   };
 
-  const saveProfile = async () => {
-    setSaving(true);
-    setError(null);
-    setInfo(null);
-    try {
-      const payload: { name?: string; email?: string; gender?: string } = {};
-      if (name.trim() && name.trim() !== (me?.name ?? "")) payload.name = name.trim();
-      if (email.trim() && email.trim() !== (me?.email ?? "")) payload.email = email.trim();
-      if (gender !== (me?.gender ?? "")) payload.gender = gender;
-      if (Object.keys(payload).length === 0) {
-        setInfo("Нечего сохранять");
-        return;
-      }
-      const updated = await api.updateProfile(payload);
-      setMe(updated);
-      props.onMeUpdate?.(updated);
-      setInfo("Сохранено");
-      window.setTimeout(() => setInfo(null), 1500);
-    } catch (e: any) {
-      setError(e?.message ?? "Ошибка сохранения");
-    } finally {
-      setSaving(false);
-    }
-  };
-
   if (!me) return null;
   const initials = me.name?.trim().split(/\s+/).slice(0, 2).map((w) => w[0]?.toUpperCase()).join("") || "?";
+  const genderLabel = me.gender === "M" ? "М" : me.gender === "F" ? "Ж" : "—";
 
   return (
     <Card className="border-border/50">
-      <CardHeader>
-        <CardTitle>Профиль</CardTitle>
-        <CardDescription>Имя, email, пароль и аватар.</CardDescription>
+      <CardHeader className="flex flex-row items-start justify-between gap-3 space-y-0">
+        <div>
+          <CardTitle>Профиль</CardTitle>
+          <CardDescription>Имя, email, пол и аватар.</CardDescription>
+        </div>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => setEditOpen(true)}
+          aria-label="Редактировать профиль"
+          className="shrink-0"
+        >
+          <Pencil className="h-4 w-4 mr-1.5" />
+          Редактировать
+        </Button>
       </CardHeader>
       <CardContent className="space-y-6">
-        {/* Avatar */}
+        {/* Avatar — оставляем inline (одноклик, авто-сохранение). */}
         <div className="space-y-3">
           <div className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Аватар</div>
           <div className="flex items-start gap-4">
@@ -303,13 +281,136 @@ function ProfileSection(props: {
           </div>
         </div>
 
-        {/* Fields */}
-        <div className="space-y-4 pt-2 border-t border-border">
-          <div className="space-y-2">
-            <label className="text-sm font-medium">Имя</label>
-            <Input value={name} onChange={(e) => setName(e.target.value)} autoComplete="name" />
+        {/* Поля — view-only. Редактирование через диалог. */}
+        <div className="space-y-3 pt-2 border-t border-border">
+          <ViewRow label="Имя" value={me.name || "—"} />
+          <ViewRow label="Email" value={me.email || "—"} />
+          <ViewRow label="Пол" value={genderLabel} />
+        </div>
+
+        {/* Шансы выигрыша — отдельный auto-save toggle (одноклик, не привязан к Edit). */}
+        <label className="flex items-start justify-between gap-3 cursor-pointer rounded-md border border-border bg-background/50 hover:bg-background px-3 py-2.5 transition-colors">
+          <div className="space-y-0.5 min-w-0">
+            <div className="text-sm font-medium">Показывать шансы выигрыша</div>
+            <div className="text-xs text-muted-foreground">
+              В модале «Раунды» под каждым матчем будет полоска шансов и метка «Лёгкий фаворит» / «Равные шансы» и т.п. По Elo.
+            </div>
           </div>
-          <div className="space-y-2">
+          <input
+            type="checkbox"
+            className="mt-1 h-4 w-4 accent-primary shrink-0"
+            checked={me.showWinProbability === true}
+            onChange={async (e) => {
+              const next = e.target.checked;
+              setError(null);
+              try {
+                const updated = await api.updateProfile({ showWinProbability: next });
+                setMe(updated);
+                props.onMeUpdate?.(updated);
+              } catch (err: any) {
+                setError(err?.message ?? "Не удалось сохранить настройку");
+              }
+            }}
+          />
+        </label>
+
+        {error && (
+          <div className="rounded-lg border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive">
+            {error}
+          </div>
+        )}
+        {info && (
+          <div className="rounded-lg border border-emerald-500/40 dark:border-emerald-500/30 bg-emerald-500/10 p-3 text-sm text-emerald-700 dark:text-emerald-300 flex items-center gap-2">
+            <Check className="h-4 w-4" />
+            {info}
+          </div>
+        )}
+      </CardContent>
+
+      <EditProfileDialog
+        open={editOpen}
+        onOpenChange={setEditOpen}
+        me={me}
+        onSaved={(updated) => {
+          setMe(updated);
+          props.onMeUpdate?.(updated);
+        }}
+      />
+    </Card>
+  );
+}
+
+function ViewRow({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="flex items-center justify-between gap-3 rounded-md border border-border/50 bg-secondary/30 px-3 py-2.5">
+      <div className="text-xs font-medium text-muted-foreground uppercase tracking-wide">{label}</div>
+      <div className="text-sm font-medium truncate">{value}</div>
+    </div>
+  );
+}
+
+function EditProfileDialog(props: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  me: MeResponse;
+  onSaved: (me: MeResponse) => void;
+}) {
+  const [name, setName] = useState(props.me.name ?? "");
+  const [email, setEmail] = useState(props.me.email ?? "");
+  const [gender, setGender] = useState(props.me.gender ?? "");
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  // Сброс при каждом открытии — чтобы при отмене не сохранять локальные изменения.
+  useEffect(() => {
+    if (props.open) {
+      setName(props.me.name ?? "");
+      setEmail(props.me.email ?? "");
+      setGender(props.me.gender ?? "");
+      setError(null);
+      setSaving(false);
+    }
+  }, [props.open, props.me]);
+
+  const dirty =
+    name.trim() !== (props.me.name ?? "") ||
+    email.trim() !== (props.me.email ?? "") ||
+    gender !== (props.me.gender ?? "");
+
+  const onSave = async () => {
+    setSaving(true);
+    setError(null);
+    try {
+      const payload: { name?: string; email?: string; gender?: string } = {};
+      if (name.trim() && name.trim() !== (props.me.name ?? "")) payload.name = name.trim();
+      if (email.trim() !== (props.me.email ?? "")) payload.email = email.trim();
+      if (gender !== (props.me.gender ?? "")) payload.gender = gender;
+      if (Object.keys(payload).length === 0) {
+        props.onOpenChange(false);
+        return;
+      }
+      const updated = await api.updateProfile(payload);
+      props.onSaved(updated);
+      props.onOpenChange(false);
+    } catch (e: any) {
+      setError(e?.message ?? "Не удалось сохранить");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <Dialog open={props.open} onOpenChange={props.onOpenChange}>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle>Редактировать профиль</DialogTitle>
+        </DialogHeader>
+        <div className="space-y-3">
+          <div className="space-y-1.5">
+            <label className="text-sm font-medium">Имя</label>
+            <Input value={name} onChange={(e) => setName(e.target.value)} autoComplete="name" autoFocus />
+          </div>
+          <div className="space-y-1.5">
             <label className="text-sm font-medium">Email</label>
             <Input
               type="email"
@@ -318,8 +419,7 @@ function ProfileSection(props: {
               autoComplete="email"
             />
           </div>
-          {/* Смена пароля переехала в раздел «Безопасность» — теперь требует текущий пароль. */}
-          <div className="space-y-2">
+          <div className="space-y-1.5">
             <label className="text-sm font-medium">Пол</label>
             <Select value={gender || "_unset"} onValueChange={(v) => setGender(v === "_unset" ? "" : v)}>
               <SelectTrigger className="h-10">
@@ -332,53 +432,20 @@ function ProfileSection(props: {
               </SelectContent>
             </Select>
           </div>
-
-          {/* Шансы выигрыша — отдельный auto-save тоггл (одноклик, не привязан к Save). */}
-          <label className="flex items-start justify-between gap-3 cursor-pointer rounded-md border border-border bg-background/50 hover:bg-background px-3 py-2.5 transition-colors">
-            <div className="space-y-0.5 min-w-0">
-              <div className="text-sm font-medium">Показывать шансы выигрыша</div>
-              <div className="text-xs text-muted-foreground">
-                В модале «Раунды» под каждым матчем будет полоска шансов и метка «Лёгкий фаворит» / «Равные шансы» и т.п. По Elo.
-              </div>
-            </div>
-            <input
-              type="checkbox"
-              className="mt-1 h-4 w-4 accent-primary shrink-0"
-              checked={me.showWinProbability === true}
-              onChange={async (e) => {
-                const next = e.target.checked;
-                setError(null);
-                try {
-                  const updated = await api.updateProfile({ showWinProbability: next });
-                  setMe(updated);
-                  props.onMeUpdate?.(updated);
-                } catch (err: any) {
-                  setError(err?.message ?? "Не удалось сохранить настройку");
-                }
-              }}
-            />
-          </label>
-
           {error && (
-            <div className="rounded-lg border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive">
-              {error}
-            </div>
+            <div className="rounded-md border border-destructive/30 bg-destructive/10 p-2 text-xs text-destructive">{error}</div>
           )}
-          {info && (
-            <div className="rounded-lg border border-emerald-500/40 dark:border-emerald-500/30 bg-emerald-500/10 p-3 text-sm text-emerald-700 dark:text-emerald-300 flex items-center gap-2">
-              <Check className="h-4 w-4" />
-              {info}
-            </div>
-          )}
-
-          <div className="flex justify-end">
-            <Button onClick={saveProfile} disabled={saving || !dirty}>
-              {saving ? "Сохранение…" : "Сохранить"}
-            </Button>
-          </div>
         </div>
-      </CardContent>
-    </Card>
+        <DialogFooter className="gap-2 sm:gap-0">
+          <Button type="button" variant="outline" onClick={() => props.onOpenChange(false)} disabled={saving}>
+            Отмена
+          </Button>
+          <Button type="button" onClick={onSave} disabled={saving || !dirty}>
+            {saving ? "Сохранение…" : "Сохранить"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
 
@@ -794,24 +861,6 @@ function SubscriptionsSection() {
             })}
           </div>
         )}
-      </CardContent>
-    </Card>
-  );
-}
-
-// ---------- Security section ----------
-
-function SecuritySection() {
-  return (
-    <Card className="border-border/50">
-      <CardHeader>
-        <CardTitle>Безопасность</CardTitle>
-        <CardDescription>Управление сессиями и удаление аккаунта.</CardDescription>
-      </CardHeader>
-      <CardContent>
-        <div className="rounded-lg border border-dashed border-border p-6 text-center text-sm text-muted-foreground">
-          Скоро здесь появятся: выход из всех сессий, 2FA, удаление аккаунта.
-        </div>
       </CardContent>
     </Card>
   );

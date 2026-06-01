@@ -1,14 +1,15 @@
-import { FormEvent, useState } from "react";
+import { FormEvent, useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import { KeyRound } from "lucide-react";
 import { api, MeResponse } from "@/lib/api";
 
 /**
- * Секция «Пароль» в настройках. Поведение зависит от наличия пароля у юзера:
- *
- *  - hasPassword=true → форма «Сменить пароль»: currentPassword + newPassword + confirmPassword
- *  - hasPassword=false (OAuth-only юзер) → форма «Установить пароль»: только newPassword + confirmPassword
+ * Секция «Пароль» в настройках. Компактная карточка с одной кнопкой:
+ *   - hasPassword=true  → «Сменить пароль» (открывает модал с currentPassword + new + confirm)
+ *   - hasPassword=false → «Установить пароль» (модал без currentPassword)
  *
  * После установки пароля юзер сможет входить email+password в дополнение к OAuth.
  */
@@ -17,17 +18,69 @@ export function PasswordSection(props: {
   onMeUpdate: (me: MeResponse) => void;
 }) {
   const hasPassword = props.me.hasPassword;
+  const emailMissing = !props.me.email;
+  const [open, setOpen] = useState(false);
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="text-base flex items-center gap-2">
+          <KeyRound className="h-4 w-4 text-muted-foreground" />
+          Пароль
+        </CardTitle>
+        <CardDescription>
+          {hasPassword
+            ? "Можете сменить пароль от аккаунта."
+            : "Установите пароль, чтобы входить по email + паролю в дополнение к привязанным аккаунтам."}
+        </CardDescription>
+      </CardHeader>
+      <CardContent>
+        {emailMissing ? (
+          <div className="mb-3 rounded-md border border-amber-500/40 dark:border-amber-500/30 bg-amber-500/10 p-3 text-xs text-amber-900 dark:text-amber-100">
+            У тебя не привязан email — пароль будет работать только после добавления email в разделе «Профиль».
+          </div>
+        ) : null}
+        <Button onClick={() => setOpen(true)} variant={hasPassword ? "outline" : "default"}>
+          {hasPassword ? "Сменить пароль" : "Установить пароль"}
+        </Button>
+      </CardContent>
+
+      <PasswordDialog
+        open={open}
+        onOpenChange={setOpen}
+        hasPassword={hasPassword}
+        onMeUpdate={props.onMeUpdate}
+      />
+    </Card>
+  );
+}
+
+function PasswordDialog(props: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  hasPassword: boolean;
+  onMeUpdate: (me: MeResponse) => void;
+}) {
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [success, setSuccess] = useState(false);
+
+  // Сброс при каждом открытии — чтобы старые значения не висели.
+  useEffect(() => {
+    if (props.open) {
+      setCurrentPassword("");
+      setNewPassword("");
+      setConfirmPassword("");
+      setError(null);
+      setSaving(false);
+    }
+  }, [props.open]);
 
   const onSubmit = async (e: FormEvent) => {
     e.preventDefault();
     setError(null);
-    setSuccess(false);
     if (newPassword.length < 6) {
       setError("Пароль должен быть не короче 6 символов");
       return;
@@ -36,18 +89,15 @@ export function PasswordSection(props: {
       setError("Пароли не совпадают");
       return;
     }
-    if (hasPassword && !currentPassword) {
+    if (props.hasPassword && !currentPassword) {
       setError("Введите текущий пароль");
       return;
     }
     setSaving(true);
     try {
-      const updated = await api.setPassword(newPassword, hasPassword ? currentPassword : null);
+      const updated = await api.setPassword(newPassword, props.hasPassword ? currentPassword : null);
       props.onMeUpdate(updated);
-      setCurrentPassword("");
-      setNewPassword("");
-      setConfirmPassword("");
-      setSuccess(true);
+      props.onOpenChange(false);
     } catch (e: any) {
       setError(e?.message ?? "Не удалось сохранить пароль");
     } finally {
@@ -55,23 +105,20 @@ export function PasswordSection(props: {
     }
   };
 
-  // Если у юзера есть email — он может входить по паролю. Если email = null (Telegram-only)
-  // пароль бесполезен пока не добавлен email. Показываем подсказку.
-  const emailMissing = !props.me.email;
-
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="text-base">{hasPassword ? "Сменить пароль" : "Установить пароль"}</CardTitle>
-      </CardHeader>
-      <CardContent>
-        {emailMissing ? (
-          <div className="mb-4 rounded-md border border-amber-500/40 dark:border-amber-500/30 bg-amber-500/10 p-3 text-xs text-amber-900 dark:text-amber-100">
-            У тебя не привязан email — пароль будет работать только после добавления email в разделе «Профиль».
-          </div>
-        ) : null}
-        <form onSubmit={onSubmit} className="space-y-3 max-w-md">
-          {hasPassword ? (
+    <Dialog open={props.open} onOpenChange={props.onOpenChange}>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle>{props.hasPassword ? "Сменить пароль" : "Установить пароль"}</DialogTitle>
+          <DialogDescription>
+            {props.hasPassword
+              ? "Введите текущий пароль для подтверждения, затем новый дважды."
+              : "Придумайте пароль (минимум 6 символов) — затем сможете входить по email + паролю."}
+          </DialogDescription>
+        </DialogHeader>
+
+        <form onSubmit={onSubmit} className="space-y-3">
+          {props.hasPassword ? (
             <div className="space-y-1">
               <label className="text-xs text-muted-foreground">Текущий пароль</label>
               <Input
@@ -79,6 +126,7 @@ export function PasswordSection(props: {
                 value={currentPassword}
                 onChange={(e) => setCurrentPassword(e.target.value)}
                 autoComplete="current-password"
+                autoFocus
               />
             </div>
           ) : null}
@@ -90,6 +138,7 @@ export function PasswordSection(props: {
               onChange={(e) => setNewPassword(e.target.value)}
               autoComplete="new-password"
               minLength={6}
+              autoFocus={!props.hasPassword}
             />
           </div>
           <div className="space-y-1">
@@ -104,16 +153,16 @@ export function PasswordSection(props: {
           {error ? (
             <div className="rounded-md border border-destructive/30 bg-destructive/10 p-2 text-xs text-destructive">{error}</div>
           ) : null}
-          {success ? (
-            <div className="rounded-md border border-emerald-500/40 dark:border-emerald-500/30 bg-emerald-500/10 p-2 text-xs text-emerald-700 dark:text-emerald-300">
-              Пароль обновлён.
-            </div>
-          ) : null}
-          <Button type="submit" disabled={saving}>
-            {saving ? "Сохраняем…" : hasPassword ? "Сменить пароль" : "Установить пароль"}
-          </Button>
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button type="button" variant="outline" onClick={() => props.onOpenChange(false)} disabled={saving}>
+              Отмена
+            </Button>
+            <Button type="submit" disabled={saving}>
+              {saving ? "Сохраняем…" : props.hasPassword ? "Сменить пароль" : "Установить пароль"}
+            </Button>
+          </DialogFooter>
         </form>
-      </CardContent>
-    </Card>
+      </DialogContent>
+    </Dialog>
   );
 }
