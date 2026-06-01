@@ -249,7 +249,7 @@ export function EditProfileDialog(props: {
           )}
         </div>
 
-        <DialogFooter className="gap-2 sm:gap-0">
+        <DialogFooter className="gap-2">
           <Button type="button" variant="outline" onClick={() => props.onOpenChange(false)} disabled={saving}>
             Отмена
           </Button>

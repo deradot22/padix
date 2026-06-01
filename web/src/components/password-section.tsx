@@ -153,7 +153,7 @@ function PasswordDialog(props: {
           {error ? (
             <div className="rounded-md border border-destructive/30 bg-destructive/10 p-2 text-xs text-destructive">{error}</div>
           ) : null}
-          <DialogFooter className="gap-2 sm:gap-0">
+          <DialogFooter className="gap-2">
             <Button type="button" variant="outline" onClick={() => props.onOpenChange(false)} disabled={saving}>
               Отмена
             </Button>
