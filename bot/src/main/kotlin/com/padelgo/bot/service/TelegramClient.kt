@@ -180,15 +180,22 @@ class TelegramClient(
         if (parseMode != null) body["parse_mode"] = parseMode
         if (replyMarkup != null) body["reply_markup"] = replyMarkup
 
-        val resp = restClient.post()
-            .uri("${baseUrl()}/editMessageText")
-            .contentType(MediaType.APPLICATION_JSON)
-            .body(body)
-            .retrieve()
-            .body<TgResponse<Any>>()
-            ?: throw TelegramApiException("editMessageText: empty response")
+        val resp = try {
+            restClient.post()
+                .uri("${baseUrl()}/editMessageText")
+                .contentType(MediaType.APPLICATION_JSON)
+                .body(body)
+                .retrieve()
+                .body<TgResponse<Any>>()
+                ?: throw TelegramApiException("editMessageText: empty response")
+        } catch (e: org.springframework.web.client.RestClientResponseException) {
+            // Telegram отвечает 400 на «message is not modified» — RestClient бросает
+            // exception раньше чем мы проверим resp.description. Парсим body вручную.
+            val body = e.responseBodyAsString
+            if (body.contains("message is not modified", ignoreCase = true)) return
+            throw TelegramApiException("editMessageText for $chatId/$messageId failed: $body", e.statusCode.value())
+        }
         if (!resp.ok) {
-            // "message is not modified" — нормально для нашего use-case, не шумим.
             val desc = resp.description.orEmpty()
             if (desc.contains("message is not modified", ignoreCase = true)) return
             throw TelegramApiException("editMessageText for $chatId/$messageId failed: $desc", resp.errorCode)
