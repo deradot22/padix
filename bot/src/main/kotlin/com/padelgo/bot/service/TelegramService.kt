@@ -106,6 +106,13 @@ data class RepinUpcomingResult(
     val reorderedChats: Int,
 )
 
+/** Результат backfill-операции `refreshUpcomingKeyboards`. */
+data class RefreshKeyboardsResult(
+    val edited: Int,
+    val skipped: Int,
+    val failed: Int,
+)
+
 @Service
 class TelegramService(
     private val client: TelegramClient,
@@ -1045,6 +1052,70 @@ class TelegramService(
         }
         log.info("repinAllUpcoming done: pinned={} skipped={} chats={}", pinned, skipped, reorderedCount)
         return RepinUpcomingResult(pinned = pinned, skipped = skipped, reorderedChats = reorderedCount)
+    }
+
+    /**
+     * Backfill: переотрисовать клавиатуру у всех CREATED-постов будущих игр
+     * (callback «📝 Зарегистрироваться» + URL «🔍 Игра» вместо одиночной URL-кнопки).
+     * Текст пересобирается актуальным (renderEventCreated со свежим counter),
+     * reply_markup — registerCta. Прошедшие игры пропускаются.
+     *
+     * Используется один раз после деплоя фичи in-chat registration — чтобы старые
+     * закреплённые анонсы получили новые кнопки без пересоздания.
+     */
+    @Transactional
+    fun refreshUpcomingKeyboards(): RefreshKeyboardsResult {
+        if (!client.isConfigured()) return RefreshKeyboardsResult(0, 0, 0)
+        val now = Instant.now()
+        var edited = 0
+        var skipped = 0
+        var failed = 0
+        for (post in postRepo.findAll()) {
+            try {
+                val eventId = post.eventId
+                val chatInternalId = post.telegramChatId
+                if (eventId == null || chatInternalId == null) {
+                    skipped++
+                    continue
+                }
+                val event = eventRepo.findById(eventId).orElse(null)
+                val tgChat = chatRepo.findById(chatInternalId).orElse(null)
+                if (event == null || tgChat == null) {
+                    skipped++
+                    continue
+                }
+                // Кнопка регистрации релевантна только для открытых на регистрацию игр.
+                if (event.status != com.padelgo.bot.domain.EventStatus.OPEN_FOR_REGISTRATION) {
+                    skipped++
+                    continue
+                }
+                val tz = event.seriesId?.let { sid ->
+                    seriesRepo.findById(sid).orElse(null)?.timezone?.let { runCatching { ZoneId.of(it) }.getOrNull() }
+                } ?: ZoneId.of("UTC")
+                val endInstant = LocalDateTime.of(event.date, event.endTime).atZone(tz).toInstant()
+                if (endInstant.isBefore(now)) {
+                    skipped++
+                    continue
+                }
+
+                val capacity = event.courtsCount * 4
+                val registered = regRepo.countByEventIdAndStatus(eventId).toInt().coerceAtMost(capacity)
+                val cta = registerCta(eventId)
+                val text = renderEventCreated(event, registered) + cta.textSuffix
+                try {
+                    client.editMessageText(tgChat.chatId, post.messageId, text, replyMarkup = cta.replyMarkup)
+                    edited++
+                } catch (e: Exception) {
+                    log.warn("refreshUpcomingKeyboards edit {}/{} failed: {}", tgChat.chatId, post.messageId, e.message)
+                    failed++
+                }
+            } catch (e: Exception) {
+                log.warn("refreshUpcomingKeyboards post {}: {}", post.id, e.message)
+                failed++
+            }
+        }
+        log.info("refreshUpcomingKeyboards done: edited={} skipped={} failed={}", edited, skipped, failed)
+        return RefreshKeyboardsResult(edited = edited, skipped = skipped, failed = failed)
     }
 
     /**

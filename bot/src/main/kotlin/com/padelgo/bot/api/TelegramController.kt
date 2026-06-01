@@ -1,6 +1,7 @@
 package com.padelgo.bot.api
 
 import com.padelgo.bot.service.LinkTokenInfo
+import com.padelgo.bot.service.RefreshKeyboardsResult
 import com.padelgo.bot.service.RepinUpcomingResult
 import com.padelgo.bot.service.TelegramChatInfo
 import com.padelgo.bot.service.TelegramService
@@ -153,6 +154,15 @@ class TelegramController(
      */
     @PostMapping("/admin/repin-upcoming")
     fun repinUpcoming(): RepinUpcomingResult = service.repinAllUpcoming()
+
+    /**
+     * Backfill: переотрисовать клавиатуру у всех CREATED-постов будущих игр —
+     * меняет одиночную URL-кнопку на новую пару (callback Зарегистрироваться + URL Игра).
+     * Идемпотентно: повторный вызов на той же кнопке = no-op (Telegram сам игнорирует
+     * editMessageText если контент не изменился).
+     */
+    @PostMapping("/admin/refresh-keyboards-upcoming")
+    fun refreshKeyboardsUpcoming(): RefreshKeyboardsResult = service.refreshUpcomingKeyboards()
 
     @PatchMapping("/chats/{chatId}/preferences")
     fun updateChatPreferences(
