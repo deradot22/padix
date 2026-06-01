@@ -243,6 +243,11 @@ export function V0TelegramBotLoginPage(props: { onAuth: (me: MeResponse) => void
               <div className="text-sm">Бот спрашивает у тебя подтверждение в Telegram</div>
               <div className="text-xs text-muted-foreground">Тапни «✅ Войти» в чате с ботом</div>
             </div>
+          ) : status.status === "APPROVED" && linkMode ? (
+            // Link-mode: бэк сейчас линкует TG к текущему юзеру, форма регистрации не нужна.
+            // ВАЖНО: эта ветка должна идти ПЕРЕД проверкой existingUser, иначе у юзера
+            // с новым (ещё не привязанным) TG на долю секунды промелькнёт «регистрация».
+            renderWaiting("Привязываем Telegram…")
           ) : status.status === "APPROVED" && status.existingUser === true ? (
             renderWaiting("Готово, заходим…")
           ) : status.status === "APPROVED" ? (
