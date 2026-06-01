@@ -30,6 +30,10 @@ export function V0TelegramBotLoginPage(props: { onAuth: (me: MeResponse) => void
   const [params] = useSearchParams();
   const token = params.get("token") ?? "";
   const deepLink = params.get("deepLink") ?? "";
+  // mode=link — юзер УЖЕ залогинен и привязывает TG к своему аккаунту.
+  // Логика отличается: после APPROVED идём в /bot-link/complete, обновляем me,
+  // редиректим в /settings (а не /survey или /).
+  const linkMode = params.get("mode") === "link";
 
   const [status, setStatus] = useState<StatusResp | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -77,10 +81,14 @@ export function V0TelegramBotLoginPage(props: { onAuth: (me: MeResponse) => void
 
   // Когда APPROVED — для существующего юзера сразу complete + redirect.
   // Для нового — заполнить дефолтное имя из Telegram-данных и ждать сабмита формы.
+  // Для link-mode — всегда auto-complete: создаём не юзера, а связку TG↔user.
   useEffect(() => {
     if (!status || status.status !== "APPROVED") return;
     if (completedRef.current) return;
-    if (status.existingUser === true) {
+    if (linkMode) {
+      completedRef.current = true;
+      autoCompleteLink();
+    } else if (status.existingUser === true) {
       completedRef.current = true;
       autoComplete();
     } else {
@@ -103,6 +111,21 @@ export function V0TelegramBotLoginPage(props: { onAuth: (me: MeResponse) => void
       }
     } catch (e: any) {
       setError(e?.message ?? "Не удалось завершить вход");
+      setCompleting(false);
+      completedRef.current = false;
+    }
+  }
+
+  /** Link-flow: юзер уже залогинен, привязываем TG к его аккаунту. JWT не меняется. */
+  async function autoCompleteLink() {
+    setCompleting(true);
+    setError(null);
+    try {
+      const updatedMe = await api.telegramBotLinkComplete(token);
+      props.onAuth(updatedMe);
+      nav("/settings", { replace: true });
+    } catch (e: any) {
+      setError(e?.message ?? "Не удалось привязать Telegram");
       setCompleting(false);
       completedRef.current = false;
     }

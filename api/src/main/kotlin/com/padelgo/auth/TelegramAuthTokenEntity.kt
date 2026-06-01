@@ -77,6 +77,14 @@ class TelegramAuthToken(
     @Column(name = "email_confirm_sent_to", length = 255)
     var emailConfirmSentTo: String? = null,
 
+    /**
+     * bot-link flow: какому юзеру привязать TG (из JWT при `/bot-link/start`).
+     * Отличается от email_confirm_target_user_id, который ставится позже (если на complete
+     * юзер ввёл existing email). Здесь — юзер уже залогинен в Padix и хочет привязать TG.
+     */
+    @Column(name = "link_target_user_id")
+    var linkTargetUserId: java.util.UUID? = null,
+
     @CreationTimestamp
     @Column(name = "created_at", nullable = false)
     var createdAt: Instant? = null,

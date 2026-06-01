@@ -136,6 +136,29 @@ class AuthController(
         telegramBotLogin.confirmEmailLink(req.confirm)
 
     @Operation(
+        summary = "Старт привязки Telegram к УЖЕ-залогиненному юзеру (требует JWT)",
+        description = "В отличие от /bot-login/start, этот endpoint требует JWT текущего юзера и " +
+            "помечает токен link_target_user_id = currentUserId. После approve в боте фронт зовёт " +
+            "/bot-link/complete (тоже с JWT) — Telegram линкуется к текущему юзеру вместо создания нового."
+    )
+    @SecurityRequirement(name = "BearerAuth")
+    @PostMapping("/telegram/bot-link/start")
+    fun telegramBotLinkStart(): BotLoginStartResult = telegramBotLogin.startLink(principal().userId)
+
+    @Operation(
+        summary = "Завершить привязку Telegram к текущему юзеру (требует JWT)",
+        description = "Только если статус токена APPROVED И link_target_user_id == currentUserId. " +
+            "Линкует telegram_user_id к users.id; не создаёт нового юзера."
+    )
+    @SecurityRequirement(name = "BearerAuth")
+    @PostMapping("/telegram/bot-link/complete")
+    fun telegramBotLinkComplete(@RequestBody req: BotLinkCompleteRequest): MeResponse {
+        val p = principal()
+        telegramBotLogin.completeLink(req.token, p.userId)
+        return auth.me(p)
+    }
+
+    @Operation(
         summary = "Старт Twitter/X OAuth — редирект на x.com/authorize",
         description = "Браузер ходит на этот эндпойнт напрямую (`window.location = ...`). Бэк генерит " +
             "state и PKCE, сохраняет в БД и 302-редиректит на Twitter."
@@ -161,7 +184,16 @@ class AuthController(
         val url = twitterAuth.handleCallback(code = code, state = state, errorParam = error)
         response.sendRedirect(url)
     }
+
+    /** Достать JwtPrincipal или кинуть 401 — для эндпоинтов /api/auth/... требующих авторизации. */
+    private fun principal(): JwtPrincipal {
+        val p = SecurityContextHolder.getContext().authentication?.principal
+        if (p is JwtPrincipal) return p
+        throw ApiException(HttpStatus.UNAUTHORIZED, "Unauthorized")
+    }
 }
+
+data class BotLinkCompleteRequest(val token: String)
 
 @Tag(name = "Profile", description = "Профиль текущего авторизованного пользователя")
 @SecurityRequirement(name = "BearerAuth")

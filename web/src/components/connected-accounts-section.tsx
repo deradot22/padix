@@ -1,12 +1,12 @@
 import { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useConfirm } from "@/components/ui/confirm-dialog";
-import { api, AuthConfig, MeResponse, TelegramAuthPayload } from "@/lib/api";
+import { api, AuthConfig, MeResponse } from "@/lib/api";
 import { GoogleLoginButton } from "@/components/google-login-button";
 import { FacebookLoginButton } from "@/components/facebook-login-button";
-import { TelegramLoginButton } from "@/components/telegram-login-button";
 
 type Provider = "telegram" | "google" | "facebook" | "twitter";
 
@@ -28,6 +28,7 @@ export function ConnectedAccountsSection(props: {
   onMeUpdate: (me: MeResponse) => void;
 }) {
   const confirm = useConfirm();
+  const nav = useNavigate();
   const [authConfig, setAuthConfig] = useState<AuthConfig | null>(null);
   const [activeProvider, setActiveProvider] = useState<Provider | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -98,20 +99,6 @@ export function ConnectedAccountsSection(props: {
     }
   }
 
-  async function handleLinkTelegram(payload: TelegramAuthPayload) {
-    setActiveProvider("telegram");
-    setError(null);
-    try {
-      const updated = await api.linkTelegram(payload);
-      props.onMeUpdate(updated);
-      setOpenLinkUi(null);
-    } catch (e: any) {
-      setError(e?.message ?? "Не удалось привязать Telegram");
-    } finally {
-      setActiveProvider(null);
-    }
-  }
-
   async function handleLinkTwitter() {
     setActiveProvider("twitter");
     setError(null);
@@ -120,6 +107,23 @@ export function ConnectedAccountsSection(props: {
       window.location.href = url;
     } catch (e: any) {
       setError(e?.message ?? "Не удалось начать привязку X");
+      setActiveProvider(null);
+    }
+  }
+
+  /**
+   * Telegram link — без под-формы: сразу шлём start, открываем Telegram, редиректим
+   * на waiting-страницу с mode=link. По завершении бот-flow страница вернёт юзера в /settings.
+   */
+  async function handleLinkTelegramStart() {
+    setActiveProvider("telegram");
+    setError(null);
+    try {
+      const r = await api.telegramBotLinkStart();
+      window.open(r.deepLink, "_blank", "noopener,noreferrer");
+      nav(`/auth/telegram-login?token=${encodeURIComponent(r.token)}&deepLink=${encodeURIComponent(r.deepLink)}&mode=link`);
+    } catch (e: any) {
+      setError(e?.message ?? "Не удалось начать привязку Telegram");
       setActiveProvider(null);
     }
   }
@@ -171,6 +175,7 @@ export function ConnectedAccountsSection(props: {
                       size="sm"
                       onClick={() => {
                         if (p === "twitter") handleLinkTwitter();
+                        else if (p === "telegram") handleLinkTelegramStart();
                         else setOpenLinkUi(p);
                       }}
                       disabled={busy}
@@ -197,13 +202,6 @@ export function ConnectedAccountsSection(props: {
                       appId={authConfig.facebookAppId}
                       onAuth={handleLinkFacebook}
                       text="Подключить Facebook"
-                    />
-                  ) : null}
-                  {p === "telegram" && authConfig.telegramBotId ? (
-                    <TelegramLoginButton
-                      botId={authConfig.telegramBotId}
-                      botUsername={authConfig.telegramBotUsername ?? undefined}
-                      mode="link"
                     />
                   ) : null}
                   <button

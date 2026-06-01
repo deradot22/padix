@@ -642,6 +642,21 @@ export const api = {
       body: JSON.stringify({ confirm }),
     }),
   /**
+   * bot-link flow для УЖЕ-залогиненного юзера, который хочет привязать Telegram.
+   * Отличается от bot-login: токен помечается link_target_user_id, complete не
+   * создаёт нового юзера а линкует TG к currentUserId.
+   */
+  telegramBotLinkStart: () =>
+    request<{ token: string; deepLink: string; botUsername: string }>(
+      "/api/auth/telegram/bot-link/start",
+      { method: "POST" },
+    ),
+  telegramBotLinkComplete: (token: string) =>
+    request<MeResponse>("/api/auth/telegram/bot-link/complete", {
+      method: "POST",
+      body: JSON.stringify({ token }),
+    }),
+  /**
    * URL для старта Twitter OAuth — браузер должен сделать window.location.href = это.
    * Бэк 302-редиректит на x.com/authorize, потом вернётся на /auth/oauth-callback#token=...
    */

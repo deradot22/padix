@@ -19,7 +19,7 @@ export function TelegramLoginButton(props: {
   botId?: number;
   /** Сохранён для совместимости. */
   botUsername?: string;
-  /** "link" — привязка к существующему юзеру. Реализуется отдельно (TODO). */
+  /** "link" — привязка к существующему юзеру (требует JWT). */
   mode?: "login" | "link";
 }) {
   const nav = useNavigate();
@@ -29,11 +29,14 @@ export function TelegramLoginButton(props: {
     if (loading) return;
     setLoading(true);
     try {
-      const r = await api.telegramBotLoginStart();
+      const isLink = props.mode === "link";
+      const r = isLink ? await api.telegramBotLinkStart() : await api.telegramBotLoginStart();
       // Открываем Telegram в новой вкладке (или активирует Telegram-app на мобиле).
       window.open(r.deepLink, "_blank", "noopener,noreferrer");
       // Перенаправляем юзера на waiting-страницу с polling'ом.
-      nav(`/auth/telegram-login?token=${encodeURIComponent(r.token)}&deepLink=${encodeURIComponent(r.deepLink)}`);
+      // mode=link → после APPROVED дёрнем completeLink (не complete), не выйдем из аккаунта.
+      const url = `/auth/telegram-login?token=${encodeURIComponent(r.token)}&deepLink=${encodeURIComponent(r.deepLink)}${isLink ? "&mode=link" : ""}`;
+      nav(url);
     } catch (e) {
       setLoading(false);
     }
