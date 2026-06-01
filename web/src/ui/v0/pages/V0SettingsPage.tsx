@@ -13,10 +13,9 @@ import { ConnectedAccountsSection } from "@/components/connected-accounts-sectio
 import { PasswordSection } from "@/components/password-section";
 import { User, Bell, Link2, ShieldCheck, Upload, Check, Send, ChevronLeft, ChevronRight, BellOff, BellRing, Repeat, Pause, Play, Trash2, Plus, Pencil } from "lucide-react";
 
-type SectionId = "profile" | "notifications" | "subscriptions" | "integrations" | "security";
+type SectionId = "notifications" | "subscriptions" | "integrations" | "security";
 
 const SECTIONS: { id: SectionId; label: string; icon: typeof User }[] = [
-  { id: "profile", label: "Профиль", icon: User },
   { id: "notifications", label: "Уведомления", icon: Bell },
   { id: "subscriptions", label: "Подписки", icon: Repeat },
   { id: "integrations", label: "Интеграции", icon: Link2 },
@@ -24,7 +23,7 @@ const SECTIONS: { id: SectionId; label: string; icon: typeof User }[] = [
 ];
 
 function isSectionId(v: string | null): v is SectionId {
-  return v === "profile" || v === "notifications" || v === "subscriptions" || v === "integrations" || v === "security";
+  return v === "notifications" || v === "subscriptions" || v === "integrations" || v === "security";
 }
 
 export function V0SettingsPage(props: {
@@ -35,12 +34,17 @@ export function V0SettingsPage(props: {
   const nav = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const tabFromUrl = searchParams.get("tab");
-  const [section, setSection] = useState<SectionId>(isSectionId(tabFromUrl) ? tabFromUrl : "profile");
+  const [section, setSection] = useState<SectionId>(isSectionId(tabFromUrl) ? tabFromUrl : "notifications");
 
   useEffect(() => {
     if (!props.meLoaded) return;
     if (!props.me) nav("/login");
   }, [props.me, props.meLoaded, nav]);
+
+  // Старые ссылки ?tab=profile теперь редиректятся на /profile (карандашик там).
+  useEffect(() => {
+    if (tabFromUrl === "profile") nav("/profile", { replace: true });
+  }, [tabFromUrl, nav]);
 
   useEffect(() => {
     const cur = searchParams.get("tab");
@@ -106,9 +110,6 @@ export function V0SettingsPage(props: {
         </nav>
 
         <div className="space-y-6 min-w-0">
-          {section === "profile" && (
-            <ProfileSection me={props.me} onMeUpdate={props.onMeUpdate} />
-          )}
           {section === "notifications" && <NotificationsSection />}
           {section === "subscriptions" && <SubscriptionsSection />}
           {section === "integrations" && (
@@ -128,324 +129,6 @@ export function V0SettingsPage(props: {
         </div>
       </div>
     </div>
-  );
-}
-
-// ---------- Profile section ----------
-
-const BOY_AVATARS = [
-  "https://api.dicebear.com/8.x/avataaars/png?seed=boy1",
-  "https://api.dicebear.com/8.x/avataaars/png?seed=boy2",
-  "https://api.dicebear.com/8.x/avataaars/png?seed=boy3",
-  "https://api.dicebear.com/8.x/avataaars/png?seed=boy4",
-  "https://api.dicebear.com/8.x/avataaars/png?seed=boy5",
-];
-const GIRL_AVATARS = [
-  "https://api.dicebear.com/8.x/avataaars/png?seed=girl1",
-  "https://api.dicebear.com/8.x/avataaars/png?seed=girl2",
-  "https://api.dicebear.com/8.x/avataaars/png?seed=girl3",
-  "https://api.dicebear.com/8.x/avataaars/png?seed=girl4",
-  "https://api.dicebear.com/8.x/avataaars/png?seed=girl5",
-];
-
-function compressAvatar(file: File, maxSize = 256, quality = 0.8): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onerror = () => reject(new Error("Не удалось прочитать файл"));
-    reader.onload = () => {
-      const src = reader.result as string;
-      const img = new Image();
-      img.onerror = () => reject(new Error("Не удалось загрузить изображение"));
-      img.onload = () => {
-        const scale = Math.min(1, maxSize / Math.max(img.width, img.height));
-        const width = Math.max(1, Math.round(img.width * scale));
-        const height = Math.max(1, Math.round(img.height * scale));
-        const canvas = document.createElement("canvas");
-        canvas.width = width;
-        canvas.height = height;
-        const ctx = canvas.getContext("2d");
-        if (!ctx) {
-          reject(new Error("Нет контекста canvas"));
-          return;
-        }
-        ctx.drawImage(img, 0, 0, width, height);
-        try {
-          resolve(canvas.toDataURL("image/jpeg", quality));
-        } catch (e) {
-          reject(e);
-        }
-      };
-      img.src = src;
-    };
-    reader.readAsDataURL(file);
-  });
-}
-
-function ProfileSection(props: {
-  me: any;
-  onMeUpdate?: (me: MeResponse) => void;
-}) {
-  const [me, setMe] = useState<MeResponse | null>(props.me ?? null);
-  const [avatar, setAvatar] = useState<string | null>(props.me?.avatarUrl ?? null);
-  const [error, setError] = useState<string | null>(null);
-  const [info, setInfo] = useState<string | null>(null);
-  const [editOpen, setEditOpen] = useState(false);
-
-  useEffect(() => {
-    if (props.me) {
-      setMe(props.me);
-      setAvatar(props.me.avatarUrl ?? null);
-    }
-  }, [props.me]);
-
-  const persistAvatar = async (next: string | null) => {
-    setAvatar(next);
-    try {
-      const updated = await api.updateAvatar(next);
-      setMe(updated);
-      props.onMeUpdate?.(updated);
-      setInfo("Аватар обновлён");
-      window.setTimeout(() => setInfo(null), 1500);
-    } catch (e: any) {
-      setError(e?.message ?? "Не удалось обновить аватар");
-    }
-  };
-
-  if (!me) return null;
-  const initials = me.name?.trim().split(/\s+/).slice(0, 2).map((w) => w[0]?.toUpperCase()).join("") || "?";
-  const genderLabel = me.gender === "M" ? "М" : me.gender === "F" ? "Ж" : "—";
-
-  return (
-    <Card className="border-border/50">
-      <CardHeader className="flex flex-row items-start justify-between gap-3 space-y-0">
-        <div>
-          <CardTitle>Профиль</CardTitle>
-          <CardDescription>Имя, email, пол и аватар.</CardDescription>
-        </div>
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={() => setEditOpen(true)}
-          aria-label="Редактировать профиль"
-          className="shrink-0"
-        >
-          <Pencil className="h-4 w-4 mr-1.5" />
-          Редактировать
-        </Button>
-      </CardHeader>
-      <CardContent className="space-y-6">
-        {/* Avatar — оставляем inline (одноклик, авто-сохранение). */}
-        <div className="space-y-3">
-          <div className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Аватар</div>
-          <div className="flex items-start gap-4">
-            <div className="h-20 w-20 rounded-full bg-secondary/60 border border-border overflow-hidden flex items-center justify-center text-xl font-semibold shrink-0">
-              {avatar ? (
-                <img src={avatar} alt="" className="h-full w-full object-cover" />
-              ) : (
-                initials
-              )}
-            </div>
-            <div className="space-y-3 flex-1">
-              <label className="inline-flex cursor-pointer items-center gap-2 rounded-md border border-border bg-background px-3 py-2 text-xs font-medium hover:bg-secondary transition-colors">
-                <Upload className="h-3.5 w-3.5" />
-                Загрузить фото
-                <input
-                  type="file"
-                  accept="image/*"
-                  className="hidden"
-                  onChange={(e) => {
-                    const file = e.target.files?.[0];
-                    if (!file) return;
-                    compressAvatar(file)
-                      .then(persistAvatar)
-                      .catch((err: any) => setError(err?.message ?? "Ошибка обработки"));
-                  }}
-                />
-              </label>
-              <div className="grid grid-cols-5 gap-2">
-                {[...BOY_AVATARS, ...GIRL_AVATARS].map((src) => (
-                  <button
-                    key={src}
-                    type="button"
-                    className={cn(
-                      "h-10 w-10 rounded-full border transition-all",
-                      avatar === src ? "border-primary ring-2 ring-primary/40" : "border-border hover:border-primary/40"
-                    )}
-                    onClick={() => persistAvatar(src)}
-                  >
-                    <img src={src} alt="" className="h-full w-full rounded-full object-cover" />
-                  </button>
-                ))}
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Поля — view-only. Редактирование через диалог. */}
-        <div className="space-y-3 pt-2 border-t border-border">
-          <ViewRow label="Имя" value={me.name || "—"} />
-          <ViewRow label="Email" value={me.email || "—"} />
-          <ViewRow label="Пол" value={genderLabel} />
-        </div>
-
-        {/* Шансы выигрыша — отдельный auto-save toggle (одноклик, не привязан к Edit). */}
-        <label className="flex items-start justify-between gap-3 cursor-pointer rounded-md border border-border bg-background/50 hover:bg-background px-3 py-2.5 transition-colors">
-          <div className="space-y-0.5 min-w-0">
-            <div className="text-sm font-medium">Показывать шансы выигрыша</div>
-            <div className="text-xs text-muted-foreground">
-              В модале «Раунды» под каждым матчем будет полоска шансов и метка «Лёгкий фаворит» / «Равные шансы» и т.п. По Elo.
-            </div>
-          </div>
-          <input
-            type="checkbox"
-            className="mt-1 h-4 w-4 accent-primary shrink-0"
-            checked={me.showWinProbability === true}
-            onChange={async (e) => {
-              const next = e.target.checked;
-              setError(null);
-              try {
-                const updated = await api.updateProfile({ showWinProbability: next });
-                setMe(updated);
-                props.onMeUpdate?.(updated);
-              } catch (err: any) {
-                setError(err?.message ?? "Не удалось сохранить настройку");
-              }
-            }}
-          />
-        </label>
-
-        {error && (
-          <div className="rounded-lg border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive">
-            {error}
-          </div>
-        )}
-        {info && (
-          <div className="rounded-lg border border-emerald-500/40 dark:border-emerald-500/30 bg-emerald-500/10 p-3 text-sm text-emerald-700 dark:text-emerald-300 flex items-center gap-2">
-            <Check className="h-4 w-4" />
-            {info}
-          </div>
-        )}
-      </CardContent>
-
-      <EditProfileDialog
-        open={editOpen}
-        onOpenChange={setEditOpen}
-        me={me}
-        onSaved={(updated) => {
-          setMe(updated);
-          props.onMeUpdate?.(updated);
-        }}
-      />
-    </Card>
-  );
-}
-
-function ViewRow({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="flex items-center justify-between gap-3 rounded-md border border-border/50 bg-secondary/30 px-3 py-2.5">
-      <div className="text-xs font-medium text-muted-foreground uppercase tracking-wide">{label}</div>
-      <div className="text-sm font-medium truncate">{value}</div>
-    </div>
-  );
-}
-
-function EditProfileDialog(props: {
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-  me: MeResponse;
-  onSaved: (me: MeResponse) => void;
-}) {
-  const [name, setName] = useState(props.me.name ?? "");
-  const [email, setEmail] = useState(props.me.email ?? "");
-  const [gender, setGender] = useState(props.me.gender ?? "");
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  // Сброс при каждом открытии — чтобы при отмене не сохранять локальные изменения.
-  useEffect(() => {
-    if (props.open) {
-      setName(props.me.name ?? "");
-      setEmail(props.me.email ?? "");
-      setGender(props.me.gender ?? "");
-      setError(null);
-      setSaving(false);
-    }
-  }, [props.open, props.me]);
-
-  const dirty =
-    name.trim() !== (props.me.name ?? "") ||
-    email.trim() !== (props.me.email ?? "") ||
-    gender !== (props.me.gender ?? "");
-
-  const onSave = async () => {
-    setSaving(true);
-    setError(null);
-    try {
-      const payload: { name?: string; email?: string; gender?: string } = {};
-      if (name.trim() && name.trim() !== (props.me.name ?? "")) payload.name = name.trim();
-      if (email.trim() !== (props.me.email ?? "")) payload.email = email.trim();
-      if (gender !== (props.me.gender ?? "")) payload.gender = gender;
-      if (Object.keys(payload).length === 0) {
-        props.onOpenChange(false);
-        return;
-      }
-      const updated = await api.updateProfile(payload);
-      props.onSaved(updated);
-      props.onOpenChange(false);
-    } catch (e: any) {
-      setError(e?.message ?? "Не удалось сохранить");
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  return (
-    <Dialog open={props.open} onOpenChange={props.onOpenChange}>
-      <DialogContent className="sm:max-w-md">
-        <DialogHeader>
-          <DialogTitle>Редактировать профиль</DialogTitle>
-        </DialogHeader>
-        <div className="space-y-3">
-          <div className="space-y-1.5">
-            <label className="text-sm font-medium">Имя</label>
-            <Input value={name} onChange={(e) => setName(e.target.value)} autoComplete="name" autoFocus />
-          </div>
-          <div className="space-y-1.5">
-            <label className="text-sm font-medium">Email</label>
-            <Input
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              autoComplete="email"
-            />
-          </div>
-          <div className="space-y-1.5">
-            <label className="text-sm font-medium">Пол</label>
-            <Select value={gender || "_unset"} onValueChange={(v) => setGender(v === "_unset" ? "" : v)}>
-              <SelectTrigger className="h-10">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="_unset">Не указан</SelectItem>
-                <SelectItem value="M">М</SelectItem>
-                <SelectItem value="F">Ж</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-          {error && (
-            <div className="rounded-md border border-destructive/30 bg-destructive/10 p-2 text-xs text-destructive">{error}</div>
-          )}
-        </div>
-        <DialogFooter className="gap-2 sm:gap-0">
-          <Button type="button" variant="outline" onClick={() => props.onOpenChange(false)} disabled={saving}>
-            Отмена
-          </Button>
-          <Button type="button" onClick={onSave} disabled={saving || !dirty}>
-            {saving ? "Сохранение…" : "Сохранить"}
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
   );
 }
 

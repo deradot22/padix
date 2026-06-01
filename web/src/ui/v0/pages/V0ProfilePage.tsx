@@ -6,6 +6,7 @@ import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { EditProfileDialog } from "@/components/edit-profile-dialog";
 import { Input } from "@/components/ui/input";
 import { ModalScrollArea } from "@/components/ui/modal-scroll-area";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -79,6 +80,7 @@ export function V0ProfilePage(props: { me: any; meLoaded?: boolean; onMeUpdate?:
   const [graphOpen, setGraphOpen] = useState(false);
   const [editGameOpen, setEditGameOpen] = useState(false);
   const [editGameEventId, setEditGameEventId] = useState<string | null>(null);
+  const [editProfileOpen, setEditProfileOpen] = useState(false);
 
   useEffect(() => {
     if (!props.meLoaded) return;
@@ -346,7 +348,19 @@ export function V0ProfilePage(props: { me: any; meLoaded?: boolean; onMeUpdate?:
                   )}
                 </div>
                 <div>
-                  <h2 className="text-3xl font-bold">{viewMe.name}</h2>
+                  <div className="flex items-center gap-2">
+                    <h2 className="text-3xl font-bold">{viewMe.name}</h2>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-8 w-8 text-muted-foreground hover:text-foreground"
+                      onClick={() => setEditProfileOpen(true)}
+                      aria-label="Редактировать профиль"
+                      title="Редактировать профиль"
+                    >
+                      <Pencil className="h-4 w-4" />
+                    </Button>
+                  </div>
                   <p className="flex items-center gap-2 text-muted-foreground mt-1">
                     <Mail className="h-4 w-4" />
                     {viewMe.email}
@@ -983,6 +997,16 @@ export function V0ProfilePage(props: { me: any; meLoaded?: boolean; onMeUpdate?:
             }}
           />
         ) : null}
+
+        <EditProfileDialog
+          open={editProfileOpen}
+          onOpenChange={setEditProfileOpen}
+          me={viewMe}
+          onSaved={(updated) => {
+            setMeLive(updated);
+            props.onMeUpdate?.(updated);
+          }}
+        />
       </div>
     </TooltipProvider>
   );
