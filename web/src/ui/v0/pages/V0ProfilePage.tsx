@@ -349,7 +349,7 @@ export function V0ProfilePage(props: { me: any; meLoaded?: boolean; onMeUpdate?:
               }}
             />
           </div>
-          <CardContent className="-mt-16 pb-8">
+          <CardContent className="relative z-10 -mt-16 pb-8">
             <div className="flex flex-col gap-6 sm:flex-row sm:items-end sm:justify-between">
               <div className="flex items-end gap-4">
                 <div className="flex h-24 w-24 items-center justify-center rounded-2xl border-4 border-background bg-gradient-to-br from-primary/20 to-primary/5 shadow-xl overflow-hidden">
