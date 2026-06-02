@@ -1,5 +1,6 @@
 import React from "react";
 import { useLocation } from "react-router-dom";
+import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { Header } from "@/components/header";
 import { EmailVerificationBanner } from "@/components/email-verification-banner";
 
@@ -17,6 +18,7 @@ export function MainLayout(props: {
   onResendVerification?: () => Promise<void>;
 }) {
   const { pathname } = useLocation();
+  const prefersReducedMotion = useReducedMotion();
   // На странице /verify-email сам сценарий — подтверждение, баннер избыточен.
   const showBanner =
     props.authed &&
@@ -24,6 +26,17 @@ export function MainLayout(props: {
     props.email &&
     props.onResendVerification &&
     pathname !== "/verify-email";
+
+  // Лёгкий fade при смене страницы. mode="wait" чтобы старая страница ушла до показа новой.
+  // При prefers-reduced-motion fallback — мгновенно (duration 0).
+  const fade = prefersReducedMotion
+    ? { initial: { opacity: 1 }, animate: { opacity: 1 }, exit: { opacity: 1 }, transition: { duration: 0 } }
+    : {
+        initial: { opacity: 0, y: 4 },
+        animate: { opacity: 1, y: 0 },
+        exit: { opacity: 0, y: -4 },
+        transition: { duration: 0.18, ease: "easeOut" as const },
+      };
 
   return (
     <div className="min-h-dvh bg-background">
@@ -36,7 +49,13 @@ export function MainLayout(props: {
         onRefreshNotifications={props.onRefreshNotifications}
         onLogout={props.onLogout}
       />
-      <main className="mx-auto max-w-7xl w-full px-4 py-8 sm:px-6 lg:px-8">{props.children}</main>
+      <main className="mx-auto max-w-7xl w-full px-4 py-8 sm:px-6 lg:px-8">
+        <AnimatePresence mode="wait" initial={false}>
+          <motion.div key={pathname} {...fade}>
+            {props.children}
+          </motion.div>
+        </AnimatePresence>
+      </main>
     </div>
   );
 }
