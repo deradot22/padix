@@ -1,11 +1,31 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { ArrowRight, Calendar, Clock, Gamepad2, TrendingUp, Trophy, Users, Zap } from "lucide-react";
+import { motion, useReducedMotion, type Variants } from "motion/react";
 import { api, Event, Player } from "../../../lib/api";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { formatEventDate, timeRange } from "../utils";
+
+// Hero-анимация: stagger fade-up.
+// При prefers-reduced-motion staggered children всё равно работают,
+// но без y-смещения и с длительностью 0.
+const heroContainer: Variants = {
+  hidden: { opacity: 1 },
+  show: {
+    opacity: 1,
+    transition: { staggerChildren: 0.08, delayChildren: 0.05 },
+  },
+};
+const heroChild: Variants = {
+  hidden: { opacity: 0, y: 12 },
+  show: { opacity: 1, y: 0, transition: { duration: 0.4, ease: "easeOut" } },
+};
+const heroChildReduced: Variants = {
+  hidden: { opacity: 0 },
+  show: { opacity: 1, transition: { duration: 0 } },
+};
 
 function formatDate(d: Date): string {
   const yyyy = d.getFullYear();
@@ -25,6 +45,8 @@ function formatLabel(format: Event["format"]) {
 
 export function V0HomePage(props: { me: any }) {
   const nav = useNavigate();
+  const prefersReducedMotion = useReducedMotion();
+  const childVariant = prefersReducedMotion ? heroChildReduced : heroChild;
   const [events, setEvents] = useState<Event[] | null>(null);
   const [statsEvents, setStatsEvents] = useState<Event[] | null>(null);
   const [rating, setRating] = useState<Player[] | null>(null);
@@ -145,19 +167,26 @@ export function V0HomePage(props: { me: any }) {
 
   return (
     <div className="space-y-8 w-full min-w-0">
-      <div className="relative w-full overflow-hidden rounded-2xl border border-border bg-gradient-to-br from-primary/10 via-background to-background p-8 lg:p-12">
+      <motion.div
+        className="relative w-full overflow-hidden rounded-2xl border border-border bg-gradient-to-br from-primary/10 via-background to-background p-8 lg:p-12"
+        variants={heroContainer}
+        initial="hidden"
+        animate="show"
+      >
         <div className="relative z-10 max-w-2xl">
-          <Badge className="mb-4 bg-primary/20 text-primary border-primary/30 border">
-            <Zap className="mr-1 h-3 w-3" />
-            Сезон {new Date().getFullYear()}
-          </Badge>
-          <h1 className="text-4xl font-bold tracking-tight lg:text-5xl">
+          <motion.div variants={childVariant}>
+            <Badge className="mb-4 bg-primary/20 text-primary border-primary/30 border">
+              <Zap className="mr-1 h-3 w-3" />
+              Сезон {new Date().getFullYear()}
+            </Badge>
+          </motion.div>
+          <motion.h1 variants={childVariant} className="text-4xl font-bold tracking-tight lg:text-5xl">
             Добро пожаловать в <span className="text-primary">padix</span>
-          </h1>
-          <p className="mt-4 text-lg text-muted-foreground">
+          </motion.h1>
+          <motion.p variants={childVariant} className="mt-4 text-lg text-muted-foreground">
             Организуйте игры в падел, отслеживайте свой рейтинг и находите партнеров для игры.
-          </p>
-          <div className="mt-6 flex flex-wrap gap-3">
+          </motion.p>
+          <motion.div variants={childVariant} className="mt-6 flex flex-wrap gap-3">
             <Button asChild size="lg">
               <Link to="/games">
                 <Gamepad2 className="mr-2 h-5 w-5" />
@@ -170,11 +199,11 @@ export function V0HomePage(props: { me: any }) {
                 <ArrowRight className="ml-2 h-4 w-4" />
               </Link>
             </Button>
-          </div>
+          </motion.div>
         </div>
         <div className="absolute -right-20 -top-20 h-64 w-64 rounded-full bg-primary/10 blur-3xl" />
         <div className="absolute -bottom-20 -right-10 h-48 w-48 rounded-full bg-primary/5 blur-2xl" />
-      </div>
+      </motion.div>
 
       <div className="grid w-full gap-4 sm:grid-cols-3 items-stretch">
         {quickStats.map((stat) => (
