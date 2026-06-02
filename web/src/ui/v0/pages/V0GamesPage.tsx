@@ -185,10 +185,13 @@ export function V0GamesPage(props: { me: any }) {
   };
 
   // Фильтрация по табу + поиску. Считаем здесь, чтобы и пустое-состояние и список были консистентны.
+  // Также скрываем smoke-test события (созданные test-ui скриптами) — они захламляют UX.
+  // Имена вида "smoke-series-1779292981" приходят из E2E/нагрузочных проверок.
   const filteredEvents = useMemo(() => {
     if (!events) return null;
     const q = searchQuery.trim().toLowerCase();
     return events.filter((e) => {
+      if ((e.title ?? "").startsWith("smoke-series-")) return false;
       if (filterTab === "public" && e.visibility !== "PUBLIC") return false;
       if (filterTab === "mine" && !registeredIds[e.id]) return false;
       if (q && !(e.title ?? "").toLowerCase().includes(q)) return false;
