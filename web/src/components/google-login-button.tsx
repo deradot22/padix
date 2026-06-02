@@ -114,7 +114,7 @@ export function GoogleLoginButton(props: {
     <div className="relative inline-block" title={ariaLabel}>
       {/* Наша квадратная кнопка-иконка — в стиле сайта, с буквой «G» в брендовом зелёном. */}
       <div
-        className="h-10 w-10 flex items-center justify-center rounded-md border border-border bg-secondary/40 text-primary text-lg font-bold pointer-events-none select-none transition-colors hover:bg-secondary/60"
+        className="h-11 w-11 md:h-10 md:w-10 flex items-center justify-center rounded-md border border-border bg-secondary/40 text-primary text-lg font-bold pointer-events-none select-none transition-colors hover:bg-secondary/60"
         aria-hidden="true"
       >
         {ready ? "G" : "…"}
