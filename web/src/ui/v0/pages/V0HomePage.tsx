@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { ArrowRight, Calendar, Clock, Gamepad2, TrendingUp, Trophy, Users, Zap } from "lucide-react";
-import { motion, useReducedMotion, type Variants } from "motion/react";
+import { animate, motion, useReducedMotion, type Variants } from "motion/react";
 import { api, Event, Player } from "../../../lib/api";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -27,6 +27,41 @@ const heroChildReduced: Variants = {
   show: { opacity: 1, transition: { duration: 0 } },
 };
 
+// Count-up для статистик. При reduceMotion сразу показываем финальное значение.
+function AnimatedNumber({ value, reduce }: { value: number; reduce: boolean }) {
+  const [display, setDisplay] = useState<number>(reduce ? value : 0);
+  useEffect(() => {
+    if (reduce) {
+      setDisplay(value);
+      return;
+    }
+    const controls = animate(0, value, {
+      duration: 0.9,
+      ease: "easeOut",
+      onUpdate: (v) => setDisplay(Math.round(v)),
+    });
+    return () => controls.stop();
+  }, [value, reduce]);
+  return <>{display}</>;
+}
+
+// Карточки статистики — staggered fade-up после hero.
+const statsContainer: Variants = {
+  hidden: { opacity: 1 },
+  show: {
+    opacity: 1,
+    transition: { staggerChildren: 0.1, delayChildren: 0.4 },
+  },
+};
+const statCardVariant: Variants = {
+  hidden: { opacity: 0, y: 16 },
+  show: { opacity: 1, y: 0, transition: { duration: 0.45, ease: "easeOut" } },
+};
+const statCardReduced: Variants = {
+  hidden: { opacity: 0 },
+  show: { opacity: 1, transition: { duration: 0 } },
+};
+
 function formatDate(d: Date): string {
   const yyyy = d.getFullYear();
   const mm = `${d.getMonth() + 1}`.padStart(2, "0");
@@ -45,8 +80,9 @@ function formatLabel(format: Event["format"]) {
 
 export function V0HomePage(props: { me: any }) {
   const nav = useNavigate();
-  const prefersReducedMotion = useReducedMotion();
+  const prefersReducedMotion = useReducedMotion() ?? false;
   const childVariant = prefersReducedMotion ? heroChildReduced : heroChild;
+  const statVariant = prefersReducedMotion ? statCardReduced : statCardVariant;
   const [events, setEvents] = useState<Event[] | null>(null);
   const [statsEvents, setStatsEvents] = useState<Event[] | null>(null);
   const [rating, setRating] = useState<Player[] | null>(null);
@@ -205,24 +241,37 @@ export function V0HomePage(props: { me: any }) {
         <div className="absolute -bottom-20 -right-10 h-48 w-48 rounded-full bg-primary/5 blur-2xl" />
       </motion.div>
 
-      <div className="grid w-full gap-4 sm:grid-cols-3 items-stretch">
-        {quickStats.map((stat) => (
-          <Card key={stat.label} className="border-border/50 w-full">
-            <CardContent className="flex items-center gap-4 p-6">
-              <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-secondary">
-                <stat.icon className={`h-6 w-6 ${stat.color}`} />
-              </div>
-              <div>
-                <p className="text-3xl font-bold tabular-nums">{stat.value}</p>
-                <p className="text-sm text-muted-foreground">{stat.label}</p>
-                {"sublabel" in stat && stat.sublabel ? (
-                  <p className="text-xs text-muted-foreground mt-0.5">{stat.sublabel}</p>
-                ) : null}
-              </div>
-            </CardContent>
-          </Card>
-        ))}
-      </div>
+      <motion.div
+        className="grid w-full gap-4 sm:grid-cols-3 items-stretch"
+        variants={statsContainer}
+        initial="hidden"
+        animate="show"
+      >
+        {quickStats.map((stat) => {
+          const numericValue = Number(stat.value);
+          const isNumeric = !Number.isNaN(numericValue);
+          return (
+            <motion.div key={stat.label} variants={statVariant}>
+              <Card className="border-border/50 w-full h-full">
+                <CardContent className="flex items-center gap-4 p-6">
+                  <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-secondary">
+                    <stat.icon className={`h-6 w-6 ${stat.color}`} />
+                  </div>
+                  <div>
+                    <p className="text-3xl font-bold tabular-nums">
+                      {isNumeric ? <AnimatedNumber value={numericValue} reduce={prefersReducedMotion} /> : stat.value}
+                    </p>
+                    <p className="text-sm text-muted-foreground">{stat.label}</p>
+                    {"sublabel" in stat && stat.sublabel ? (
+                      <p className="text-xs text-muted-foreground mt-0.5">{stat.sublabel}</p>
+                    ) : null}
+                  </div>
+                </CardContent>
+              </Card>
+            </motion.div>
+          );
+        })}
+      </motion.div>
 
       <div className="grid w-full gap-8 lg:grid-cols-2 items-stretch justify-items-stretch">
         <Card className="w-full max-w-none">
