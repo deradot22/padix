@@ -522,6 +522,10 @@ tieBreak           // ↓ случайный шум
 | `POST` | `/api/admin/users/{id}/restore` | Восстановить (email + password обязательны) |
 | `POST` | `/api/admin/complete-games?date=` | Утилита: добивает все эвенты на указанную дату до состояния FINISHED (для тестов) |
 
+**Web-страница `/admin`** — публикуется только в DEV-сборках или при явном `VITE_ENABLE_ADMIN_UI=true` в env (см. [App.tsx](../web/src/ui/App.tsx)). В обычном production-бандле формы логина админа нет — это убирает «утечку» URL в публичный DOM. API при этом достижим напрямую через HTTP с правильным токеном — флаг прячет только web entry point.
+
+Чтобы включить в проде на Render: добавить переменную `VITE_ENABLE_ADMIN_UI=true` в env-vars web-сервиса и пересобрать.
+
 ---
 
 ## 11. Фронтенд
@@ -571,6 +575,17 @@ web/src/
 - **DatePicker / TimePicker** — popover в теме сайта (используется в создании эвента, фильтрах).
 - **rating-graph** — переключатель периодов (7д/30д/3м/всё), toggle режима оси X (по матчам / по времени), LTTB downsample при >60 точках, выбор сохраняется в localStorage.
 - **rating-notification-modal** — pop-модал после игры с зелёной/розовой плашкой ±delta.
+
+### 11.2a Анимации
+
+Используется библиотека **motion@^12** (`motion/react`). Все анимации уважают `prefers-reduced-motion` через `useReducedMotion()` — пользователи с этой настройкой получают мгновенное появление без перемещений.
+
+Где применены:
+
+- **Главная (V0HomePage):** stagger fade-up для hero (badge → h1 → описание → CTA, 80 мс шаг); stat-карточки слайдятся вверх с задержкой 400 мс после hero, числа считаются с 0 до target за 900 мс через `animate()`; «Ближайшие игры» и «Топ игроков» — staggered slide-up списков (70 мс шаг, через 700 мс).
+- **MainLayout:** `AnimatePresence mode="wait"` оборачивает `children`; смена роута даёт лёгкий fade+y(4px) за 180 мс. `initial={false}` — анимация только на client-side навигации, не на hard load.
+
+Bundle cost: +~125 кБ (gz +40 кБ) — допустимо. Если будет важна экономия — можно `React.lazy()` для `motion/react` или code-split.
 
 ### 11.3 Сделанные UX-улучшения
 
