@@ -335,19 +335,19 @@ export function V0ProfilePage(props: { me: any; meLoaded?: boolean; onMeUpdate?:
 
         <Card className="overflow-hidden border-border/50">
           {/*
-            Cover-баннер: сократили высоту (32→20/24) — раньше большой плоский градиент
-            тянул внимание. Добавили диагональный line-pattern, чтобы напомнить разметку
-            корта без тяжёлой иллюстрации.
+            Cover-баннер: высота как в оригинале (h-32, 128px). Поверх плоского
+            зелёного градиента — диагональный line-pattern, чтобы напомнить разметку
+            корта и убрать ощущение пустоты без тяжёлой иллюстрации.
           */}
           <div
-            className="h-20 md:h-24 bg-gradient-to-r from-primary/30 via-primary/15 to-accent/10"
+            className="h-32 bg-gradient-to-r from-primary/30 via-primary/15 to-accent/10"
             style={{
               backgroundImage:
                 "repeating-linear-gradient(135deg, transparent 0, transparent 14px, rgba(255,255,255,0.07) 14px, rgba(255,255,255,0.07) 15px), linear-gradient(to right, hsl(var(--primary) / 0.3), hsl(var(--primary) / 0.15), hsl(var(--accent) / 0.1))",
             }}
             aria-hidden="true"
           />
-          <CardContent className="-mt-12 md:-mt-14 pb-8">
+          <CardContent className="-mt-16 pb-8">
             <div className="flex flex-col gap-6 sm:flex-row sm:items-end sm:justify-between">
               <div className="flex items-end gap-4">
                 <div className="flex h-24 w-24 items-center justify-center rounded-2xl border-4 border-background bg-gradient-to-br from-primary/20 to-primary/5 shadow-xl overflow-hidden">
