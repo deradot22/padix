@@ -62,6 +62,23 @@ const statCardReduced: Variants = {
   show: { opacity: 1, transition: { duration: 0 } },
 };
 
+// Списки секций «Ближайшие игры» и «Топ игроков»: staggered slide-up.
+const listContainer: Variants = {
+  hidden: { opacity: 1 },
+  show: {
+    opacity: 1,
+    transition: { staggerChildren: 0.07, delayChildren: 0.7 },
+  },
+};
+const listItem: Variants = {
+  hidden: { opacity: 0, y: 12 },
+  show: { opacity: 1, y: 0, transition: { duration: 0.35, ease: "easeOut" } },
+};
+const listItemReduced: Variants = {
+  hidden: { opacity: 0 },
+  show: { opacity: 1, transition: { duration: 0 } },
+};
+
 function formatDate(d: Date): string {
   const yyyy = d.getFullYear();
   const mm = `${d.getMonth() + 1}`.padStart(2, "0");
@@ -83,6 +100,7 @@ export function V0HomePage(props: { me: any }) {
   const prefersReducedMotion = useReducedMotion() ?? false;
   const childVariant = prefersReducedMotion ? heroChildReduced : heroChild;
   const statVariant = prefersReducedMotion ? statCardReduced : statCardVariant;
+  const itemVariant = prefersReducedMotion ? listItemReduced : listItem;
   const [events, setEvents] = useState<Event[] | null>(null);
   const [statsEvents, setStatsEvents] = useState<Event[] | null>(null);
   const [rating, setRating] = useState<Player[] | null>(null);
@@ -296,9 +314,11 @@ export function V0HomePage(props: { me: any }) {
             ) : upcoming.length === 0 ? (
               <div className="text-sm text-muted-foreground">Ближайших игр нет.</div>
             ) : (
-              upcoming.map((e) => (
-                <div
+              <motion.div className="space-y-3" variants={listContainer} initial="hidden" animate="show">
+              {upcoming.map((e) => (
+                <motion.div
                   key={e.id}
+                  variants={itemVariant}
                   className="flex flex-col gap-3 rounded-lg border border-border bg-secondary/50 p-4 transition-colors hover:bg-secondary sm:flex-row sm:items-center sm:justify-between"
                 >
                   <div className="flex items-center gap-4 min-w-0">
@@ -327,8 +347,9 @@ export function V0HomePage(props: { me: any }) {
                       </Button>
                     )}
                   </div>
-                </div>
-              ))
+                </motion.div>
+              ))}
+              </motion.div>
             )}
           </CardContent>
         </Card>
@@ -352,11 +373,13 @@ export function V0HomePage(props: { me: any }) {
             ) : topPlayers.length === 0 ? (
               <div className="text-sm text-muted-foreground">Пока нет участников.</div>
             ) : (
-              topPlayers.map((player, i) => {
+              <motion.div className="space-y-3" variants={listContainer} initial="hidden" animate="show">
+              {topPlayers.map((player, i) => {
                 const rank = i + 1;
                 return (
-                  <div
+                  <motion.div
                     key={player.id}
+                    variants={itemVariant}
                     className="flex items-center justify-between rounded-lg border border-border bg-secondary/50 p-4"
                   >
                     <div className="flex items-center gap-4">
@@ -385,9 +408,10 @@ export function V0HomePage(props: { me: any }) {
                       </div>
                     </div>
                     <p className="text-xl font-bold tabular-nums">{player.rating}</p>
-                  </div>
+                  </motion.div>
                 );
-              })
+              })}
+              </motion.div>
             )}
           </CardContent>
         </Card>
