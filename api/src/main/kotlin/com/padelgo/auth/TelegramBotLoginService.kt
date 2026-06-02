@@ -172,11 +172,33 @@ class TelegramBotLoginService(
         if (tok.expiresAt.isBefore(Instant.now())) {
             throw ApiException(HttpStatus.GONE, "Token expired")
         }
-        if (tok.telegramUserId == null) {
-            throw ApiException(HttpStatus.CONFLICT, "Token not bound to a Telegram user yet")
-        }
+        val tgUserId = tok.telegramUserId
+            ?: throw ApiException(HttpStatus.CONFLICT, "Token not bound to a Telegram user yet")
         tok.status = TelegramAuthTokenStatus.APPROVED.name
         tok.approvedAt = Instant.now()
+
+        // bot-link flow: если токен помечен link_target_user_id — линкуем СРАЗУ, не
+        // дожидаясь возвращения юзера на сайт. Сценарий с iPhone: юзер approve'ает в
+        // боте и сразу идёт в чат с играми тапнуть «📝 Зарегистрироваться»; если бы
+        // линковка ждала /bot-link/complete на фронте — callback ловил бы NOT_LINKED.
+        // /bot-link/complete остаётся идемпотентным (повторный вызов = no-op, линк уже
+        // на месте) — чтобы waiting-страница на сайте могла нормально завершиться.
+        val linkTarget = tok.linkTargetUserId
+        if (linkTarget != null && tok.consumedAt == null) {
+            val user = users.findById(linkTarget).orElse(null)
+            // Best-effort: если уже привязан или конфликт — оставляем как есть и не падаем.
+            // Точные проверки и user-facing ошибки делает completeLink на фронте.
+            if (user != null &&
+                (user.telegramUserId == null || user.telegramUserId == tgUserId) &&
+                users.findByTelegramUserId(tgUserId).let { it == null || it.id == user.id }
+            ) {
+                user.telegramUserId = tgUserId
+                user.telegramUsername = tok.telegramUsername ?: user.telegramUsername
+                user.telegramPhotoUrl = tok.photoUrl ?: user.telegramPhotoUrl
+                users.save(user)
+                log.info("Eager link: telegram_user_id={} → user={}", tgUserId, user.id)
+            }
+        }
         return tokenRepo.save(tok)
     }
 
