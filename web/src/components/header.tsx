@@ -8,12 +8,20 @@ import { useEffect, useMemo, useState } from "react";
 import { useRef } from "react";
 import { api, EventInviteItem, FriendRequestItem } from "@/lib/api";
 
-const navigation = [
+// Десктоп: "Создать игру" не дублируем — есть hero CTA на / и FAB-кнопка на /games.
+const desktopNavigation = [
   { name: "Рейтинг", href: "/rating" },
   { name: "Игры", href: "/games" },
-  { name: "Создать игру", href: "/create" },
   { name: "Профиль", href: "/profile" },
 ];
+// Мобильный drawer: главный хаб навигации, "Создать игру" оставляем — FAB на /games может быть не очевиден.
+const mobileNavigation = [
+  ...desktopNavigation.slice(0, 2), // Рейтинг, Игры
+  { name: "Создать игру", href: "/create" },
+  desktopNavigation[2], // Профиль
+];
+// Совместимость со старым кодом, который ещё может ссылаться на navigation.
+const navigation = mobileNavigation;
 
 export function Header(props: {
   authed: boolean;
@@ -132,7 +140,7 @@ export function Header(props: {
         </Link>
 
         <nav className="hidden items-center gap-1 md:flex">
-          {navigation.map((item) => (
+          {desktopNavigation.map((item) => (
             <NavLink
               key={item.name}
               to={item.href}
@@ -467,7 +475,7 @@ export function Header(props: {
       {mobileOpen ? (
         <div className="border-t border-border/40 bg-background/95 md:hidden">
           <div className="mx-auto flex max-w-7xl flex-col gap-1 px-4 py-3">
-            {navigation.map((item) => (
+            {mobileNavigation.map((item) => (
               <NavLink
                 key={item.name}
                 to={item.href}
