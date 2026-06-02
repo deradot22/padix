@@ -366,8 +366,8 @@ export function V0ProfilePage(props: { me: any; meLoaded?: boolean; onMeUpdate?:
                   </>
                 )}
               </Badge>
-              <Badge className="h-10 gap-2 px-4 py-0 bg-accent/10 text-accent border border-accent/20 text-base">
-                <Gamepad2 className="h-4 w-4" />
+              <Badge variant="secondary" className="h-10 gap-2 px-4 py-0 text-base">
+                <Gamepad2 className="h-4 w-4 text-muted-foreground" />
                 {viewMe.gamesPlayed} матчей
               </Badge>
               {viewMe.gender ? (
