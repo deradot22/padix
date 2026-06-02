@@ -335,18 +335,20 @@ export function V0ProfilePage(props: { me: any; meLoaded?: boolean; onMeUpdate?:
 
         <Card className="overflow-hidden border-border/50">
           {/*
-            Cover-баннер: высота как в оригинале (h-32, 128px). Поверх плоского
-            зелёного градиента — диагональный line-pattern, чтобы напомнить разметку
-            корта и убрать ощущение пустоты без тяжёлой иллюстрации.
+            Cover-баннер: высота как в оригинале (h-32, 128px). Зелёный градиент —
+            Tailwind-классом (переменные проекта в oklch, поэтому НЕ трогаем background
+            инлайном). Поверх — отдельный слой с диагональными линиями (rgba, без
+            переменных), чтобы напомнить разметку корта без ощущения пустоты.
           */}
-          <div
-            className="h-32 bg-gradient-to-r from-primary/30 via-primary/15 to-accent/10"
-            style={{
-              backgroundImage:
-                "repeating-linear-gradient(135deg, transparent 0, transparent 14px, rgba(255,255,255,0.07) 14px, rgba(255,255,255,0.07) 15px), linear-gradient(to right, hsl(var(--primary) / 0.3), hsl(var(--primary) / 0.15), hsl(var(--accent) / 0.1))",
-            }}
-            aria-hidden="true"
-          />
+          <div className="relative h-32 bg-gradient-to-r from-primary/30 via-primary/15 to-accent/10" aria-hidden="true">
+            <div
+              className="absolute inset-0"
+              style={{
+                backgroundImage:
+                  "repeating-linear-gradient(135deg, transparent 0, transparent 14px, rgba(255,255,255,0.08) 14px, rgba(255,255,255,0.08) 15px)",
+              }}
+            />
+          </div>
           <CardContent className="-mt-16 pb-8">
             <div className="flex flex-col gap-6 sm:flex-row sm:items-end sm:justify-between">
               <div className="flex items-end gap-4">
