@@ -428,7 +428,19 @@ export function V0ProfilePage(props: { me: any; meLoaded?: boolean; onMeUpdate?:
                     Калибровка: <strong>{calibrationPlayed}/30</strong> матчей сыграно
                   </p>
                 </div>
-                <div className="h-2 rounded-full bg-amber-200 dark:bg-amber-900/40 overflow-hidden">
+                {/*
+                  Trough намеренно тонкий и приглушённый: при 0/30 раньше выглядело как
+                  «прогресс на всю ширину», хотя fill 0px. Уменьшили контраст trough'а
+                  и добавили aria-атрибуты для скринридеров.
+                */}
+                <div
+                  className="h-2 rounded-full bg-amber-500/15 dark:bg-amber-500/10 overflow-hidden"
+                  role="progressbar"
+                  aria-valuenow={calibrationPlayed}
+                  aria-valuemin={0}
+                  aria-valuemax={30}
+                  aria-label="Прогресс калибровки"
+                >
                   <div
                     className="h-full rounded-full bg-amber-500 transition-all duration-300"
                     style={{ width: `${(calibrationPlayed / 30) * 100}%` }}
