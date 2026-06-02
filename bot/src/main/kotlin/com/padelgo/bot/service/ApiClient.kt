@@ -77,4 +77,27 @@ class ApiClient(
             RegisterUserResult("ERROR", "Ошибка связи с api.")
         }
     }
+
+    /**
+     * Зовётся ботом после approve в bot-link flow. api сразу записывает
+     * users.telegram_user_id для целевого юзера — чтобы при следующем тапе
+     * «📝 Зарегистрироваться» в группе callback нашёл юзера.
+     */
+    fun finalizeLink(token: String): String {
+        if (!isConfigured()) return "NOT_CONFIGURED"
+        return try {
+            data class Resp(val status: String = "ERROR")
+            val r = apiRestClient.post()
+                .uri("$baseUrl/api/internal/bot/finalize-link")
+                .header("X-Internal-Secret", secret)
+                .contentType(MediaType.APPLICATION_JSON)
+                .body(mapOf("token" to token))
+                .retrieve()
+                .body<Resp>()
+            r?.status ?: "ERROR"
+        } catch (e: Exception) {
+            log.warn("api finalize-link failed: {}", e.message)
+            "ERROR"
+        }
+    }
 }

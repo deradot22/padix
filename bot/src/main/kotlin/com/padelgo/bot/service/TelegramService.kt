@@ -493,6 +493,14 @@ class TelegramService(
                 tok.status = "APPROVED"
                 tok.approvedAt = now
                 authTokenRepo.save(tok)
+                // bot-link flow: если токен помечен link_target_user_id, сразу зовём api
+                // финализировать линковку — чтобы юзер мог регистрироваться на игры через
+                // callback в группе, не возвращаясь на сайт. Best-effort: если api недоступен
+                // или конфликт — просто продолжаем (waiting-страница на сайте всё равно
+                // дозвонится через completeLink).
+                if (tok.linkTargetUserId != null) {
+                    runCatching { apiClient.finalizeLink(token) }
+                }
                 newText = "✅ <b>Вход подтверждён</b>\n\nВернитесь на padix.club — вы уже залогинены."
                 tooltipText = "Готово"
             }

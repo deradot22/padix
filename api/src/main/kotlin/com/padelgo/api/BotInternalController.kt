@@ -1,5 +1,7 @@
 package com.padelgo.api
 
+import com.padelgo.auth.TelegramAuthTokenRepository
+import com.padelgo.auth.TelegramAuthTokenStatus
 import com.padelgo.auth.UserRepository
 import com.padelgo.service.EventService
 import com.padelgo.repo.EventRepository
@@ -9,10 +11,12 @@ import com.padelgo.domain.RegistrationStatus
 import io.swagger.v3.oas.annotations.tags.Tag
 import org.slf4j.LoggerFactory
 import org.springframework.http.HttpStatus
+import org.springframework.transaction.annotation.Transactional
 import org.springframework.web.bind.annotation.PostMapping
 import org.springframework.web.bind.annotation.RequestBody
 import org.springframework.web.bind.annotation.RequestMapping
 import org.springframework.web.bind.annotation.RestController
+import java.time.Instant
 import java.util.UUID
 
 /**
@@ -32,7 +36,8 @@ class BotInternalController(
     private val eventService: EventService,
     private val eventRepo: EventRepository,
     private val regRepo: RegistrationRepository,
-    private val userRepo: UserRepository
+    private val userRepo: UserRepository,
+    private val authTokenRepo: TelegramAuthTokenRepository,
 ) {
     private val log = LoggerFactory.getLogger(BotInternalController::class.java)
 
@@ -84,6 +89,40 @@ class BotInternalController(
             RegisterFromBotResponse(status = "ERROR", message = "Не удалось зарегистрироваться.")
         }
     }
+
+    /**
+     * После того как юзер тапнул «✅ Войти» в боте (bot-link flow), бот зовёт этот
+     * endpoint чтобы api сразу записал `users.telegram_user_id` для соответствующего
+     * аккаунта. Без этого юзер с iPhone, который не возвращался на сайт после approve,
+     * получал «нужно привязать аккаунт» при tap'е «📝 Зарегистрироваться» в группе.
+     *
+     * Идемпотентен: повторный вызов на уже-привязанном юзере = no-op. Конфликты
+     * (другой TG уже привязан, этот TG у другого юзера) — возвращаем status, не падаем.
+     */
+    @PostMapping("/finalize-link")
+    @Transactional
+    fun finalizeLink(@RequestBody req: FinalizeLinkRequest): FinalizeLinkResponse {
+        val tok = authTokenRepo.findById(req.token).orElse(null)
+            ?: return FinalizeLinkResponse("TOKEN_NOT_FOUND")
+        if (tok.expiresAt.isBefore(Instant.now())) return FinalizeLinkResponse("EXPIRED")
+        if (tok.status != TelegramAuthTokenStatus.APPROVED.name) return FinalizeLinkResponse("NOT_APPROVED")
+        val targetUserId = tok.linkTargetUserId ?: return FinalizeLinkResponse("NOT_LINK_TOKEN")
+        val tgUserId = tok.telegramUserId ?: return FinalizeLinkResponse("NO_TG_USER")
+
+        val user = userRepo.findById(targetUserId).orElse(null)
+            ?: return FinalizeLinkResponse("USER_NOT_FOUND")
+        if (user.telegramUserId == tgUserId) return FinalizeLinkResponse("ALREADY_LINKED")
+        if (user.telegramUserId != null) return FinalizeLinkResponse("ANOTHER_TG_ALREADY_LINKED")
+        val takenBy = userRepo.findByTelegramUserId(tgUserId)
+        if (takenBy != null && takenBy.id != user.id) return FinalizeLinkResponse("TG_USED_BY_OTHER")
+
+        user.telegramUserId = tgUserId
+        user.telegramUsername = tok.telegramUsername ?: user.telegramUsername
+        user.telegramPhotoUrl = tok.photoUrl ?: user.telegramPhotoUrl
+        userRepo.save(user)
+        log.info("finalize-link: telegram_user_id={} → user={}", tgUserId, user.id)
+        return FinalizeLinkResponse("OK")
+    }
 }
 
 data class RegisterFromBotRequest(
@@ -98,3 +137,6 @@ data class RegisterFromBotResponse(
     /** Текст для отображения в answerCallbackQuery (тост / alert в Telegram). */
     val message: String
 )
+
+data class FinalizeLinkRequest(val token: String)
+data class FinalizeLinkResponse(val status: String)
