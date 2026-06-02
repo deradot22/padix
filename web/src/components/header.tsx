@@ -156,7 +156,7 @@ export function Header(props: {
               ref={bellRef}
               variant="ghost"
               size="icon"
-              className="relative"
+              className="relative size-11 md:size-9"
               onClick={(e) => {
                 e.stopPropagation();
                 setNotificationsOpen((v) => !v);
@@ -369,17 +369,17 @@ export function Header(props: {
           <button
             type="button"
             onClick={() => toggleTheme(!isDark)}
-            className="flex items-center rounded-full border border-border bg-secondary p-1 cursor-pointer hover:bg-secondary/80 transition-colors"
+            className="flex items-center rounded-full border border-border bg-secondary p-1.5 md:p-1 cursor-pointer hover:bg-secondary/80 transition-colors min-h-11 md:min-h-9"
             aria-label={isDark ? "Переключить на светлую тему" : "Переключить на тёмную тему"}
             title={isDark ? "Светлая тема" : "Тёмная тема"}
           >
             <span
-              className={cn("rounded-full p-1.5 transition-colors flex items-center justify-center", !isDark ? "bg-background text-foreground shadow-sm" : "text-muted-foreground")}
+              className={cn("rounded-full p-2 md:p-1.5 transition-colors flex items-center justify-center", !isDark ? "bg-background text-foreground shadow-sm" : "text-muted-foreground")}
             >
               <Sun className="h-4 w-4" />
             </span>
             <span
-              className={cn("rounded-full p-1.5 transition-colors flex items-center justify-center", isDark ? "bg-background text-foreground shadow-sm" : "text-muted-foreground")}
+              className={cn("rounded-full p-2 md:p-1.5 transition-colors flex items-center justify-center", isDark ? "bg-background text-foreground shadow-sm" : "text-muted-foreground")}
             >
               <Moon className="h-4 w-4" />
             </span>
@@ -388,7 +388,7 @@ export function Header(props: {
           <Button
             variant="ghost"
             size="icon"
-            className="md:hidden"
+            className="md:hidden size-11"
             onClick={() => setMobileOpen((v) => !v)}
             aria-label="Меню"
             title="Меню"
@@ -402,6 +402,7 @@ export function Header(props: {
                 ref={settingsBtnRef}
                 variant="ghost"
                 size="icon"
+                className="size-11 md:size-9"
                 onClick={(e) => {
                   e.stopPropagation();
                   setSettingsOpen((v) => !v);
