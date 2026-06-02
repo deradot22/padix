@@ -22,7 +22,7 @@ export function V0AdminPage() {
   const [filter, setFilter] = useState("");
   const [edits, setEdits] = useState<Record<string, EditState>>({});
 
-  const [loginUsername, setLoginUsername] = useState("admin228");
+  const [loginUsername, setLoginUsername] = useState("");
   const [loginPassword, setLoginPassword] = useState("");
   const [restoreUser, setRestoreUser] = useState<AdminUser | null>(null);
   const [restoreEmail, setRestoreEmail] = useState("");
