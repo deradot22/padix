@@ -207,16 +207,19 @@ export function V0HomePage(props: { me: any }) {
     }
   }
 
+  // Restyle B: bento — первый блок крупный (col-span-2) и акцентный.
   const quickStats = [
     {
       label: "Активных игроков",
       value: String(stats.activePlayers),
       sublabel: stats.notCalibrated > 0 ? `${stats.calibrated} откалибровано, ${stats.notCalibrated} в калибровке` : undefined,
       icon: Users,
-      color: "text-primary",
+      iconWrap: "bg-primary/15 text-primary",
+      span: "sm:col-span-2",
+      big: true,
     },
-    { label: "Игр сегодня", value: String(stats.gamesToday), icon: Gamepad2, color: "text-amber-600 dark:text-amber-400" },
-    { label: "Матчей за неделю", value: String(stats.gamesWeek), icon: TrendingUp, color: "text-emerald-600 dark:text-emerald-400" },
+    { label: "Игр сегодня", value: String(stats.gamesToday), icon: Gamepad2, iconWrap: "bg-accent/15 text-accent", span: "sm:col-span-1", big: false },
+    { label: "Матчей за неделю", value: String(stats.gamesWeek), icon: TrendingUp, iconWrap: "bg-primary/15 text-primary", span: "sm:col-span-1", big: false },
   ];
 
   return (
@@ -260,7 +263,7 @@ export function V0HomePage(props: { me: any }) {
       </motion.div>
 
       <motion.div
-        className="grid w-full gap-4 sm:grid-cols-3 items-stretch"
+        className="grid w-full gap-4 sm:grid-cols-4 items-stretch"
         variants={statsContainer}
         initial="hidden"
         animate="show"
@@ -269,17 +272,17 @@ export function V0HomePage(props: { me: any }) {
           const numericValue = Number(stat.value);
           const isNumeric = !Number.isNaN(numericValue);
           return (
-            <motion.div key={stat.label} variants={statVariant}>
+            <motion.div key={stat.label} variants={statVariant} className={stat.span}>
               <Card className="border-border/50 w-full h-full">
                 <CardContent className="flex items-center gap-4 p-6">
-                  <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-secondary">
-                    <stat.icon className={`h-6 w-6 ${stat.color}`} />
+                  <div className={`flex items-center justify-center rounded-xl ${stat.iconWrap} ${stat.big ? "h-16 w-16" : "h-12 w-12"}`}>
+                    <stat.icon className={stat.big ? "h-8 w-8" : "h-6 w-6"} />
                   </div>
                   <div>
-                    <p className="text-3xl font-bold tabular-nums">
+                    <p className={`font-display font-bold leading-none tabular-nums ${stat.big ? "text-5xl" : "text-4xl"}`}>
                       {isNumeric ? <AnimatedNumber value={numericValue} reduce={prefersReducedMotion} /> : stat.value}
                     </p>
-                    <p className="text-sm text-muted-foreground">{stat.label}</p>
+                    <p className="mt-1 text-sm font-medium text-muted-foreground">{stat.label}</p>
                     {"sublabel" in stat && stat.sublabel ? (
                       <p className="text-xs text-muted-foreground mt-0.5">{stat.sublabel}</p>
                     ) : null}
