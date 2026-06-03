@@ -233,7 +233,7 @@ export function V0RatingPage(props: { authed: boolean; me?: { playerId?: string 
           </PlayerTooltip>
         </td>
         <td className="py-1.5 sm:py-2 px-2 sm:px-3 align-middle whitespace-nowrap text-center">
-          <span className="font-semibold tabular-nums text-sm sm:text-base">
+          <span className="font-display font-bold tabular-nums text-base sm:text-xl">
             {isCalibrating(player) && isMe ? "—" : player.rating}
           </span>
           {isCalibrating(player) && !isMe && (
@@ -323,7 +323,7 @@ export function V0RatingPage(props: { authed: boolean; me?: { playerId?: string 
                 </span>
               </div>
             </PlayerTooltip>
-            <p className={cn("font-bold tabular-nums", isFirst ? "text-2xl sm:text-4xl" : "text-xl sm:text-3xl")}>
+            <p className={cn("font-display font-bold tabular-nums leading-none", isFirst ? "text-3xl sm:text-5xl" : "text-2xl sm:text-4xl")}>
               {isCalibrating(player) && player.id === meId ? "—" : player.rating}
             </p>
             <div className="mt-1 sm:mt-2 flex flex-col sm:flex-row items-center gap-0.5 sm:gap-3 text-[10px] sm:text-sm text-muted-foreground">
