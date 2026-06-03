@@ -101,10 +101,11 @@
     @apply bg-background text-foreground;
     font-family: var(--font-sans);
   }
-  /* Restyle B: спортивные заголовки Barlow Condensed — компактные, с лёгким трекингом. */
-  .v0 h1,
-  .v0 h2,
-  .v0 h3 {
+  /* Restyle B: спортивные заголовки Barlow Condensed — компактные, с лёгким трекингом.
+     Селектор глобальный (класс .v0 удалён вместе с V0Layout — больше не существует). */
+  h1,
+  h2,
+  h3 {
     font-family: var(--font-display);
     letter-spacing: 0.01em;
   }
