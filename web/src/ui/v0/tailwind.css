@@ -17,14 +17,22 @@
   --secondary-foreground: oklch(0.15 0 0);
   --muted: oklch(0.94 0 0);
   --muted-foreground: oklch(0.45 0 0);
-  --accent: oklch(0.55 0.18 145);
-  --accent-foreground: oklch(1 0 0);
+  /* Restyle B: accent = энергичный оранжевый (CTA/достижения), primary остаётся зелёным (бренд/корт). */
+  --accent: oklch(0.70 0.18 55);
+  --accent-foreground: oklch(0.18 0.02 60);
   --destructive: oklch(0.55 0.22 25);
   --destructive-foreground: oklch(1 0 0);
   --border: oklch(0.88 0 0);
   --input: oklch(0.94 0 0);
   --ring: oklch(0.55 0.18 145);
   --radius: 0.75rem;
+  /* Медали для топ-3 рейтинга. */
+  --gold: oklch(0.82 0.15 85);
+  --silver: oklch(0.78 0.01 250);
+  --bronze: oklch(0.65 0.11 55);
+  /* Спортивная типографика. */
+  --font-sans: "Barlow", ui-sans-serif, system-ui, sans-serif;
+  --font-display: "Barlow Condensed", "Barlow", ui-sans-serif, sans-serif;
 }
 
 .dark {
@@ -41,13 +49,17 @@
   --secondary-foreground: oklch(0.98 0 0);
   --muted: oklch(0.22 0 0);
   --muted-foreground: oklch(0.65 0 0);
-  --accent: oklch(0.65 0.18 145);
-  --accent-foreground: oklch(0.12 0 0);
+  /* Restyle B: оранжевый акцент, чуть светлее для тёмного фона. */
+  --accent: oklch(0.75 0.17 60);
+  --accent-foreground: oklch(0.15 0.02 60);
   --destructive: oklch(0.55 0.22 25);
   --destructive-foreground: oklch(0.98 0 0);
   --border: oklch(0.28 0 0);
   --input: oklch(0.22 0 0);
   --ring: oklch(0.65 0.18 145);
+  --gold: oklch(0.84 0.15 85);
+  --silver: oklch(0.82 0.01 250);
+  --bronze: oklch(0.68 0.11 55);
 }
 
 @theme inline {
@@ -70,10 +82,15 @@
   --color-border: var(--border);
   --color-input: var(--input);
   --color-ring: var(--ring);
+  --color-gold: var(--gold);
+  --color-silver: var(--silver);
+  --color-bronze: var(--bronze);
   --radius-sm: calc(var(--radius) - 4px);
   --radius-md: calc(var(--radius) - 2px);
   --radius-lg: var(--radius);
   --radius-xl: calc(var(--radius) + 4px);
+  --font-sans: var(--font-sans);
+  --font-display: var(--font-display);
 }
 
 @layer base {
@@ -82,6 +99,14 @@
   }
   body {
     @apply bg-background text-foreground;
+    font-family: var(--font-sans);
+  }
+  /* Restyle B: спортивные заголовки Barlow Condensed — компактные, с лёгким трекингом. */
+  .v0 h1,
+  .v0 h2,
+  .v0 h3 {
+    font-family: var(--font-display);
+    letter-spacing: 0.01em;
   }
 
   /* Стилизованные тонкие скроллбары в тему сайта — везде где есть overflow.
