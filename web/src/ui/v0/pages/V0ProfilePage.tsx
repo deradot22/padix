@@ -335,19 +335,31 @@ export function V0ProfilePage(props: { me: any; meLoaded?: boolean; onMeUpdate?:
 
         <Card className="overflow-hidden border-border/50">
           {/*
-            Cover-баннер: высота как в оригинале (h-32, 128px). Зелёный градиент —
-            Tailwind-классом (переменные проекта в oklch, поэтому НЕ трогаем background
-            инлайном). Поверх — отдельный слой с диагональными линиями (rgba, без
-            переменных), чтобы напомнить разметку корта без ощущения пустоты.
+            Cover-баннер = стилизованное поле падел-корта (вид сверху). Чистый зелёный
+            градиент (без оранжевого accent — он давал мутный край), поверх — SVG-разметка
+            корта: рамка, сетка по центру, линии подачи. preserveAspectRatio=slice растягивает
+            корт по ширине баннера. Линии белые полупрозрачные — читаются в обеих темах.
           */}
-          <div className="relative h-32 bg-gradient-to-r from-primary/30 via-primary/15 to-accent/10" aria-hidden="true">
-            <div
-              className="absolute inset-0"
-              style={{
-                backgroundImage:
-                  "repeating-linear-gradient(135deg, transparent 0, transparent 14px, rgba(255,255,255,0.08) 14px, rgba(255,255,255,0.08) 15px)",
-              }}
-            />
+          <div className="relative h-32 overflow-hidden bg-gradient-to-br from-primary/35 via-primary/15 to-primary/5" aria-hidden="true">
+            <svg
+              className="absolute inset-0 h-full w-full"
+              viewBox="0 0 200 64"
+              preserveAspectRatio="xMidYMid slice"
+              fill="none"
+            >
+              <g stroke="rgba(255,255,255,0.30)" strokeWidth="0.6" strokeLinecap="round">
+                {/* внешняя рамка корта */}
+                <rect x="6" y="6" width="188" height="52" rx="1.5" />
+                {/* сетка по центру (поперёк) — пунктиром, чуть ярче */}
+                <line x1="100" y1="6" x2="100" y2="58" stroke="rgba(255,255,255,0.42)" strokeWidth="1" strokeDasharray="2.5 1.8" />
+                {/* линии подачи по обе стороны от сетки */}
+                <line x1="58" y1="6" x2="58" y2="58" />
+                <line x1="142" y1="6" x2="142" y2="58" />
+                {/* центральные линии зон подачи (от линии подачи к задней стенке) */}
+                <line x1="6" y1="32" x2="58" y2="32" />
+                <line x1="142" y1="32" x2="194" y2="32" />
+              </g>
+            </svg>
           </div>
           <CardContent className="relative z-10 -mt-16 pb-8">
             <div className="flex flex-col gap-6 sm:flex-row sm:items-end sm:justify-between">
@@ -369,13 +381,13 @@ export function V0ProfilePage(props: { me: any; meLoaded?: boolean; onMeUpdate?:
               </div>
             </div>
 
-            <div className="mt-6 flex flex-wrap items-center gap-3">
-              <Badge className="h-10 gap-2 px-4 py-0 bg-primary/10 text-primary border border-primary/20 text-base">
-                <Trophy className="h-4 w-4" />
+            <div className="mt-6 flex flex-wrap items-center gap-2">
+              <Badge className="h-8 gap-1.5 px-3 py-0 bg-primary/10 text-primary border border-primary/20 text-sm font-medium">
+                <Trophy className="h-3.5 w-3.5" />
                 {calibration ? "на калибровке" : "Активен"}
               </Badge>
               {viewMe.gender ? (
-                <Badge variant="secondary" className="h-10 gap-2 px-4 py-0 text-base">
+                <Badge variant="secondary" className="h-8 gap-1.5 px-3 py-0 text-sm font-medium">
                   {viewMe.gender === "M" ? "М" : "Ж"}
                 </Badge>
               ) : null}
@@ -396,8 +408,8 @@ export function V0ProfilePage(props: { me: any; meLoaded?: boolean; onMeUpdate?:
                   aria-label="Скопировать ID"
                   title="Скопировать ID"
                 >
-                  <Badge variant="secondary" className="h-10 gap-2 px-4 py-0 text-sm">
-                    <span className="text-xs uppercase text-muted-foreground">ID</span>
+                  <Badge variant="secondary" className="h-8 gap-1.5 px-3 py-0 text-sm font-medium">
+                    <span className="text-[10px] uppercase text-muted-foreground">ID</span>
                     {formatPublicId(viewMe.publicId)}
                   </Badge>
                 </button>
