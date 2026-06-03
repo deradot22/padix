@@ -372,17 +372,7 @@ export function V0ProfilePage(props: { me: any; meLoaded?: boolean; onMeUpdate?:
             <div className="mt-6 flex flex-wrap items-center gap-3">
               <Badge className="h-10 gap-2 px-4 py-0 bg-primary/10 text-primary border border-primary/20 text-base">
                 <Trophy className="h-4 w-4" />
-                {calibration ? (
-                  "на калибровке"
-                ) : (
-                  <>
-                    {viewMe.rating} (NTRP {ntrpLevel(viewMe.rating)})
-                  </>
-                )}
-              </Badge>
-              <Badge variant="secondary" className="h-10 gap-2 px-4 py-0 text-base">
-                <Gamepad2 className="h-4 w-4 text-muted-foreground" />
-                {viewMe.gamesPlayed} матчей
+                {calibration ? "на калибровке" : "Активен"}
               </Badge>
               {viewMe.gender ? (
                 <Badge variant="secondary" className="h-10 gap-2 px-4 py-0 text-base">
@@ -419,6 +409,28 @@ export function V0ProfilePage(props: { me: any; meLoaded?: boolean; onMeUpdate?:
                 >
                   Скопировано
                 </span>
+              </div>
+            </div>
+
+            {/* Restyle B: «карточка игрока» — ключевые цифры крупно, scoreboard-стиль. */}
+            <div className="mt-6 grid grid-cols-3 gap-3">
+              <div className="rounded-xl border border-border bg-secondary/30 px-3 py-3 text-center">
+                <p className="font-display text-3xl sm:text-4xl font-bold leading-none tabular-nums">
+                  {calibration ? "—" : viewMe.rating}
+                </p>
+                <p className="mt-1.5 text-xs font-medium uppercase tracking-wide text-muted-foreground">Рейтинг</p>
+              </div>
+              <div className="rounded-xl border border-border bg-secondary/30 px-3 py-3 text-center">
+                <p className="font-display text-3xl sm:text-4xl font-bold leading-none tabular-nums text-primary">
+                  {calibration ? "—" : ntrpLevel(viewMe.rating)}
+                </p>
+                <p className="mt-1.5 text-xs font-medium uppercase tracking-wide text-muted-foreground">NTRP</p>
+              </div>
+              <div className="rounded-xl border border-border bg-secondary/30 px-3 py-3 text-center">
+                <p className="font-display text-3xl sm:text-4xl font-bold leading-none tabular-nums">
+                  {viewMe.gamesPlayed}
+                </p>
+                <p className="mt-1.5 text-xs font-medium uppercase tracking-wide text-muted-foreground">Матчей</p>
               </div>
             </div>
 
