@@ -67,8 +67,17 @@ function lttb(points: { x: number; y: number; original: Point }[], threshold: nu
   return sampled;
 }
 
+const MONTHS_SHORT = ["янв", "фев", "мар", "апр", "мая", "июн", "июл", "авг", "сен", "окт", "ноя", "дек"];
+function formatShortDate(iso: string): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return iso.slice(0, 10);
+  return `${d.getDate()} ${MONTHS_SHORT[d.getMonth()] ?? ""}`;
+}
+
 export function RatingGraph(props: { points: Point[] }) {
   const [period, setPeriod] = useState<Period>("30d");
+  // Интерактивность: индекс точки под курсором/пальцем (в системе sampled).
+  const [hovered, setHovered] = useState<number | null>(null);
   const [mode, setMode] = useState<Mode>(() => {
     if (typeof window === "undefined") return "matches";
     const saved = window.localStorage.getItem(MODE_STORAGE_KEY);
@@ -233,6 +242,57 @@ export function RatingGraph(props: { points: Point[] }) {
             </g>
           );
         })}
+
+        {/* интерактив: crosshair + подсветка + тултип для точки под курсором/пальцем */}
+        {hovered != null && hovered < sampled.length && (() => {
+          const hp = sampled[hovered];
+          const hx = toX(hp.x);
+          const hy = toY(hp.y);
+          const delta = hovered > 0 ? hp.y - sampled[hovered - 1].y : null;
+          const tipW = 96;
+          const tipH = 34;
+          const tipX = Math.max(padLeft, Math.min(width - padRight - tipW, hx - tipW / 2));
+          const above = hy - tipH - 12 > padTop;
+          const tipY = above ? hy - tipH - 12 : hy + 12;
+          const deltaStr = delta == null ? "" : `${delta > 0 ? "▲" : delta < 0 ? "▼" : ""}${delta > 0 ? "+" : ""}${delta}`;
+          const deltaColor = delta == null ? "var(--muted-foreground)" : delta > 0 ? "var(--primary)" : delta < 0 ? "var(--destructive)" : "var(--muted-foreground)";
+          return (
+            <g style={{ pointerEvents: "none" }}>
+              <line x1={hx} y1={padTop} x2={hx} y2={bottomY} stroke="var(--accent)" strokeWidth="1" strokeDasharray="3 3" opacity="0.6" />
+              <circle cx={hx} cy={hy} r={pointR + 2.5} fill="var(--accent)" stroke="var(--background)" strokeWidth="2" />
+              <g transform={`translate(${tipX},${tipY})`}>
+                <rect width={tipW} height={tipH} rx="6" fill="var(--popover)" stroke="var(--border)" strokeWidth="1" />
+                <text x={8} y={14} className="tabular-nums" style={{ fontSize: labelFs, fontFamily: "var(--font-display)", fontWeight: 700, fill: "var(--foreground)" }}>
+                  {hp.y}
+                  {deltaStr ? <tspan dx={6} style={{ fontSize: labelFs * 0.85, fill: deltaColor }}>{deltaStr}</tspan> : null}
+                </text>
+                <text x={8} y={tipH - 8} style={{ fontSize: labelFs * 0.8, fill: "var(--muted-foreground)" }}>
+                  {formatShortDate(hp.original.date)}
+                </text>
+              </g>
+            </g>
+          );
+        })()}
+
+        {/* невидимые зоны для перехвата наведения/тапа по точкам */}
+        {sampled.map((p, i) => {
+          const cx = toX(p.x);
+          const prevMid = i === 0 ? padLeft : (toX(sampled[i - 1].x) + cx) / 2;
+          const nextMid = i === sampled.length - 1 ? width - padRight : (cx + toX(sampled[i + 1].x)) / 2;
+          return (
+            <rect
+              key={`hit-${i}`}
+              x={prevMid}
+              y={padTop}
+              width={Math.max(1, nextMid - prevMid)}
+              height={graphH}
+              fill="transparent"
+              style={{ cursor: "pointer" }}
+              onMouseEnter={() => setHovered(i)}
+              onTouchStart={() => setHovered(i)}
+            />
+          );
+        })}
       </>
     );
   };
@@ -288,7 +348,7 @@ export function RatingGraph(props: { points: Point[] }) {
 
       {/* Мобильная */}
       <div className="overflow-x-auto md:hidden">
-        <svg viewBox="0 0 408 244" className="w-full min-h-[260px]" preserveAspectRatio="xMidYMid meet">
+        <svg viewBox="0 0 408 244" className="w-full min-h-[260px]" preserveAspectRatio="xMidYMid meet" onMouseLeave={() => setHovered(null)}>
           <g className="text-primary">
             {renderGraph({
               width: 408,
@@ -316,6 +376,7 @@ export function RatingGraph(props: { points: Point[] }) {
           className="w-full block"
           style={{ aspectRatio: `520/140` }}
           preserveAspectRatio="xMidYMid meet"
+          onMouseLeave={() => setHovered(null)}
         >
           <g className="text-primary">
             {renderGraph({
