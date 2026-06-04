@@ -371,22 +371,22 @@ export function RatingGraph(props: { points: Point[] }) {
       {/* Десктоп */}
       <div className="hidden md:block overflow-x-auto w-full rounded-xl border border-border/40 bg-secondary/10 p-4">
         <svg
-          viewBox="0 0 520 140"
+          viewBox="0 0 520 240"
           className="w-full block"
-          style={{ aspectRatio: `520/140` }}
+          style={{ aspectRatio: `520/240` }}
           preserveAspectRatio="xMidYMid meet"
           onMouseLeave={() => setHovered(null)}
         >
           <g className="text-primary">
             {renderGraph({
               width: 520,
-              height: 140,
-              padTop: 22,
-              padBottom: 22,
-              padLeft: 44,
-              padRight: 20,
-              pointR: 3,
-              labelFs: 10,
+              height: 240,
+              padTop: 34,
+              padBottom: 34,
+              padLeft: 48,
+              padRight: 24,
+              pointR: 4.5,
+              labelFs: 13,
               gradientId: "graphGradientDesktop",
             })}
           </g>
