@@ -140,45 +140,87 @@ export function RatingGraph(props: { points: Point[] }) {
     const labelOffset = Math.max(10, labelFs);
     const getLabelY = (i: number, y: number) => (i % 2 === 0 ? y - labelOffset : y + labelOffset);
 
+    // Restyle B: горизонтальный грид с подписями оси Y (вид «табло»).
+    const GRID = 4;
+    const gridVals = Array.from({ length: GRID + 1 }, (_, k) => lo + ((hi - lo) * k) / GRID);
+    const lastIdx = sampled.length - 1;
+
     return (
       <>
         <defs>
           <linearGradient id={gradientId} x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor="var(--primary)" stopOpacity="0.25" />
+            <stop offset="0%" stopColor="var(--primary)" stopOpacity="0.30" />
+            <stop offset="55%" stopColor="var(--primary)" stopOpacity="0.08" />
             <stop offset="100%" stopColor="var(--primary)" stopOpacity="0" />
           </linearGradient>
         </defs>
+
+        {/* грид-линии + подписи рейтинга по оси Y */}
+        {gridVals.map((v, k) => {
+          const gy = toY(v);
+          return (
+            <g key={`grid-${k}`}>
+              <line
+                x1={padLeft}
+                y1={gy}
+                x2={width - padRight}
+                y2={gy}
+                stroke="var(--border)"
+                strokeWidth="0.5"
+                strokeDasharray="2 3"
+                opacity="0.55"
+              />
+              <text
+                x={padLeft - 6}
+                y={gy + labelFs * 0.34}
+                textAnchor="end"
+                style={{ fontSize: labelFs * 0.85, fill: "var(--muted-foreground)", fontFamily: "var(--font-display)" }}
+              >
+                {Math.round(v)}
+              </text>
+            </g>
+          );
+        })}
+
         {areaPath && <path d={areaPath} fill={`url(#${gradientId})`} />}
         <polyline
           fill="none"
           stroke="var(--primary)"
-          strokeWidth="2"
+          strokeWidth="2.5"
           strokeLinecap="round"
           strokeLinejoin="round"
           points={linePts}
         />
         {sampled.map((p, i) => {
           const y = toY(p.y);
+          const x = toX(p.x);
+          const isLast = i === lastIdx;
           const labelY = Math.max(padTop - 2, Math.min(height - padBottom + labelFs, getLabelY(i, y)));
           return (
             <g key={i}>
+              {/* последняя точка — акцентный маркер «ты сейчас здесь» с кольцом */}
+              {isLast && (
+                <circle cx={x} cy={y} r={pointR + 5} fill="none" stroke="var(--accent)" strokeWidth="1.2" opacity="0.35" />
+              )}
               <circle
-                cx={toX(p.x)}
+                cx={x}
                 cy={y}
-                r={pointR}
-                fill="var(--background)"
-                stroke="var(--primary)"
+                r={isLast ? pointR + 1.5 : pointR}
+                fill={isLast ? "var(--accent)" : "var(--background)"}
+                stroke={isLast ? "var(--accent)" : "var(--primary)"}
                 strokeWidth="1.8"
               />
-              {shouldShowLabel(i) && (
+              {(shouldShowLabel(i) || isLast) && (
                 <text
-                  x={toX(p.x)}
-                  y={labelY}
+                  x={x}
+                  y={isLast ? y - labelOffset : labelY}
                   textAnchor="middle"
-                  className="font-semibold tabular-nums"
+                  className="tabular-nums"
                   style={{
-                    fontSize: labelFs,
-                    fill: "var(--foreground)",
+                    fontSize: isLast ? labelFs * 1.25 : labelFs,
+                    fontFamily: "var(--font-display)",
+                    fontWeight: 700,
+                    fill: isLast ? "var(--accent)" : "var(--foreground)",
                     stroke: "var(--background)",
                     strokeWidth: 7,
                     paintOrder: "stroke",
@@ -253,8 +295,8 @@ export function RatingGraph(props: { points: Point[] }) {
               height: 244,
               padTop: 32,
               padBottom: 32,
-              padLeft: 24,
-              padRight: 24,
+              padLeft: 44,
+              padRight: 20,
               pointR: 4,
               labelFs: 12,
               gradientId: "graphGradientMobile",
@@ -281,8 +323,8 @@ export function RatingGraph(props: { points: Point[] }) {
               height: 140,
               padTop: 22,
               padBottom: 22,
-              padLeft: 24,
-              padRight: 24,
+              padLeft: 44,
+              padRight: 20,
               pointR: 3,
               labelFs: 10,
               gradientId: "graphGradientDesktop",
