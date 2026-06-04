@@ -258,7 +258,6 @@ export function RatingGraph(props: { points: Point[] }) {
           const deltaColor = delta == null ? "var(--muted-foreground)" : delta > 0 ? "var(--primary)" : delta < 0 ? "var(--destructive)" : "var(--muted-foreground)";
           return (
             <g style={{ pointerEvents: "none" }}>
-              <line x1={hx} y1={padTop} x2={hx} y2={bottomY} stroke="var(--accent)" strokeWidth="1" strokeDasharray="3 3" opacity="0.6" />
               <circle cx={hx} cy={hy} r={pointR + 2.5} fill="var(--accent)" stroke="var(--background)" strokeWidth="2" />
               <g transform={`translate(${tipX},${tipY})`}>
                 <rect width={tipW} height={tipH} rx="6" fill="var(--popover)" stroke="var(--border)" strokeWidth="1" />
