@@ -798,9 +798,15 @@ class TelegramService(
     }
 
     /**
-     * Напоминание о игре идёт ЛИЧНО каждому участнику в его привязанный PRIVATE-чат
-     * (если у участника он есть и включён notify_reminder). В группах reminder не дублируется.
-     * Тихие часы и общий toggle проверяются у каждого участника отдельно.
+     * Напоминание о игре. Два независимых канала доставки:
+     *   1) ЛИЧНО каждому участнику в его привязанный PRIVATE-чат (если у участника он
+     *      есть и `notify_reminder` включён). Тихие часы и общий toggle проверяются у
+     *      КАЖДОГО участника отдельно (по его настройкам).
+     *   2) В привязанные группы автора события, у которых `notify_reminder` включён.
+     *      Гейтится настройками АВТОРА события (enabled, quiet hours). Так один пинг
+     *      в группе предупреждает всех собравшихся вместо рассылки в личку каждому.
+     * Оба канала включаются независимо чекбоксами в настройках бота на странице
+     * /settings (вкладка Telegram).
      */
     @Transactional
     fun postEventReminderToParticipants(
@@ -814,12 +820,13 @@ class TelegramService(
 
         val playerIds = participants.mapNotNull { it.id }
         val users = userRepo.findAllByPlayerIdIn(playerIds)
-        if (users.isEmpty()) return 0
 
         val ctaData = cta(eventId, "🔍 Открыть игру")
         val text = renderEventReminder(event, hoursBeforeStart, participants) + ctaData.textSuffix
 
         var sent = 0
+
+        // (1) Личные напоминания участникам
         for (user in users) {
             val userId = user.id ?: continue
             val settings = getOrCreateSettings(userId)
@@ -837,6 +844,24 @@ class TelegramService(
                 }
             }
         }
+
+        // (2) Групповые напоминания: в чаты автора события с notify_reminder=true
+        event.createdByUserId?.let { ownerId ->
+            val ownerSettings = getOrCreateSettings(ownerId)
+            if (ownerSettings.enabled && !isQuietNow(ownerSettings)) {
+                val groupChats = chatRepo.findAllByUserIdOrderByLinkedAtAsc(ownerId)
+                    .filter { it.chatType != TelegramChatType.PRIVATE.name && it.notifyReminder }
+                for (chat in groupChats) {
+                    try {
+                        client.sendMessage(chat.chatId, text, replyMarkup = ctaData.replyMarkup)
+                        sent++
+                    } catch (e: Exception) {
+                        log.warn("Failed to send group reminder to chat {}: {}", chat.chatId, e.message)
+                    }
+                }
+            }
+        }
+
         return sent
     }
 

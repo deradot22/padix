@@ -378,7 +378,7 @@ export function TelegramIntegrationCard() {
                             <X className="h-4 w-4" />
                           </Button>
                         </div>
-                        <div className="grid grid-cols-2 gap-2 text-xs">
+                        <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 text-xs">
                           <ChatToggle
                             label="изменения и набор"
                             checked={chat.notifyUpdated}
@@ -388,6 +388,11 @@ export function TelegramIntegrationCard() {
                             label="финал и результаты"
                             checked={chat.notifyFinished}
                             onChange={(v) => patchChatPrefs(chat.id, { notifyFinished: v })}
+                          />
+                          <ChatToggle
+                            label="напоминания за N часов"
+                            checked={chat.notifyReminder}
+                            onChange={(v) => patchChatPrefs(chat.id, { notifyReminder: v })}
                           />
                         </div>
                       </div>
