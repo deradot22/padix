@@ -681,18 +681,19 @@ export function V0ProfilePage(props: { me: any; meLoaded?: boolean; onMeUpdate?:
                       }}
                       showAddFriend={false}
                     >
-                      <div className="flex items-center gap-3 rounded-lg bg-secondary/50 p-2 px-3 cursor-pointer hover:bg-secondary transition-colors">
-                        <div className="h-8 w-8 shrink-0 rounded-full bg-secondary/60 border border-border overflow-hidden flex items-center justify-center text-sm font-semibold">
+                      <div className="flex items-center gap-3 rounded-lg p-2 px-2.5 cursor-pointer hover:bg-secondary/60 transition-colors">
+                        <div className="h-9 w-9 shrink-0 rounded-full bg-primary/15 text-primary border border-primary/25 overflow-hidden flex items-center justify-center text-sm font-display font-bold">
                           {friend.avatarUrl ? (
                             <img src={friend.avatarUrl} alt="" className="h-full w-full object-cover" />
                           ) : (
                             friend.name?.trim().split(/\s+/).slice(0, 2).map((w) => w[0]?.toUpperCase()).join("") || "?"
                           )}
                         </div>
-                        <div className="min-w-0">
+                        <div className="min-w-0 flex-1">
                           <p className="text-sm font-medium truncate">{friend.name}</p>
-                          <p className="text-xs text-muted-foreground">{friend.rating} • {friend.ntrp ?? ntrpLevel(friend.rating)}</p>
+                          <p className="text-xs text-muted-foreground tabular-nums">NTRP {friend.ntrp ?? ntrpLevel(friend.rating)}</p>
                         </div>
+                        <span className="shrink-0 font-display font-bold tabular-nums text-base">{friend.rating}</span>
                       </div>
                     </PlayerTooltip>
                   ))}
