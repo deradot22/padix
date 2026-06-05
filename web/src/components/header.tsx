@@ -377,7 +377,7 @@ export function Header(props: {
           <button
             type="button"
             onClick={() => toggleTheme(!isDark)}
-            className="flex items-center rounded-full border border-border bg-secondary p-1.5 md:p-1 cursor-pointer hover:bg-secondary/80 transition-colors min-h-11 md:min-h-9"
+            className="hidden md:flex items-center rounded-full border border-border bg-secondary p-1 cursor-pointer hover:bg-secondary/80 transition-colors min-h-9"
             aria-label={isDark ? "Переключить на светлую тему" : "Переключить на тёмную тему"}
             title={isDark ? "Светлая тема" : "Тёмная тема"}
           >
@@ -526,6 +526,16 @@ export function Header(props: {
                 </NavLink>
               </>
             )}
+            <div className="my-1 h-px bg-border" />
+            {/* Переключатель темы перенесён сюда из топбара (мобильная версия). Меню не закрываем — видно смену темы. */}
+            <button
+              type="button"
+              onClick={() => toggleTheme(!isDark)}
+              className="flex items-center gap-2 rounded-lg px-3 py-2 text-left text-sm font-medium text-muted-foreground hover:bg-secondary/50 hover:text-foreground transition-colors"
+            >
+              {isDark ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
+              {isDark ? "Светлая тема" : "Тёмная тема"}
+            </button>
             <div className="my-1 h-px bg-border" />
             {props.authed ? (
               <button
