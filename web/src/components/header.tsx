@@ -1,7 +1,7 @@
 "use client";
 
 import { Link, NavLink, useLocation, useNavigate } from "react-router-dom";
-import { Bell, Check, LogOut, Menu, MessageSquare, Settings, UserPlus, X } from "lucide-react";
+import { Bell, Check, LogOut, Menu, MessageSquare, Moon, Settings, Sun, UserPlus, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { useEffect, useMemo, useState } from "react";
@@ -31,6 +31,7 @@ export function Header(props: {
 }) {
   const { pathname } = useLocation();
   const nav = useNavigate();
+  const [isDark, setIsDark] = useState(() => document.documentElement.classList.contains("dark"));
   const [notificationsOpen, setNotificationsOpen] = useState(false);
   const [loadingNotifications, setLoadingNotifications] = useState(false);
   const [notificationsError, setNotificationsError] = useState<string | null>(null);
@@ -44,12 +45,31 @@ export function Header(props: {
   const settingsBtnRef = useRef<HTMLButtonElement | null>(null);
   const settingsPanelRef = useRef<HTMLDivElement | null>(null);
 
+  useEffect(() => {
+    const stored = localStorage.getItem("theme");
+    const shouldBeDark = stored === "dark";
+    setIsDark(shouldBeDark);
+    if (shouldBeDark) document.documentElement.classList.add("dark");
+    else document.documentElement.classList.remove("dark");
+  }, []);
+
   const totalNotifications = useMemo(
     () => (props.notificationCount > 0 ? props.notificationCount : invites.length + incomingFriends.length),
     [incomingFriends.length, invites.length, props.notificationCount],
   );
   const hasInvites = invites.length > 0;
   const hasFriendRequests = incomingFriends.length > 0;
+
+  const toggleTheme = (dark: boolean) => {
+    setIsDark(dark);
+    if (dark) {
+      document.documentElement.classList.add("dark");
+      localStorage.setItem("theme", "dark");
+    } else {
+      document.documentElement.classList.remove("dark");
+      localStorage.setItem("theme", "light");
+    }
+  };
 
   async function loadNotifications() {
     if (!props.authed) {
@@ -354,6 +374,25 @@ export function Header(props: {
               </div>
           </div>
 
+          <button
+            type="button"
+            onClick={() => toggleTheme(!isDark)}
+            className="hidden md:flex items-center rounded-full border border-border bg-secondary p-1 cursor-pointer hover:bg-secondary/80 transition-colors min-h-9"
+            aria-label={isDark ? "Переключить на светлую тему" : "Переключить на тёмную тему"}
+            title={isDark ? "Светлая тема" : "Тёмная тема"}
+          >
+            <span
+              className={cn("rounded-full p-2 md:p-1.5 transition-colors flex items-center justify-center", !isDark ? "bg-background text-foreground shadow-sm" : "text-muted-foreground")}
+            >
+              <Sun className="h-4 w-4" />
+            </span>
+            <span
+              className={cn("rounded-full p-2 md:p-1.5 transition-colors flex items-center justify-center", isDark ? "bg-background text-foreground shadow-sm" : "text-muted-foreground")}
+            >
+              <Moon className="h-4 w-4" />
+            </span>
+          </button>
+
           <Button
             variant="ghost"
             size="icon"
@@ -487,6 +526,16 @@ export function Header(props: {
                 </NavLink>
               </>
             )}
+            <div className="my-1 h-px bg-border" />
+            {/* Переключатель темы перенесён сюда из топбара (мобильная версия). Меню не закрываем — видно смену темы. */}
+            <button
+              type="button"
+              onClick={() => toggleTheme(!isDark)}
+              className="flex items-center gap-2 rounded-lg px-3 py-2 text-left text-sm font-medium text-muted-foreground hover:bg-secondary/50 hover:text-foreground transition-colors"
+            >
+              {isDark ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
+              {isDark ? "Светлая тема" : "Тёмная тема"}
+            </button>
             <div className="my-1 h-px bg-border" />
             {props.authed ? (
               <button

@@ -10,7 +10,7 @@ import { useConfirm } from "@/components/ui/confirm-dialog";
 import { TelegramIntegrationCard } from "@/components/telegram-integration";
 import { ConnectedAccountsSection } from "@/components/connected-accounts-section";
 import { PasswordSection } from "@/components/password-section";
-import { User, Bell, ShieldCheck, Upload, Check, Send, ChevronLeft, ChevronRight, BellOff, BellRing, Repeat, Pause, Play, Trash2, Plus, Pencil, Sun, Moon, Palette } from "lucide-react";
+import { User, Bell, ShieldCheck, Upload, Check, Send, ChevronLeft, ChevronRight, BellOff, BellRing, Repeat, Pause, Play, Trash2, Plus, Pencil } from "lucide-react";
 
 type SectionId = "profile" | "notifications" | "subscriptions" | "security";
 
@@ -35,15 +35,6 @@ export function V0SettingsPage(props: {
   const tabFromUrl = searchParams.get("tab");
   const [section, setSection] = useState<SectionId>(isSectionId(tabFromUrl) ? tabFromUrl : "profile");
 
-  // Тема перенесена сюда из шапки. Управляем через class на <html> + localStorage
-  // (тот же механизм, что inline-скрипт в index.html применяет при загрузке).
-  const [isDark, setIsDark] = useState(() => document.documentElement.classList.contains("dark"));
-  const setTheme = (dark: boolean) => {
-    setIsDark(dark);
-    document.documentElement.classList.toggle("dark", dark);
-    localStorage.setItem("theme", dark ? "dark" : "light");
-  };
-
   useEffect(() => {
     if (!props.meLoaded) return;
     if (!props.me) nav("/login");
@@ -64,45 +55,6 @@ export function V0SettingsPage(props: {
         <h1 className="text-2xl font-bold tracking-tight">Настройки</h1>
         <p className="text-sm text-muted-foreground">Аккаунт, уведомления и безопасность.</p>
       </div>
-
-      {/* Внешний вид — переключатель темы (перенесён из шапки). */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Palette className="h-5 w-5 text-primary" />
-            Внешний вид
-          </CardTitle>
-          <CardDescription>Тема оформления интерфейса</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="inline-flex rounded-lg border border-border bg-secondary/40 p-1">
-            <button
-              type="button"
-              onClick={() => setTheme(false)}
-              className={cn(
-                "flex items-center gap-2 rounded-md px-4 py-2 text-sm font-medium transition-colors",
-                !isDark ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground",
-              )}
-              aria-pressed={!isDark}
-            >
-              <Sun className="h-4 w-4" />
-              Светлая
-            </button>
-            <button
-              type="button"
-              onClick={() => setTheme(true)}
-              className={cn(
-                "flex items-center gap-2 rounded-md px-4 py-2 text-sm font-medium transition-colors",
-                isDark ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground",
-              )}
-              aria-pressed={isDark}
-            >
-              <Moon className="h-4 w-4" />
-              Тёмная
-            </button>
-          </div>
-        </CardContent>
-      </Card>
 
       <div className="grid gap-6 md:grid-cols-[220px_1fr]">
         {/* Mobile: pill-tabs в общем контейнере. Десктоп: вертикальный sidebar. */}
