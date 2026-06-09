@@ -61,6 +61,45 @@ data class PlayerResponse(
     }
 }
 
+@Schema(description = "Игрок (минимальная информация для списков/виджетов)")
+data class PlayerShort(
+    @Schema(description = "Внутренний UUID игрока")
+    val id: UUID,
+
+    @Schema(description = "Отображаемое имя")
+    val name: String,
+
+    @Schema(description = "Рейтинг ELO игрока")
+    val rating: Int,
+
+    @Schema(description = "URL аватара или null")
+    val avatarUrl: String? = null
+) {
+    companion object {
+        fun from(p: Player) = PlayerShort(
+            id = p.id!!,
+            name = p.name,
+            rating = p.rating,
+            avatarUrl = p.avatarUrl
+        )
+    }
+}
+
+@Schema(description = "Лучший напарник игрока: агрегированная статистика совместных игр")
+data class TopPartnerResponse(
+    @Schema(description = "Напарник")
+    val player: PlayerShort,
+
+    @Schema(description = "Сколько матчей сыграно вместе (только с зафиксированным счётом)")
+    val gamesTogether: Int,
+
+    @Schema(description = "Сколько из них выиграно вместе")
+    val winsTogether: Int,
+
+    @Schema(description = "Доля побед: winsTogether / gamesTogether, от 0.0 до 1.0")
+    val winRate: Double
+)
+
 @Schema(description = "Запрос на создание игры")
 data class CreateEventRequest(
     @field:NotBlank

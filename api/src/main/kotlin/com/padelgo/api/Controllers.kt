@@ -49,6 +49,19 @@ class PlayerController(
             PlayerResponse.from(p, calibration, publicId)
         }
     }
+
+    @Operation(
+        summary = "Лучшие напарники игрока (ТОП по win-rate)",
+        description = "Партнёры, с которыми игрок чаще всего побеждал, отсортированные по доле побед. " +
+            "Учитываются только сыгранные матчи (с зафиксированным счётом). " +
+            "В выдачу попадают напарники с минимум ${com.padelgo.service.EventService.MIN_GAMES_TOGETHER} совместными играми."
+    )
+    @GetMapping("/{id}/top-partners")
+    fun topPartners(
+        @PathVariable id: UUID,
+        @Parameter(description = "Сколько напарников вернуть (ТОП-N), по умолчанию 3")
+        @org.springframework.web.bind.annotation.RequestParam(required = false, defaultValue = "3") limit: Int
+    ): List<TopPartnerResponse> = service.getTopPartners(id, limit)
 }
 
 @Tag(name = "Events", description = "Управление играми: создание, регистрация, старт, счёт, финиш")

@@ -59,6 +59,12 @@ class EventService(
          * мало раундов.
          */
         const val BALANCED_TEAM_DIFF_CAP = 60
+
+        /** Минимум совместных сыгранных матчей, чтобы напарник попал в «Лучшие напарники». */
+        const val MIN_GAMES_TOGETHER = 3
+
+        /** Сколько напарников отдаём по умолчанию (ТОП-N). */
+        const val DEFAULT_TOP_PARTNERS_LIMIT = 3
     }
 
     fun getToday(date: LocalDate = LocalDate.now()): List<Event> =
@@ -1487,6 +1493,81 @@ class EventService(
                 opponentPlayers = opponentPlayerInfos
             )
         }.sortedWith(compareByDescending<PlayerMatchHistoryItem> { it.eventDate }.thenByDescending { it.roundNumber })
+    }
+
+    /**
+     * Лучшие напарники игрока по win-rate. Напарник — игрок, стоявший с ним в одной команде
+     * в сыгранном (с зафиксированным счётом) матче.
+     *
+     * Логика:
+     *  - проходим по всем матчам игрока;
+     *  - учитываем только матчи с записанным итоговым счётом (есть строки MatchSetScore) —
+     *    у незавершённых матчей нет результата, win-rate по ним не имеет смысла;
+     *  - для каждого такого матча определяем напарника и исход с точки зрения игрока
+     *    (ничья считается как сыгранная игра, но не как победа);
+     *  - агрегируем gamesTogether / winsTogether, winRate = winsTogether / gamesTogether.
+     *
+     * В выдачу попадают только напарники с >= [MIN_GAMES_TOGETHER] совместных игр.
+     * Сортировка: winRate desc, затем winsTogether desc, затем gamesTogether desc.
+     */
+    fun getTopPartners(playerId: UUID, limit: Int = DEFAULT_TOP_PARTNERS_LIMIT): List<com.padelgo.api.TopPartnerResponse> {
+        val allMatches = matchRepo.findAll()
+        val my = allMatches.filter { m ->
+            m.teamAPlayer1Id == playerId || m.teamAPlayer2Id == playerId ||
+                m.teamBPlayer1Id == playerId || m.teamBPlayer2Id == playerId
+        }
+        if (my.isEmpty()) return emptyList()
+
+        val roundIds = my.mapNotNull { it.roundId }.toSet()
+        val rounds = roundRepo.findAllById(roundIds).associateBy { it.id!! }
+        val eventIds = rounds.values.mapNotNull { it.eventId }.toSet()
+        val events = eventRepo.findAllById(eventIds).associateBy { it.id!! }
+
+        // partnerId -> (количество совместных игр, количество совместных побед)
+        val gamesTogether = HashMap<UUID, Int>()
+        val winsTogether = HashMap<UUID, Int>()
+
+        for (m in my) {
+            val round = rounds[m.roundId] ?: continue
+            val event = events[round.eventId] ?: continue
+            val sets = scoreRepo.findAllByMatchIdOrderBySetNumberAsc(m.id!!)
+            if (sets.isEmpty()) continue  // матч без счёта — в win-rate не учитываем
+
+            val isTeamA = m.teamAPlayer1Id == playerId || m.teamAPlayer2Id == playerId
+            val partnerId = (
+                if (isTeamA) {
+                    if (m.teamAPlayer1Id == playerId) m.teamAPlayer2Id else m.teamAPlayer1Id
+                } else {
+                    if (m.teamBPlayer1Id == playerId) m.teamBPlayer2Id else m.teamBPlayer1Id
+                }
+                ) ?: continue
+
+            val scoreA = scoreAFromSets(event.scoringMode, sets)
+            val playerScore = if (isTeamA) scoreA else 1.0 - scoreA
+
+            gamesTogether[partnerId] = (gamesTogether[partnerId] ?: 0) + 1
+            if (playerScore > 0.5) winsTogether[partnerId] = (winsTogether[partnerId] ?: 0) + 1
+        }
+
+        val qualified = gamesTogether.filterValues { it >= MIN_GAMES_TOGETHER }
+        if (qualified.isEmpty()) return emptyList()
+
+        val partners = playerRepo.findAllById(qualified.keys).associateBy { it.id!! }
+
+        return qualified.entries.mapNotNull { (partnerId, games) ->
+            val partner = partners[partnerId] ?: return@mapNotNull null
+            val wins = winsTogether[partnerId] ?: 0
+            com.padelgo.api.TopPartnerResponse(
+                player = com.padelgo.api.PlayerShort.from(partner),
+                gamesTogether = games,
+                winsTogether = wins,
+                winRate = wins.toDouble() / games
+            )
+        }.sortedWith(
+            compareByDescending<com.padelgo.api.TopPartnerResponse> { it.winRate }
+                .thenByDescending { it.winsTogether }
+                .thenByDescending { it.gamesTogether }
+        ).take(limit)
     }
 
     fun getMatchesForPlayerInEvent(playerId: UUID, eventId: UUID): List<PlayerMatchHistoryItem> {
