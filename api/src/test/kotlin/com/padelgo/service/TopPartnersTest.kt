@@ -206,11 +206,11 @@ class TopPartnersTest {
     }
 
     @Test
-    fun `ранжирование по нижней границе Уилсона, затем gamesTogether`() {
-        val x = player("X")  // 4 игры / 4 победы → wilson 0.510
-        val w = player("W")  // 3 игры / 3 победы → wilson 0.438
-        val y = player("Y")  // 3 игры / 2 победы → wilson 0.208
-        val z = player("Z")  // 5 игр / 2 победы → wilson 0.118 (за бортом ТОП-3)
+    fun `ранжирование по балансу качества и наигранности, затем gamesTogether`() {
+        val x = player("X")  // 4 игры / 4 победы → score 6.32
+        val w = player("W")  // 3 игры / 3 победы → score 5.00
+        val y = player("Y")  // 3 игры / 2 победы → score 3.50
+        val z = player("Z")  // 5 игр / 2 победы → score 3.09 (за бортом ТОП-3)
 
         repeat(4) { addMatch(x, win = true) }
         repeat(3) { addMatch(w, win = true) }
@@ -220,7 +220,7 @@ class TopPartnersTest {
         val result = run(limit = 3)
 
         assertEquals(3, result.size)
-        // X и W оба winRate 1.0, но у X больше совместных игр (4 > 3) → нижняя граница Уилсона выше → X впереди.
+        // X и W оба winRate 1.0, но у X больше совместных побед → балл выше → X впереди.
         assertEquals(x.id, result[0].player.id)
         assertEquals(w.id, result[1].player.id)
         assertEquals(y.id, result[2].player.id)
@@ -233,23 +233,24 @@ class TopPartnersTest {
     }
 
     @Test
-    fun `малая выборка со 100 процентами уступает большой выборке с 70 процентами`() {
-        // MIN_GAMES_TOGETHER = 3, поэтому минимально проходящая «малая выборка» — это 3 игры.
-        // (Напарник с 1 игрой вообще не дошёл бы до ранжирования — его срезает порог.)
-        val small = player("Малая")  // 3 игры / 3 победы → сырой winRate 1.0
-        val big = player("Большая")  // 20 игр / 14 побед → сырой winRate 0.7
-        repeat(3) { addMatch(small, win = true) }
-        repeat(14) { addMatch(big, win = true) }
-        repeat(6) { addMatch(big, win = false) }
+    fun `наигранность поднимает частого напарника выше редкого, но провального частого — нет`() {
+        val frequent = player("Частый")  // 20 игр / 13 побед (65%) → score 13.89
+        val rare = player("Редкий")      // 9 игр / 7 побед (78%)   → score 9.32
+        val bad = player("Провальный")   // 30 игр / 12 побед (40%) → score 7.95
+        repeat(13) { addMatch(frequent, win = true) }; repeat(7) { addMatch(frequent, win = false) }
+        repeat(7) { addMatch(rare, win = true) }; repeat(2) { addMatch(rare, win = false) }
+        repeat(12) { addMatch(bad, win = true) }; repeat(18) { addMatch(bad, win = false) }
 
         val result = run(limit = 3)
 
-        assertEquals(2, result.size)
-        // Несмотря на 100% у small, Уилсон ставит big выше: на 20 играх результат надёжнее.
-        assertEquals(big.id, result[0].player.id)
-        assertEquals(small.id, result[1].player.id)
+        assertEquals(3, result.size)
+        // Частый напарник (65%) обходит редкого (78%) — наигранность перевешивает разницу в проценте...
+        assertEquals(frequent.id, result[0].player.id)
+        assertEquals(rare.id, result[1].player.id)
+        // ...но провальный частый (40% на 30 играх) остаётся внизу из-за штрафа за поражения.
+        assertEquals(bad.id, result[2].player.id)
+        assertTrue(result[0].winRate < result[1].winRate) // 0.65 < 0.78 — да, % у победителя ниже
         assertTrue(result[0].score > result[1].score)
-        assertEquals(1.0, result[1].winRate)
-        assertEquals(0.7, result[0].winRate)
+        assertTrue(result[1].score > result[2].score)
     }
 }

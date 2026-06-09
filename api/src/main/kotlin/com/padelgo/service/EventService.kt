@@ -74,22 +74,24 @@ class EventService(
         const val RECENT_DAYS = 90L
 
         /**
-         * Нижняя граница 95%-доверительного интервала Уилсона для доли успехов [wins]/[games].
+         * Ранжирующий балл напарника — баланс «качества» (доли побед) и «наигранности»
+         * (объёма совместных игр):
          *
-         * Промышленный стандарт ранжирования «реальный win-rate с учётом размера выборки»:
-         * партнёр с 3/3 (сырой 100%) получает скор ниже, чем партнёр с 14/20 (70%), потому что
-         * по трём играм нельзя уверенно утверждать, что доля побед действительно так высока.
-         * z = 1.96 соответствует уровню доверия 95%.
+         *     score = winsTogether − поражения × 0.5 + log2(gamesTogether + 1)
+         *
+         * - каждая совместная победа добавляет балл, поэтому частые успешные напарники
+         *   поднимаются выше редких (даже если у редкого выше сырой процент);
+         * - каждое поражение снимает полбалла, поэтому «много играли, но часто проигрывали»
+         *   наверх не лезет;
+         * - log2(games+1) — мягкий бонус за объём (быстро растёт на первых играх, потом плавно).
+         *
+         * Пример: 20 игр / 67% даёт больший балл, чем 9 игр / 78% — наигранность перевешивает
+         * небольшую разницу в проценте; но 30 игр / 40% остаётся внизу из-за штрафа за поражения.
          */
-        fun wilsonLowerBound(wins: Int, games: Int): Double {
+        fun partnerScore(wins: Int, games: Int): Double {
             if (games <= 0) return 0.0
-            val z = 1.96
-            val z2 = z * z
-            val p = wins.toDouble() / games
-            val denom = 1.0 + z2 / games
-            val center = p + z2 / (2.0 * games)
-            val delta = z * kotlin.math.sqrt((p * (1.0 - p) + z2 / (4.0 * games)) / games)
-            return (center - delta) / denom
+            val losses = games - wins
+            return wins - losses * 0.5 + kotlin.math.log2((games + 1).toDouble())
         }
     }
 
@@ -1420,10 +1422,8 @@ class EventService(
     }
 
     fun getMatchesForPlayer(playerId: UUID): List<PlayerMatchHistoryItem> {
-        val allMatches = matchRepo.findAll()
-        val my = allMatches.filter { m ->
-            m.teamAPlayer1Id == playerId || m.teamAPlayer2Id == playerId || m.teamBPlayer1Id == playerId || m.teamBPlayer2Id == playerId
-        }
+        // Берём только матчи игрока (а не findAll() по всей таблице) — иначе профиль тормозит.
+        val my = matchRepo.findAllByPlayerParticipating(playerId)
         if (my.isEmpty()) return emptyList()
 
         val playerIds = my.flatMap {
@@ -1435,12 +1435,12 @@ class EventService(
         val eventIds = rounds.values.mapNotNull { it.eventId }.toSet()
         val events = eventRepo.findAllById(eventIds).associateBy { it.id!! }
 
-        val scores = my.associate { m ->
-            m.id!! to scoreRepo.findAllByMatchIdOrderBySetNumberAsc(m.id!!)
-        }
-        val draftScores = my.associate { m ->
-            m.id!! to (draftScoreRepo.findByMatchId(m.id!!)?.let { listOf(it) } ?: emptyList())
-        }
+        // Счёт и драфт-счёт по всем матчам одним запросом каждый вместо N+1 на каждый матч.
+        val matchIds = my.mapNotNull { it.id }
+        val scores = scoreRepo.findAllByMatchIdInOrderBySetNumberAsc(matchIds)
+            .groupBy { it.matchId }
+        val draftScores = draftScoreRepo.findAllByMatchIdIn(matchIds)
+            .groupBy { it.matchId }
         val ratingByMatch = ratingChangeRepo.findAllByPlayerId(playerId)
             .filter { it.matchId != null }
             .groupBy { it.matchId!! }
@@ -1537,7 +1537,7 @@ class EventService(
      * и только откалиброванные (calibrationMatchesRemaining == 0): пока игрок калибруется,
      * его статистика ещё не показательна;
      * и только «активные» — хотя бы один совместный матч за последние [RECENT_DAYS] дней (от [today]).
-     * Сортировка: score desc (нижняя граница Уилсона, см. [wilsonLowerBound]), затем gamesTogether desc.
+     * Сортировка: score desc (баланс качества и наигранности, см. [partnerScore]), затем gamesTogether desc.
      */
     fun getTopPartners(
         playerId: UUID,
@@ -1615,9 +1615,9 @@ class EventService(
                 gamesTogether = games,
                 winsTogether = wins,
                 winRate = wins.toDouble() / games,
-                // Сортируем по нижней границе Уилсона, а не по сырому winRate: так высокий
-                // процент побед на малой выборке не обгоняет стабильный результат на большой.
-                score = wilsonLowerBound(wins, games)
+                // Сортируем по баллу-балансу качества и наигранности (см. partnerScore),
+                // а не по сырому winRate: частые успешные напарники должны быть выше редких.
+                score = partnerScore(wins, games)
             )
         }.sortedWith(
             compareByDescending<com.padelgo.api.TopPartnerResponse> { it.score }
