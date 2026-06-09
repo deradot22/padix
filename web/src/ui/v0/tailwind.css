@@ -93,6 +93,18 @@
   --font-display: var(--font-display);
 }
 
+/*
+  Трекинг заголовков. Намеренно ВНЕ @layer, чтобы перебить utility-классы
+  tracking-tight на заголовках: Barlow Condensed — узкий шрифт, и tracking-tight
+  (-0.025em) делал буквы слипшимися, а отсутствие класса — наоборот разреженными.
+  Единый лёгкий положительный трекинг открывает condensed-буквы и убирает разнобой.
+*/
+h1,
+h2,
+h3 {
+  letter-spacing: 0.02em;
+}
+
 @layer base {
   * {
     @apply border-border outline-ring/50;
@@ -101,13 +113,11 @@
     @apply bg-background text-foreground;
     font-family: var(--font-sans);
   }
-  /* Restyle B: спортивные заголовки Barlow Condensed — компактные, с лёгким трекингом.
-     Селектор глобальный (класс .v0 удалён вместе с V0Layout — больше не существует). */
+  /* Restyle B: спортивные заголовки Barlow Condensed (трекинг задан выше, вне @layer). */
   h1,
   h2,
   h3 {
     font-family: var(--font-display);
-    letter-spacing: 0.01em;
   }
 
   /* Стилизованные тонкие скроллбары в тему сайта — везде где есть overflow.
