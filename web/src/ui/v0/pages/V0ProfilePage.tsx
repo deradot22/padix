@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { api, EventHistoryItem, EventHistoryMatch, EventInviteItem, FriendsSnapshot, hasToken } from "../../../lib/api";
+import { api, EventHistoryItem, EventHistoryMatch, EventInviteItem, FriendsSnapshot, TopPartner, hasToken } from "../../../lib/api";
 import { ntrpLevel } from "../../../lib/rating";
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
@@ -74,6 +74,10 @@ export function V0ProfilePage(props: { me: any; meLoaded?: boolean; onMeUpdate?:
   const [idCopied, setIdCopied] = useState(false);
   const [friendsExpanded, setFriendsExpanded] = useState(false);
   const [historyExpanded, setHistoryExpanded] = useState(false);
+  const [partnersExpanded, setPartnersExpanded] = useState(false);
+  const [partners, setPartners] = useState<TopPartner[] | null>(null);
+  const [partnersLoading, setPartnersLoading] = useState(false);
+  const [partnersError, setPartnersError] = useState<string | null>(null);
   const [ratingHistory, setRatingHistory] = useState<{ date: string; rating: number; delta: number | null }[]>([]);
   const [ratingHistoryLoaded, setRatingHistoryLoaded] = useState(false);
   const [invitesDetailsLoaded, setInvitesDetailsLoaded] = useState(false);
@@ -195,6 +199,20 @@ export function V0ProfilePage(props: { me: any; meLoaded?: boolean; onMeUpdate?:
       .finally(() => { if (!cancelled) setRatingHistoryLoaded(true); });
     return () => { cancelled = true; };
   }, [props.me?.playerId]);
+
+  useEffect(() => {
+    // Лучших напарников грузим лениво — только при первом раскрытии секции.
+    if (!partnersExpanded || partners !== null || !props.me?.playerId) return;
+    let cancelled = false;
+    setPartnersLoading(true);
+    setPartnersError(null);
+    api
+      .topPartners(props.me.playerId, 3)
+      .then((d) => { if (!cancelled) setPartners(d); })
+      .catch((e: any) => { if (!cancelled) setPartnersError(e?.message ?? "Ошибка"); })
+      .finally(() => { if (!cancelled) setPartnersLoading(false); });
+    return () => { cancelled = true; };
+  }, [partnersExpanded, partners, props.me?.playerId]);
 
   const historyContent = useMemo(() => {
     if (historyLoading) return <div className="text-sm text-muted-foreground">Загрузка…</div>;
@@ -751,6 +769,59 @@ export function V0ProfilePage(props: { me: any; meLoaded?: boolean; onMeUpdate?:
             <CardDescription>История ваших игр и изменение рейтинга</CardDescription>
           </CardHeader>
           <CardContent className={cn(!historyExpanded && "hidden")}>{historyContent}</CardContent>
+        </Card>
+
+        <Card className="border-border/50">
+          <CardHeader
+            className="pb-4 cursor-pointer select-none"
+            onClick={() => setPartnersExpanded((v) => !v)}
+            role="button"
+            aria-expanded={partnersExpanded}
+          >
+            <div className="flex items-center justify-between gap-2">
+              <CardTitle className="flex items-center gap-2">
+                <Users2 className="h-5 w-5 text-primary" />
+                Лучшие напарники
+              </CardTitle>
+              <ChevronDown className={cn("h-4 w-4 text-muted-foreground transition-transform", !partnersExpanded && "-rotate-90")} />
+            </div>
+            <CardDescription>С кем ты чаще всего побеждаешь</CardDescription>
+          </CardHeader>
+          <CardContent className={cn("space-y-2", !partnersExpanded && "hidden")}>
+            {partnersLoading ? (
+              <div className="text-sm text-muted-foreground">Загрузка…</div>
+            ) : partnersError ? (
+              <div className="rounded-lg border border-destructive/30 bg-destructive/10 p-3 text-sm">
+                Не удалось загрузить: {partnersError}
+              </div>
+            ) : !partners?.length ? (
+              <div className="text-sm text-muted-foreground">Пока недостаточно игр.</div>
+            ) : (
+              partners.map((p, i) => (
+                <div
+                  key={p.player.id}
+                  className="flex items-center gap-3 rounded-lg bg-secondary/50 p-2 px-3"
+                >
+                  <span className="w-5 shrink-0 text-center text-sm font-bold text-muted-foreground tabular-nums">
+                    {i + 1}
+                  </span>
+                  <div className="h-10 w-10 shrink-0 rounded-full bg-secondary/60 border border-border overflow-hidden flex items-center justify-center text-sm font-semibold">
+                    {p.player.avatarUrl ? (
+                      <img src={p.player.avatarUrl} alt="" className="h-full w-full object-cover" />
+                    ) : (
+                      p.player.name?.trim().split(/\s+/).slice(0, 2).map((w) => w[0]?.toUpperCase()).join("") || "?"
+                    )}
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm font-medium truncate">{p.player.name}</p>
+                    <p className="text-xs text-muted-foreground">
+                      {p.gamesTogether} игр, {p.winsTogether} побед, {Math.round(p.winRate * 100)}% wr
+                    </p>
+                  </div>
+                </div>
+              ))
+            )}
+          </CardContent>
         </Card>
 
         {details ? (

@@ -119,6 +119,23 @@ export type BalancePreview = {
   shouldWarn: boolean;
 };
 
+/** Краткая инфа об игроке для виджетов-списков. */
+export type PlayerShort = {
+  id: string;
+  name: string;
+  rating: number;
+  avatarUrl?: string | null;
+};
+
+/** Лучший напарник игрока: агрегированная статистика совместных игр. */
+export type TopPartner = {
+  player: PlayerShort;
+  gamesTogether: number;
+  winsTogether: number;
+  /** Доля побед 0..1. */
+  winRate: number;
+};
+
 export type AuthProvidersInfo = {
   telegram: boolean;
   google: boolean;
@@ -716,6 +733,8 @@ export const api = {
     }>("/api/survey/current"),
   submitSurvey: (payload: { version: number; answers: Record<string, string> }) =>
     request("/api/survey/submit", { method: "POST", body: JSON.stringify(payload) }),
+  topPartners: (playerId: string, limit = 3) =>
+    request<TopPartner[]>(`/api/players/${playerId}/top-partners?limit=${limit}`),
   myHistory: () => request<EventHistoryItem[]>("/api/me/history"),
   myHistoryEvent: (eventId: string) =>
     request<EventHistoryMatch[]>(`/api/me/history/${eventId}`),
