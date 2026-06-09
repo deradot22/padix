@@ -1544,17 +1544,17 @@ class EventService(
         limit: Int = DEFAULT_TOP_PARTNERS_LIMIT,
         today: LocalDate = LocalDate.now()
     ): List<com.padelgo.api.TopPartnerResponse> {
-        val allMatches = matchRepo.findAll()
-        val my = allMatches.filter { m ->
-            m.teamAPlayer1Id == playerId || m.teamAPlayer2Id == playerId ||
-                m.teamBPlayer1Id == playerId || m.teamBPlayer2Id == playerId
-        }
+        // Берём только матчи игрока (а не findAll() по всей таблице) — иначе профиль тормозит.
+        val my = matchRepo.findAllByPlayerParticipating(playerId)
         if (my.isEmpty()) return emptyList()
 
         val roundIds = my.mapNotNull { it.roundId }.toSet()
         val rounds = roundRepo.findAllById(roundIds).associateBy { it.id!! }
         val eventIds = rounds.values.mapNotNull { it.eventId }.toSet()
         val events = eventRepo.findAllById(eventIds).associateBy { it.id!! }
+        // Счёт по всем матчам одним запросом вместо N+1 на каждый матч.
+        val setsByMatch = scoreRepo.findAllByMatchIdInOrderBySetNumberAsc(my.mapNotNull { it.id })
+            .groupBy { it.matchId }
 
         // partnerId -> (количество совместных игр, количество совместных побед)
         val gamesTogether = HashMap<UUID, Int>()
@@ -1565,7 +1565,7 @@ class EventService(
         for (m in my) {
             val round = rounds[m.roundId] ?: continue
             val event = events[round.eventId] ?: continue
-            val sets = scoreRepo.findAllByMatchIdOrderBySetNumberAsc(m.id!!)
+            val sets = setsByMatch[m.id].orEmpty()
             if (sets.isEmpty()) continue  // матч без счёта — в win-rate не учитываем
 
             val isTeamA = m.teamAPlayer1Id == playerId || m.teamAPlayer2Id == playerId

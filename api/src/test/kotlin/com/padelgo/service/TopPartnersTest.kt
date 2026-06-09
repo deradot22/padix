@@ -88,7 +88,8 @@ class TopPartnersTest {
         val playerRepo: com.padelgo.repo.PlayerRepository = mock()
         val userRepo: com.padelgo.auth.UserRepository = mock()
 
-        whenever(matchRepo.findAll()).thenReturn(matches)
+        // Все матчи в тестах включают playerId (команда A) — выборка по игроку возвращает их все.
+        whenever(matchRepo.findAllByPlayerParticipating(any())).thenReturn(matches)
         whenever(roundRepo.findAllById(any())).thenAnswer { inv ->
             @Suppress("UNCHECKED_CAST")
             val ids = inv.arguments[0] as Iterable<UUID>
@@ -114,9 +115,9 @@ class TopPartnersTest {
                 }
             }
         }
-        scoresByMatch.forEach { (mid, sets) ->
-            whenever(scoreRepo.findAllByMatchIdOrderBySetNumberAsc(mid)).thenReturn(sets)
-        }
+        // Батч-загрузка счёта: сервис сам сгруппирует по matchId.
+        whenever(scoreRepo.findAllByMatchIdInOrderBySetNumberAsc(any()))
+            .thenReturn(scoresByMatch.values.flatten())
 
         return EventService(
             playerRepo = playerRepo,

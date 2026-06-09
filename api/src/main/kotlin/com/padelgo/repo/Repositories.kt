@@ -59,10 +59,22 @@ interface MatchRepository : JpaRepository<Match, UUID> {
         """
     )
     fun findAllByEventId(@Param("eventId") eventId: UUID): List<Match>
+
+    @Query(
+        """
+        select m from Match m
+        where m.teamAPlayer1Id = :playerId
+           or m.teamAPlayer2Id = :playerId
+           or m.teamBPlayer1Id = :playerId
+           or m.teamBPlayer2Id = :playerId
+        """
+    )
+    fun findAllByPlayerParticipating(@Param("playerId") playerId: UUID): List<Match>
 }
 
 interface MatchSetScoreRepository : JpaRepository<MatchSetScore, UUID> {
     fun findAllByMatchIdOrderBySetNumberAsc(matchId: UUID): List<MatchSetScore>
+    fun findAllByMatchIdInOrderBySetNumberAsc(matchIds: Collection<UUID>): List<MatchSetScore>
     fun deleteAllByMatchId(matchId: UUID)
 
     @org.springframework.data.jpa.repository.Modifying
