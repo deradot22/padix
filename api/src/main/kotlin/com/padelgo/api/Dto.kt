@@ -97,7 +97,13 @@ data class TopPartnerResponse(
     val winsTogether: Int,
 
     @Schema(description = "Доля побед: winsTogether / gamesTogether, от 0.0 до 1.0")
-    val winRate: Double
+    val winRate: Double,
+
+    @Schema(
+        description = "Ранжирующий скор: нижняя граница 95%-доверительного интервала Уилсона " +
+            "для доли побед. Штрафует малую выборку, поэтому используется для сортировки вместо сырого winRate."
+    )
+    val score: Double
 )
 
 @Schema(description = "Запрос на создание игры")

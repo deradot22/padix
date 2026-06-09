@@ -65,6 +65,32 @@ class EventService(
 
         /** Сколько напарников отдаём по умолчанию (ТОП-N). */
         const val DEFAULT_TOP_PARTNERS_LIMIT = 3
+
+        /**
+         * Окно «активности»: напарник попадёт в ТОП, только если хотя бы один совместный матч
+         * сыгран за последние столько дней. Иначе старые связки (давно не играли вместе)
+         * вытесняли бы актуальных партнёров.
+         */
+        const val RECENT_DAYS = 90L
+
+        /**
+         * Нижняя граница 95%-доверительного интервала Уилсона для доли успехов [wins]/[games].
+         *
+         * Промышленный стандарт ранжирования «реальный win-rate с учётом размера выборки»:
+         * партнёр с 3/3 (сырой 100%) получает скор ниже, чем партнёр с 14/20 (70%), потому что
+         * по трём играм нельзя уверенно утверждать, что доля побед действительно так высока.
+         * z = 1.96 соответствует уровню доверия 95%.
+         */
+        fun wilsonLowerBound(wins: Int, games: Int): Double {
+            if (games <= 0) return 0.0
+            val z = 1.96
+            val z2 = z * z
+            val p = wins.toDouble() / games
+            val denom = 1.0 + z2 / games
+            val center = p + z2 / (2.0 * games)
+            val delta = z * kotlin.math.sqrt((p * (1.0 - p) + z2 / (4.0 * games)) / games)
+            return (center - delta) / denom
+        }
     }
 
     fun getToday(date: LocalDate = LocalDate.now()): List<Event> =
@@ -1507,10 +1533,17 @@ class EventService(
      *    (ничья считается как сыгранная игра, но не как победа);
      *  - агрегируем gamesTogether / winsTogether, winRate = winsTogether / gamesTogether.
      *
-     * В выдачу попадают только напарники с >= [MIN_GAMES_TOGETHER] совместных игр.
-     * Сортировка: winRate desc, затем winsTogether desc, затем gamesTogether desc.
+     * В выдачу попадают только напарники с >= [MIN_GAMES_TOGETHER] совместных игр,
+     * и только откалиброванные (calibrationMatchesRemaining == 0): пока игрок калибруется,
+     * его статистика ещё не показательна;
+     * и только «активные» — хотя бы один совместный матч за последние [RECENT_DAYS] дней (от [today]).
+     * Сортировка: score desc (нижняя граница Уилсона, см. [wilsonLowerBound]), затем gamesTogether desc.
      */
-    fun getTopPartners(playerId: UUID, limit: Int = DEFAULT_TOP_PARTNERS_LIMIT): List<com.padelgo.api.TopPartnerResponse> {
+    fun getTopPartners(
+        playerId: UUID,
+        limit: Int = DEFAULT_TOP_PARTNERS_LIMIT,
+        today: LocalDate = LocalDate.now()
+    ): List<com.padelgo.api.TopPartnerResponse> {
         val allMatches = matchRepo.findAll()
         val my = allMatches.filter { m ->
             m.teamAPlayer1Id == playerId || m.teamAPlayer2Id == playerId ||
@@ -1526,6 +1559,8 @@ class EventService(
         // partnerId -> (количество совместных игр, количество совместных побед)
         val gamesTogether = HashMap<UUID, Int>()
         val winsTogether = HashMap<UUID, Int>()
+        // partnerId -> дата последнего совместного матча (для фильтра активности).
+        val lastPlayedTogether = HashMap<UUID, LocalDate>()
 
         for (m in my) {
             val round = rounds[m.roundId] ?: continue
@@ -1547,25 +1582,45 @@ class EventService(
 
             gamesTogether[partnerId] = (gamesTogether[partnerId] ?: 0) + 1
             if (playerScore > 0.5) winsTogether[partnerId] = (winsTogether[partnerId] ?: 0) + 1
+            val prev = lastPlayedTogether[partnerId]
+            if (prev == null || event.date.isAfter(prev)) lastPlayedTogether[partnerId] = event.date
         }
 
         val qualified = gamesTogether.filterValues { it >= MIN_GAMES_TOGETHER }
         if (qualified.isEmpty()) return emptyList()
 
-        val partners = playerRepo.findAllById(qualified.keys).associateBy { it.id!! }
+        // Фильтр активности: последняя совместная игра — не позднее RECENT_DAYS назад.
+        val cutoff = today.minusDays(RECENT_DAYS)
+        val recent = qualified.filterKeys { pid ->
+            lastPlayedTogether[pid]?.isBefore(cutoff) == false
+        }
+        if (recent.isEmpty()) return emptyList()
 
-        return qualified.entries.mapNotNull { (partnerId, games) ->
+        // В ТОП попадают только откалиброванные напарники (calibrationMatchesRemaining == 0).
+        // Партнёр без аккаунта (нет UserAccount) калибровку пройти не мог — исключаем.
+        val calibratedPlayerIds = userRepo.findAllByPlayerIdIn(recent.keys)
+            .filter { it.calibrationMatchesRemaining == 0 }
+            .mapNotNull { it.playerId }
+            .toSet()
+        val eligible = recent.filterKeys { it in calibratedPlayerIds }
+        if (eligible.isEmpty()) return emptyList()
+
+        val partners = playerRepo.findAllById(eligible.keys).associateBy { it.id!! }
+
+        return eligible.entries.mapNotNull { (partnerId, games) ->
             val partner = partners[partnerId] ?: return@mapNotNull null
             val wins = winsTogether[partnerId] ?: 0
             com.padelgo.api.TopPartnerResponse(
                 player = com.padelgo.api.PlayerShort.from(partner),
                 gamesTogether = games,
                 winsTogether = wins,
-                winRate = wins.toDouble() / games
+                winRate = wins.toDouble() / games,
+                // Сортируем по нижней границе Уилсона, а не по сырому winRate: так высокий
+                // процент побед на малой выборке не обгоняет стабильный результат на большой.
+                score = wilsonLowerBound(wins, games)
             )
         }.sortedWith(
-            compareByDescending<com.padelgo.api.TopPartnerResponse> { it.winRate }
-                .thenByDescending { it.winsTogether }
+            compareByDescending<com.padelgo.api.TopPartnerResponse> { it.score }
                 .thenByDescending { it.gamesTogether }
         ).take(limit)
     }

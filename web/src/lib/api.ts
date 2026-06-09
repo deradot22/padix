@@ -134,6 +134,8 @@ export type TopPartner = {
   winsTogether: number;
   /** Доля побед 0..1. */
   winRate: number;
+  /** Ранжирующий скор — нижняя граница 95%-ДИ Уилсона (сортировка на бэке идёт по нему). */
+  score: number;
 };
 
 export type AuthProvidersInfo = {
