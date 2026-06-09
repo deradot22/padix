@@ -111,6 +111,7 @@ interface MatchSetScoreRepository : JpaRepository<MatchSetScore, UUID> {
 
 interface MatchDraftScoreRepository : JpaRepository<com.padelgo.domain.MatchDraftScore, UUID> {
     fun findByMatchId(matchId: UUID): com.padelgo.domain.MatchDraftScore?
+    fun findAllByMatchIdIn(matchIds: Collection<UUID>): List<com.padelgo.domain.MatchDraftScore>
     fun deleteByMatchId(matchId: UUID)
 }
 
