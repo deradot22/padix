@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { api, EventHistoryItem, EventHistoryMatch, EventInviteItem, FriendsSnapshot, TopPartner, hasToken } from "../../../lib/api";
+import { api, EventHistoryItem, EventHistoryMatch, EventInviteItem, FriendsSnapshot, Round, TopPartner, hasToken } from "../../../lib/api";
 import { ntrpLevel } from "../../../lib/rating";
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
@@ -12,6 +12,7 @@ import { ModalScrollArea } from "@/components/ui/modal-scroll-area";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { PlayerTooltip } from "@/components/player-tooltip";
+import { EventLeaderboard } from "@/components/event-leaderboard";
 import { RatingGraph } from "@/components/rating-graph";
 import {
   Calendar,
@@ -64,7 +65,7 @@ export function V0ProfilePage(props: { me: any; meLoaded?: boolean; onMeUpdate?:
   const [detailsTitle, setDetailsTitle] = useState<string | null>(null);
   const [detailsEventId, setDetailsEventId] = useState<string | null>(null);
   const [detailsStatsOpen, setDetailsStatsOpen] = useState(false);
-  const [detailsStats, setDetailsStats] = useState<{ id: string; name: string; points: number; avatarUrl?: string | null }[]>([]);
+  const [detailsRounds, setDetailsRounds] = useState<Round[]>([]);
   const [historyError, setHistoryError] = useState<string | null>(null);
   const [historyLoading, setHistoryLoading] = useState(true);
   const [acceptedInvites, setAcceptedInvites] = useState<Record<string, boolean>>({});
@@ -85,6 +86,17 @@ export function V0ProfilePage(props: { me: any; meLoaded?: boolean; onMeUpdate?:
   const [editGameOpen, setEditGameOpen] = useState(false);
   const [editGameEventId, setEditGameEventId] = useState<string | null>(null);
   const [editProfileOpen, setEditProfileOpen] = useState(false);
+
+  // Блокируем прокрутку фона, пока открыта модалка деталей игры: это кастомный
+  // fixed-оверлей, который (в отличие от Radix Dialog) не лочит body сам.
+  useEffect(() => {
+    if (!details) return;
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = prev;
+    };
+  }, [details]);
 
   useEffect(() => {
     if (!props.meLoaded) return;
@@ -251,7 +263,7 @@ export function V0ProfilePage(props: { me: any; meLoaded?: boolean; onMeUpdate?:
                     setDetails(res);
                     setDetailsEventId(it.eventId);
                     setDetailsStatsOpen(false);
-                    setDetailsStats([]);
+                    setDetailsRounds([]);
                     setDetailsTitle(it.eventTitle);
                   } catch (err: any) {
                     setHistoryError(err?.message ?? "Ошибка");
@@ -826,73 +838,64 @@ export function V0ProfilePage(props: { me: any; meLoaded?: boolean; onMeUpdate?:
 
         {details ? (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-6" onClick={() => { setDetails(null); setDetailsStatsOpen(false); }}>
-            <ModalScrollArea className="w-full max-w-5xl max-h-[90dvh] overflow-y-auto rounded-xl border border-border bg-card p-6" onClick={(e) => e.stopPropagation()}>
-              <div className="flex items-start justify-between gap-3">
-                <div>
-                  <div className="text-lg font-semibold">{detailsTitle}</div>
-                  {details?.[0]?.eventStartTime ? (
-                    <div className="text-sm text-muted-foreground">
-                      {details[0].eventStartTime.slice(0, 5)}
-                      {details[0].eventEndTime ? `–${details[0].eventEndTime.slice(0, 5)}` : ""}
-                    </div>
-                  ) : null}
-                  {details?.[0]?.eventDate ? (
-                    <div className="text-sm text-muted-foreground">{details[0].eventDate}</div>
-                  ) : null}
-                </div>
-                <div className="flex items-center gap-2 shrink-0">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => {
-                      setEditGameEventId(detailsEventId);
-                      setEditGameOpen(true);
-                    }}
-                  >
-                    <Pencil className="h-4 w-4 mr-1.5" />
-                    Редактировать счет
-                  </Button>
-                  <Button variant="outline" size="sm" onClick={() => { setDetails(null); setDetailsStatsOpen(false); }}>
-                    Закрыть
-                  </Button>
+            <div
+              className="flex w-full max-w-5xl max-h-[90dvh] flex-col overflow-hidden rounded-xl border border-border bg-card"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="shrink-0 border-b border-border px-4 py-3 sm:px-6 sm:py-4">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <div className="truncate text-lg font-semibold">{detailsTitle}</div>
+                    {details?.[0]?.eventStartTime ? (
+                      <div className="text-sm text-muted-foreground">
+                        {details[0].eventStartTime.slice(0, 5)}
+                        {details[0].eventEndTime ? `–${details[0].eventEndTime.slice(0, 5)}` : ""}
+                      </div>
+                    ) : null}
+                    {details?.[0]?.eventDate ? (
+                      <div className="text-sm text-muted-foreground">{details[0].eventDate}</div>
+                    ) : null}
+                  </div>
+                  <div className="flex items-center gap-2 shrink-0">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => {
+                        setEditGameEventId(detailsEventId);
+                        setEditGameOpen(true);
+                      }}
+                    >
+                      <Pencil className="h-4 w-4 sm:mr-1.5" />
+                      <span className="hidden sm:inline">Редактировать счет</span>
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="icon"
+                      aria-label="Закрыть"
+                      onClick={() => { setDetails(null); setDetailsStatsOpen(false); }}
+                    >
+                      <X className="h-4 w-4" />
+                    </Button>
+                  </div>
                 </div>
               </div>
+              <div className="flex-1 overflow-y-auto px-4 py-4 sm:px-6" style={{ scrollbarWidth: "none" }}>
               <Button
                 variant="secondary"
-                className="w-full mt-3"
+                className="w-full"
                 onClick={async () => {
                   if (detailsStatsOpen) {
                     setDetailsStatsOpen(false);
                     return;
                   }
-                  if (detailsStats.length > 0) {
+                  if (detailsRounds.length > 0) {
                     setDetailsStatsOpen(true);
                     return;
                   }
                   if (!detailsEventId) return;
                   try {
                     const d = await api.getEventDetails(detailsEventId);
-                    const totals = new Map<string, { id: string; name: string; points: number; avatarUrl?: string | null }>();
-                    d.rounds.flatMap((r: any) => r.matches).forEach((m: any) => {
-                      const score = m.score;
-                      if (!score || score.mode !== "POINTS") return;
-                      const ptsA = score.points?.teamAPoints ?? 0;
-                      const ptsB = score.points?.teamBPoints ?? 0;
-                      m.teamA.forEach((p: any) => {
-                        if (!p?.id) return;
-                        const row = totals.get(p.id) ?? { id: p.id, name: p.name, points: 0, avatarUrl: p.avatarUrl };
-                        row.points += ptsA;
-                        totals.set(p.id, row);
-                      });
-                      m.teamB.forEach((p: any) => {
-                        if (!p?.id) return;
-                        const row = totals.get(p.id) ?? { id: p.id, name: p.name, points: 0, avatarUrl: p.avatarUrl };
-                        row.points += ptsB;
-                        totals.set(p.id, row);
-                      });
-                    });
-                    const rows = Array.from(totals.values()).sort((a, b) => b.points - a.points || a.name.localeCompare(b.name));
-                    setDetailsStats(rows);
+                    setDetailsRounds(d.rounds ?? []);
                     setDetailsStatsOpen(true);
                   } catch {}
                 }}
@@ -901,27 +904,8 @@ export function V0ProfilePage(props: { me: any; meLoaded?: boolean; onMeUpdate?:
                 Статистика
               </Button>
 
-              {detailsStatsOpen && detailsStats.length > 0 ? (
-                <div className="mt-4 space-y-2">
-                  {detailsStats.map((row) => (
-                    <div
-                      key={row.id}
-                      className="flex items-center justify-between rounded-md border border-border/60 bg-secondary/40 px-3 py-2"
-                    >
-                      <div className="flex items-center gap-2 min-w-0">
-                        <div className="h-6 w-6 shrink-0 rounded-full bg-secondary/60 border border-border overflow-hidden flex items-center justify-center text-[10px] font-semibold">
-                          {row.avatarUrl ? (
-                            <img src={row.avatarUrl} alt="" className="h-full w-full object-cover" />
-                          ) : (
-                            row.name?.[0]?.toUpperCase() ?? "?"
-                          )}
-                        </div>
-                        <span className="text-sm font-medium truncate">{row.name}</span>
-                      </div>
-                      <div className="text-sm font-semibold shrink-0 ml-2">{row.points}</div>
-                    </div>
-                  ))}
-                </div>
+              {detailsStatsOpen && detailsRounds.length > 0 ? (
+                <EventLeaderboard rounds={detailsRounds} className="mt-4" />
               ) : null}
 
               <div className="mt-4 hidden sm:block overflow-x-auto">
@@ -1045,7 +1029,8 @@ export function V0ProfilePage(props: { me: any; meLoaded?: boolean; onMeUpdate?:
                   );
                 })}
               </div>
-            </ModalScrollArea>
+            </div>
+            </div>
           </div>
         ) : null}
 
