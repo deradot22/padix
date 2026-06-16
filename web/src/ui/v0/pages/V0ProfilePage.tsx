@@ -347,7 +347,7 @@ export function V0ProfilePage(props: { me: any; meLoaded?: boolean; onMeUpdate?:
             корта: рамка, сетка по центру, линии подачи. preserveAspectRatio=slice растягивает
             корт по ширине баннера. Линии белые полупрозрачные — читаются в обеих темах.
           */}
-          <div className="relative h-20 md:h-24 overflow-hidden bg-gradient-to-br from-primary/35 via-primary/15 to-primary/5" aria-hidden="true">
+          <div className="relative -mt-6 h-20 md:h-24 overflow-hidden bg-gradient-to-br from-primary/35 via-primary/15 to-primary/5" aria-hidden="true">
             {/* preserveAspectRatio=none — корт растягивается на весь баннер до краёв
                (со slice верх/низ обрезались). Линии вплотную к кромкам блока. */}
             <svg
