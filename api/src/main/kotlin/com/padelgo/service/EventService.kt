@@ -1639,18 +1639,18 @@ class EventService(
         val ratingDeltas = ratingChanges.groupBy { it.eventId }.mapValues { (_, v) -> v.sumOf { it.delta } }
         val finishedAtByEvent = ratingChanges.groupBy { it.eventId }.mapValues { (_, v) -> v.maxOfOrNull { it.createdAt!! } }
 
-        val scoresByMatch = matches.associate { m ->
-            m.matchId to scoreRepo.findAllByMatchIdOrderBySetNumberAsc(m.matchId)
-        }
-        val draftScoresByMatch = matches.associate { m ->
-            m.matchId to (draftScoreRepo.findByMatchId(m.matchId)?.let { listOf(it) } ?: emptyList())
-        }
+        // Батч вместо N+1: счёт и драфты всех матчей грузим двумя запросами, а не по одному на матч.
+        val matchIds = matches.map { it.matchId }
+        val scoresByMatch = scoreRepo.findAllByMatchIdInOrderBySetNumberAsc(matchIds).groupBy { it.matchId }
+        val draftByMatch = draftScoreRepo.findAllByMatchIdIn(matchIds).associateBy { it.matchId }
 
+        // Батч вместо N+1: регистрации всех эвентов одним запросом, имена игроков — одним.
+        val regsByEvent = regRepo.findAllByEventIdInAndStatus(eventIds).groupBy { it.eventId }
+        val regPlayersById = playerRepo
+            .findAllById(regsByEvent.values.flatten().mapNotNull { it.playerId }.toSet())
+            .associateBy { it.id!! }
         val participantsByEvent = eventIds.associateWith { eid ->
-            val regs = regRepo.findAllByEventIdAndStatus(eid)
-            val pids = regs.mapNotNull { it.playerId }
-            val players = playerRepo.findAllById(pids)
-            players.map { it.name }.sorted()
+            regsByEvent[eid].orEmpty().mapNotNull { regPlayersById[it.playerId]?.name }.sorted()
         }
 
         return matches
@@ -1661,15 +1661,13 @@ class EventService(
                     items.sumOf { item ->
                         // Сначала пытаемся прочитать финальный счёт (MatchSetScore), потом fallback на драфт —
                         // иначе после submitScore (драфт удалён) totalPoints не считается.
-                        val finalScores = scoresByMatch[item.matchId].orEmpty()
-                        val draftScores = draftScoresByMatch[item.matchId].orEmpty()
-                        val match = matchRepo.findById(item.matchId).orElse(null) ?: return@sumOf 0
-                        val isTeamA = match.teamAPlayer1Id == playerId || match.teamAPlayer2Id == playerId
-                        val finalScore = finalScores.firstOrNull()
+                        // isTeamA уже посчитан в PlayerMatchHistoryItem — повторный matchRepo.findById не нужен.
+                        val finalScore = scoresByMatch[item.matchId]?.firstOrNull()
+                        val isTeamA = item.isTeamA
                         if (finalScore != null) {
                             if (isTeamA) finalScore.teamAGames else finalScore.teamBGames
                         } else {
-                            draftScores.firstOrNull()?.let { ds ->
+                            draftByMatch[item.matchId]?.let { ds ->
                                 if (isTeamA) ds.teamAPoints else ds.teamBPoints
                             } ?: 0
                         }

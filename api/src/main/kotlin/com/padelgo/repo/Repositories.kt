@@ -32,6 +32,11 @@ interface EventSeriesRepository : JpaRepository<com.padelgo.domain.EventSeries, 
 interface RegistrationRepository : JpaRepository<Registration, UUID> {
     fun findAllByEventIdAndStatus(eventId: UUID, status: RegistrationStatus = RegistrationStatus.REGISTERED): List<Registration>
 
+    fun findAllByEventIdInAndStatus(
+        eventIds: Collection<UUID>,
+        status: RegistrationStatus = RegistrationStatus.REGISTERED
+    ): List<Registration>
+
     fun findByEventIdAndPlayerId(eventId: UUID, playerId: UUID): Registration?
 
     fun findAllByEventIdAndCancelRequestedTrueAndStatus(
