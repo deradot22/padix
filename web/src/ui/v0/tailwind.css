@@ -167,6 +167,18 @@ h3 {
   }
 }
 
+/* Мобилка: прячем видимый кастомный скроллбар — 8px-полоса перекрывала нижнюю
+   навигацию (bottom-nav) в правом углу. Тач-скролл работает без видимой полосы. */
+@media (max-width: 767px) {
+  * {
+    scrollbar-width: none;
+  }
+  *::-webkit-scrollbar {
+    width: 0 !important;
+    height: 0 !important;
+  }
+}
+
 .rounds-scroll-container::-webkit-scrollbar {
   width: 5px;
   background: transparent;
