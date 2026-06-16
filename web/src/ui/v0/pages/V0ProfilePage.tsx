@@ -33,6 +33,18 @@ import {
   XCircle,
 } from "lucide-react";
 
+const NTRP_BOUNDS: { level: string; lo: number; hi: number }[] = [
+  { level: "1.0", lo: 0, hi: 900 },
+  { level: "1.5", lo: 900, hi: 1000 },
+  { level: "2.0", lo: 1000, hi: 1100 },
+  { level: "2.5", lo: 1100, hi: 1200 },
+  { level: "3.0", lo: 1200, hi: 1500 },
+  { level: "3.5", lo: 1500, hi: 1700 },
+  { level: "4.0", lo: 1700, hi: 1900 },
+  { level: "4.5", lo: 1900, hi: 2100 },
+  { level: "5.0+", lo: 2100, hi: Infinity },
+];
+
 function formatPublicId(publicId?: string | null) {
   if (!publicId) return null;
   const trimmed = publicId.trim();
@@ -356,18 +368,18 @@ export function V0ProfilePage(props: { me: any; meLoaded?: boolean; onMeUpdate?:
               </g>
             </svg>
           </div>
-          <CardContent className="relative z-10 -mt-8 md:-mt-10 pb-8">
-            <div className="flex flex-col gap-6 sm:flex-row sm:items-end sm:justify-between">
+          <CardContent className="relative z-10 -mt-8 md:-mt-10 pb-5">
+            <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
               <div className="flex items-end gap-4">
-                <div className="flex h-24 w-24 items-center justify-center rounded-2xl border-4 border-background bg-gradient-to-br from-primary/20 to-primary/5 shadow-xl overflow-hidden">
+                <div className="flex h-20 w-20 items-center justify-center rounded-2xl border-4 border-background bg-gradient-to-br from-primary/20 to-primary/5 shadow-xl overflow-hidden">
                   {avatar ? (
                     <img src={avatar} alt="Avatar" className="h-full w-full object-cover" />
                   ) : (
-                    <User className="h-12 w-12 text-primary" />
+                    <User className="h-10 w-10 text-primary" />
                   )}
                 </div>
                 <div className="pb-1">
-                  <h2 className="text-3xl font-bold">{viewMe.name}</h2>
+                  <h2 className="text-2xl md:text-3xl font-bold">{viewMe.name}</h2>
                   <p className="flex items-center gap-2 text-muted-foreground mt-1">
                     <Mail className="h-4 w-4" />
                     {viewMe.email}
@@ -376,7 +388,7 @@ export function V0ProfilePage(props: { me: any; meLoaded?: boolean; onMeUpdate?:
               </div>
             </div>
 
-            <div className="mt-6 flex flex-wrap items-center gap-2">
+            <div className="mt-4 flex flex-wrap items-center gap-2">
               <Badge className="h-8 gap-1.5 px-3 py-0 bg-primary/10 text-primary border border-primary/20 text-sm font-medium">
                 <Trophy className="h-3.5 w-3.5" />
                 {calibration ? "на калибровке" : "Активен"}
@@ -420,26 +432,64 @@ export function V0ProfilePage(props: { me: any; meLoaded?: boolean; onMeUpdate?:
             </div>
 
             {/* Restyle B: «карточка игрока» — ключевые цифры крупно, scoreboard-стиль. */}
-            <div className="mt-6 grid grid-cols-3 gap-3">
-              <div className="rounded-xl border border-border bg-secondary/30 px-3 py-3 text-center">
+            <div className="mt-4 grid grid-cols-3 gap-3">
+              <div className="rounded-xl border border-border bg-secondary/30 px-3 py-2.5 text-center">
                 <p className="font-display text-3xl sm:text-4xl font-bold leading-none tabular-nums">
                   {calibration ? "—" : viewMe.rating}
                 </p>
-                <p className="mt-1.5 text-xs font-medium uppercase tracking-wide text-muted-foreground">Рейтинг</p>
+                <p className="mt-1 text-xs font-medium uppercase tracking-wide text-muted-foreground">Рейтинг</p>
               </div>
-              <div className="rounded-xl border border-border bg-secondary/30 px-3 py-3 text-center">
+              <div className="rounded-xl border border-border bg-secondary/30 px-3 py-2.5 text-center">
                 <p className="font-display text-3xl sm:text-4xl font-bold leading-none tabular-nums text-primary">
                   {calibration ? "—" : ntrpLevel(viewMe.rating)}
                 </p>
-                <p className="mt-1.5 text-xs font-medium uppercase tracking-wide text-muted-foreground">NTRP</p>
+                <p className="mt-1 text-xs font-medium uppercase tracking-wide text-muted-foreground">NTRP</p>
               </div>
-              <div className="rounded-xl border border-border bg-secondary/30 px-3 py-3 text-center">
+              <div className="rounded-xl border border-border bg-secondary/30 px-3 py-2.5 text-center">
                 <p className="font-display text-3xl sm:text-4xl font-bold leading-none tabular-nums">
                   {viewMe.gamesPlayed}
                 </p>
-                <p className="mt-1.5 text-xs font-medium uppercase tracking-wide text-muted-foreground">Матчей</p>
+                <p className="mt-1 text-xs font-medium uppercase tracking-wide text-muted-foreground">Матчей</p>
               </div>
             </div>
+
+            {/*
+              Restyle B: прогресс до следующего уровня NTRP. Пороги захардкожены в NTRP_BOUNDS
+              (зеркало lib/rating.ts). При калибровке рейтинг ещё «—», поэтому прогресс прячем,
+              чтобы не вводить в заблуждение. На максимальном уровне (hi === Infinity) — просто метка.
+            */}
+            {!calibration ? (() => {
+              const rating = viewMe.rating as number;
+              const idx = NTRP_BOUNDS.findIndex((b) => rating >= b.lo && rating < b.hi);
+              const current = idx >= 0 ? NTRP_BOUNDS[idx] : NTRP_BOUNDS[NTRP_BOUNDS.length - 1];
+              if (current.hi === Infinity) {
+                return <div className="mt-4 text-xs text-muted-foreground">Максимальный уровень NTRP</div>;
+              }
+              const next = NTRP_BOUNDS[idx + 1];
+              const nextLevel = next ? next.level : current.level;
+              const pct = Math.max(0, Math.min(100, Math.round(((rating - current.lo) / (current.hi - current.lo)) * 100)));
+              const remaining = Math.max(0, current.hi - rating);
+              return (
+                <div className="mt-4">
+                  <div className="mb-1.5 flex items-center justify-between text-xs">
+                    <span className="font-display font-bold tabular-nums text-foreground">
+                      NTRP {current.level} <span className="text-muted-foreground">▸ {nextLevel}</span>
+                    </span>
+                    <span className="text-muted-foreground tabular-nums">ещё {remaining} до {nextLevel}</span>
+                  </div>
+                  <div
+                    className="h-2 rounded-full bg-primary/15 overflow-hidden"
+                    role="progressbar"
+                    aria-valuenow={pct}
+                    aria-valuemin={0}
+                    aria-valuemax={100}
+                    aria-label="Прогресс до следующего уровня NTRP"
+                  >
+                    <div className="h-full rounded-full bg-primary transition-all duration-500" style={{ width: `${pct}%` }} />
+                  </div>
+                </div>
+              );
+            })() : null}
 
             {calibration ? (
               <div className="mt-6 rounded-lg border border-amber-500/40 dark:border-amber-500/30 bg-amber-500/10 px-4 py-3 space-y-2">
