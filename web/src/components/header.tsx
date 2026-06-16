@@ -509,44 +509,8 @@ export function Header(props: {
             className="fixed left-0 right-0 top-16 z-[100] border-b border-border bg-background/70 backdrop-blur-2xl shadow-2xl md:hidden"
           >
             <div className="mx-auto flex max-w-7xl flex-col gap-1 px-4 py-3">
-              {mobileNavigation.map((item) => {
-                const Icon = item.icon;
-                const active = pathname === item.href;
-                const isGames = item.href === "/games";
-                return (
-                  <div key={item.name} className="flex items-center gap-1">
-                    <NavLink
-                      to={item.href}
-                      onClick={() => setMobileOpen(false)}
-                      className={({ isActive }) =>
-                        cn(
-                          "flex flex-1 items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition-all duration-200",
-                          isActive || active
-                            ? "bg-secondary text-foreground"
-                            : "text-muted-foreground hover:bg-secondary/50 hover:text-foreground",
-                        )
-                      }
-                    >
-                      <Icon className="h-4 w-4" />
-                      {item.name}
-                    </NavLink>
-                    {isGames ? (
-                      <NavLink
-                        to="/create"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setMobileOpen(false);
-                        }}
-                        aria-label="Создать игру"
-                        title="Создать игру"
-                        className="flex size-8 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
-                      >
-                        <Plus className="h-4 w-4" />
-                      </NavLink>
-                    ) : null}
-                  </div>
-                );
-              })}
+              {/* Основная навигация (Рейтинг/Игры/Создать/Профиль) теперь в нижней панели BottomNav.
+                 Здесь — только вторичное: Настройки, Обратная связь, тема, выход. */}
               {props.authed && (
                 <>
                   <NavLink

@@ -2,6 +2,7 @@ import React from "react";
 import { useLocation } from "react-router-dom";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { Header } from "@/components/header";
+import { BottomNav } from "@/components/bottom-nav";
 import { EmailVerificationBanner } from "@/components/email-verification-banner";
 
 export function MainLayout(props: {
@@ -49,13 +50,14 @@ export function MainLayout(props: {
         onRefreshNotifications={props.onRefreshNotifications}
         onLogout={props.onLogout}
       />
-      <main className="mx-auto max-w-7xl w-full px-4 pt-4 pb-8 sm:px-6 sm:pt-8 lg:px-8">
+      <main className="mx-auto max-w-7xl w-full px-4 pt-4 pb-24 sm:px-6 sm:pt-8 md:pb-8 lg:px-8">
         <AnimatePresence mode="wait" initial={false}>
           <motion.div key={pathname} {...fade}>
             {props.children}
           </motion.div>
         </AnimatePresence>
       </main>
+      {props.authed ? <BottomNav /> : null}
     </div>
   );
 }
