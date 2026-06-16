@@ -484,24 +484,29 @@ export function Header(props: {
       <AnimatePresence>
         {mobileOpen ? (
           <>
-            {/* Затемняющий фон под меню: гарантированно скрывает контент + клик закрывает меню. */}
+            {/* Лёгкое притемнение под стеклом + клик закрывает меню. */}
             <motion.div
               key="mobile-backdrop"
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
               transition={{ duration: 0.18, ease: "easeOut" }}
-              className="fixed inset-x-0 bottom-0 top-16 z-[90] bg-black/60 md:hidden"
+              className="fixed inset-x-0 bottom-0 top-16 z-[90] bg-black/25 md:hidden"
               onClick={() => setMobileOpen(false)}
               aria-hidden="true"
             />
+          {/*
+            Эффект «матового стекла»: полупрозрачный фон + backdrop-blur размывает
+            контент под меню. ВАЖНО: анимируем только opacity (без y-сдвига) — transform
+            ломает backdrop-filter, из-за чего раньше blur не применялся.
+          */}
           <motion.div
             key="mobile-drawer"
-            initial={reduceMotion ? { opacity: 0 } : { opacity: 0, y: -8 }}
-            animate={reduceMotion ? { opacity: 1 } : { opacity: 1, y: 0 }}
-            exit={reduceMotion ? { opacity: 0 } : { opacity: 0, y: -8 }}
-            transition={{ duration: 0.18, ease: "easeOut" }}
-            className="fixed left-0 right-0 top-16 z-[100] border-b border-border bg-background shadow-2xl md:hidden"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: reduceMotion ? 0 : 0.18, ease: "easeOut" }}
+            className="fixed left-0 right-0 top-16 z-[100] border-b border-border bg-background/70 backdrop-blur-2xl shadow-2xl md:hidden"
           >
             <div className="mx-auto flex max-w-7xl flex-col gap-1 px-4 py-3">
               {mobileNavigation.map((item) => {
