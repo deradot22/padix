@@ -563,63 +563,65 @@ export function Header(props: {
                 </>
               )}
               <div className="my-1 h-px bg-border" />
-              {/* Тема как iOS-свитч: подпись слева, переключатель справа. Меню не закрываем — видно смену темы. */}
-              <div className="flex items-center justify-between rounded-lg px-3 py-2 text-sm font-medium text-muted-foreground">
-                <span className="flex items-center gap-2">
-                  {isDark ? <Moon className="h-4 w-4" /> : <Sun className="h-4 w-4" />}
-                  Тема
-                </span>
+              {/* Одна строка: слева Выйти/Войти, справа — iOS-свитч темы. */}
+              <div className="flex items-center justify-between gap-2">
+                {props.authed ? (
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      if (
+                        await confirm({
+                          title: "Выйти из аккаунта?",
+                          description: "Вы уверены, что хотите выйти?",
+                          confirmLabel: "Выйти",
+                          cancelLabel: "Отмена",
+                          confirmVariant: "destructive",
+                        })
+                      ) {
+                        setMobileOpen(false);
+                        props.onLogout?.();
+                      }
+                    }}
+                    className="flex items-center gap-2 rounded-lg px-3 py-2 text-left text-sm font-medium text-muted-foreground hover:bg-secondary/50 hover:text-foreground transition-colors"
+                  >
+                    <LogOut className="h-4 w-4" />
+                    Выйти
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => { setMobileOpen(false); nav("/login"); }}
+                    className="rounded-lg px-3 py-2 text-left text-sm font-medium text-muted-foreground hover:bg-secondary/50 hover:text-foreground transition-colors"
+                  >
+                    Войти
+                  </button>
+                )}
+                {/* Свитч темы справа от кнопки выхода. Меню не закрываем — видно смену темы. */}
                 <button
                   type="button"
                   role="switch"
                   aria-checked={isDark}
                   aria-label={isDark ? "Переключить на светлую тему" : "Переключить на тёмную тему"}
+                  title={isDark ? "Светлая тема" : "Тёмная тема"}
                   onClick={() => toggleTheme(!isDark)}
-                  className={cn(
-                    "relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors",
-                    isDark ? "bg-primary" : "bg-secondary",
-                  )}
+                  className="flex shrink-0 items-center gap-2 rounded-lg px-2 py-2"
                 >
+                  {isDark ? <Moon className="h-4 w-4 text-muted-foreground" /> : <Sun className="h-4 w-4 text-muted-foreground" />}
                   <span
                     className={cn(
-                      "inline-block h-5 w-5 rounded-full bg-background shadow-sm transition-transform",
-                      isDark ? "translate-x-5" : "translate-x-0.5",
+                      "relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors",
+                      isDark ? "bg-primary" : "bg-secondary",
                     )}
-                  />
+                  >
+                    <span
+                      className={cn(
+                        "inline-block h-5 w-5 rounded-full bg-background shadow-sm transition-transform",
+                        isDark ? "translate-x-5" : "translate-x-0.5",
+                      )}
+                    />
+                  </span>
                 </button>
               </div>
-              <div className="my-1 h-px bg-border" />
-              {props.authed ? (
-                <button
-                  type="button"
-                  onClick={async () => {
-                    if (
-                      await confirm({
-                        title: "Выйти из аккаунта?",
-                        description: "Вы уверены, что хотите выйти?",
-                        confirmLabel: "Выйти",
-                        cancelLabel: "Отмена",
-                        confirmVariant: "destructive",
-                      })
-                    ) {
-                      setMobileOpen(false);
-                      props.onLogout?.();
-                    }
-                  }}
-                  className="flex items-center gap-2 rounded-lg px-3 py-2 text-left text-sm font-medium text-muted-foreground hover:bg-secondary/50 hover:text-foreground transition-colors"
-                >
-                  <LogOut className="h-4 w-4" />
-                  Выйти
-                </button>
-              ) : (
-                <button
-                  type="button"
-                  onClick={() => { setMobileOpen(false); nav("/login"); }}
-                  className="rounded-lg px-3 py-2 text-left text-sm font-medium text-muted-foreground hover:bg-secondary/50 hover:text-foreground transition-colors"
-                >
-                  Войти
-                </button>
-              )}
             </div>
           </motion.div>
         ) : null}
