@@ -32,7 +32,8 @@ private val logger = LoggerFactory.getLogger("EventController")
 @RequestMapping("/api/players")
 class PlayerController(
     private val service: EventService,
-    private val userRepo: com.padelgo.auth.UserRepository
+    private val userRepo: com.padelgo.auth.UserRepository,
+    private val playerRepo: PlayerRepository
 ) {
     @Operation(
         summary = "Список игроков по рейтингу (убывание)",
@@ -48,6 +49,42 @@ class PlayerController(
             val publicId = formatPublicId(usersByPlayerId[p.id]?.publicId)
             PlayerResponse.from(p, calibration, publicId)
         }
+    }
+
+    @Operation(
+        summary = "Аватар игрока (картинкой)",
+        description = "Отдаёт аватар игрока как изображение с кешированием. Если аватар хранится как " +
+            "base64 data-URL — декодирует в байты; если это внешняя ссылка — редиректит на неё; иначе 404. " +
+            "Публичный эндпоинт (рендерится тегом <img>), чтобы списочные JSON-ответы не таскали base64."
+    )
+    @GetMapping("/{id}/avatar")
+    fun avatar(@PathVariable id: UUID): org.springframework.http.ResponseEntity<ByteArray> {
+        val player = playerRepo.findById(id).orElse(null)
+            ?: return org.springframework.http.ResponseEntity.status(org.springframework.http.HttpStatus.NOT_FOUND).build()
+        val url = player.avatarUrl
+            ?: return org.springframework.http.ResponseEntity.status(org.springframework.http.HttpStatus.NOT_FOUND).build()
+        if (!url.startsWith("data:")) {
+            // Внешний URL (dicebear/telegram/...) — редиректим, чтобы фронт мог единообразно
+            // указывать на /avatar для любого игрока.
+            return org.springframework.http.ResponseEntity.status(org.springframework.http.HttpStatus.FOUND)
+                .location(java.net.URI.create(url))
+                .build()
+        }
+        val comma = url.indexOf(',')
+        if (comma < 0) return org.springframework.http.ResponseEntity.status(org.springframework.http.HttpStatus.NOT_FOUND).build()
+        // "data:image/jpeg;base64,...."  ->  mime = image/jpeg
+        val mime = url.substring("data:".length, comma).substringBefore(";").ifBlank { "image/jpeg" }
+        val bytes = try {
+            java.util.Base64.getDecoder().decode(url.substring(comma + 1))
+        } catch (e: IllegalArgumentException) {
+            return org.springframework.http.ResponseEntity.status(org.springframework.http.HttpStatus.NOT_FOUND).build()
+        }
+        val etag = "\"" + Integer.toHexString(bytes.contentHashCode()) + "\""
+        return org.springframework.http.ResponseEntity.ok()
+            .contentType(org.springframework.http.MediaType.parseMediaType(mime))
+            .cacheControl(org.springframework.http.CacheControl.maxAge(java.time.Duration.ofDays(7)).cachePublic())
+            .eTag(etag)
+            .body(bytes)
     }
 
     @Operation(

@@ -82,6 +82,7 @@ class SecurityConfig(
                     "/api/admin/login",
                     "/api/players/rating"
                 ).permitAll()
+                .requestMatchers(org.springframework.http.HttpMethod.GET, "/api/players/*/avatar").permitAll()
                 .requestMatchers(org.springframework.http.HttpMethod.GET, "/api/events/*", "/api/events/today", "/api/events/upcoming").permitAll()
                 .anyRequest().authenticated()
         }
@@ -244,6 +245,7 @@ class SurveyGateFilter(
             val completed = user.surveyCompleted
             val allowed = path.startsWith("/api/auth/") ||
                 path == "/api/players/rating" ||
+                (path.startsWith("/api/players/") && path.endsWith("/avatar")) ||
                 path.startsWith("/api/survey/") ||
                 path == "/api/me" ||
                 path.startsWith("/api/me/") ||

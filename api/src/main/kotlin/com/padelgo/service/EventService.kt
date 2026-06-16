@@ -1460,8 +1460,8 @@ class EventService(
             val opponentText = if (isTeamA) teamB.joinToString(" + ") else teamA.joinToString(" + ")
             val myIds = if (isTeamA) teamAIds else teamBIds
             val oppIds = if (isTeamA) teamBIds else teamAIds
-            val teamPlayerInfos = myIds.mapNotNull { id -> playersById[id]?.let { MatchPlayerInfo(it.name, it.avatarUrl) } }
-            val opponentPlayerInfos = oppIds.mapNotNull { id -> playersById[id]?.let { MatchPlayerInfo(it.name, it.avatarUrl) } }
+            val teamPlayerInfos = myIds.mapNotNull { id -> playersById[id]?.let { MatchPlayerInfo(it.name, com.padelgo.api.AvatarLinks.publicUrl(it.id, it.avatarUrl)) } }
+            val opponentPlayerInfos = oppIds.mapNotNull { id -> playersById[id]?.let { MatchPlayerInfo(it.name, com.padelgo.api.AvatarLinks.publicUrl(it.id, it.avatarUrl)) } }
             // Для POINTS-режима счёт может лежать либо в финальном MatchSetScore (после submitScore),
             // либо в драфте (до submitScore). После submitScore драфт удаляется (см. submitScore line ~998),
             // поэтому читаем MatchSetScore первым, иначе исторические матчи показывают «—».

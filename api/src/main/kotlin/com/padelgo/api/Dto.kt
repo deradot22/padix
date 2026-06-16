@@ -56,7 +56,7 @@ data class PlayerResponse(
             gamesPlayed = p.gamesPlayed,
             calibrationEventsRemaining = calibrationEventsRemaining,
             publicId = publicId,
-            avatarUrl = p.avatarUrl
+            avatarUrl = AvatarLinks.publicUrl(p.id, p.avatarUrl)
         )
     }
 }
@@ -80,7 +80,7 @@ data class PlayerShort(
             id = p.id!!,
             name = p.name,
             rating = p.rating,
-            avatarUrl = p.avatarUrl
+            avatarUrl = AvatarLinks.publicUrl(p.id, p.avatarUrl)
         )
     }
 }
