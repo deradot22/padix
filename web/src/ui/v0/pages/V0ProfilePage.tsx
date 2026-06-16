@@ -31,7 +31,6 @@ import {
   Users2,
   X,
   XCircle,
-  ChevronDown,
 } from "lucide-react";
 
 function formatPublicId(publicId?: string | null) {
@@ -71,12 +70,10 @@ export function V0ProfilePage(props: { me: any; meLoaded?: boolean; onMeUpdate?:
   const [avatar, setAvatar] = useState<string | null>(null);
   const [info, setInfo] = useState<string | null>(null);
   const [idCopied, setIdCopied] = useState(false);
-  const [friendsExpanded, setFriendsExpanded] = useState(false);
-  const [historyExpanded, setHistoryExpanded] = useState(false);
+  const [profileTab, setProfileTab] = useState<"graph" | "history" | "friends" | "invites">("history");
   const [ratingHistory, setRatingHistory] = useState<{ date: string; rating: number; delta: number | null }[]>([]);
   const [ratingHistoryLoaded, setRatingHistoryLoaded] = useState(false);
   const [invitesDetailsLoaded, setInvitesDetailsLoaded] = useState(false);
-  const [graphOpen, setGraphOpen] = useState(false);
   const [editGameOpen, setEditGameOpen] = useState(false);
   const [editGameEventId, setEditGameEventId] = useState<string | null>(null);
 
@@ -478,8 +475,62 @@ export function V0ProfilePage(props: { me: any; meLoaded?: boolean; onMeUpdate?:
           </CardContent>
         </Card>
 
-        <div className="grid gap-8 lg:grid-cols-3 items-stretch">
-          <Card className="lg:col-span-2 border-border/50 flex flex-col">
+        {(() => {
+          const invitesCount = (invites ?? [])
+            .filter((inv) => !isPastDate(inv.eventDate))
+            .filter((inv) => !inviteEventJoined.has(inv.eventId)).length;
+          const friendsCount = friends?.friends?.length ?? 0;
+          const tabBtn = (active: boolean) =>
+            cn(
+              "inline-flex items-center justify-center gap-1.5 rounded-md px-3 py-2 text-sm transition-colors",
+              active
+                ? "bg-background text-foreground font-medium shadow-sm"
+                : "text-muted-foreground",
+            );
+          return (
+            <div className="flex flex-wrap gap-1 rounded-lg bg-secondary/40 p-1 sm:inline-flex sm:flex-nowrap">
+              {ratingHistory.length > 1 && (
+                <button
+                  type="button"
+                  onClick={() => setProfileTab("graph")}
+                  className={tabBtn(profileTab === "graph")}
+                >
+                  <TrendingUp className="h-4 w-4 shrink-0" />
+                  <span>График</span>
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={() => setProfileTab("history")}
+                className={tabBtn(profileTab === "history")}
+              >
+                <Calendar className="h-4 w-4 shrink-0" />
+                <span>История</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setProfileTab("friends")}
+                className={tabBtn(profileTab === "friends")}
+              >
+                <Users className="h-4 w-4 shrink-0" />
+                <span>Друзья</span>
+                {friendsCount > 0 && <span className="tabular-nums">({friendsCount})</span>}
+              </button>
+              <button
+                type="button"
+                onClick={() => setProfileTab("invites")}
+                className={tabBtn(profileTab === "invites")}
+              >
+                <Gamepad2 className="h-4 w-4 shrink-0" />
+                <span>Приглашения</span>
+                {invitesCount > 0 && <span className="tabular-nums">({invitesCount})</span>}
+              </button>
+            </div>
+          );
+        })()}
+
+        {profileTab === "invites" && (
+          <Card className="border-border/50 flex flex-col">
             <CardHeader className="pb-4">
               <CardTitle className="flex items-center gap-2">
                 <Gamepad2 className="h-6 w-6 text-primary" />
@@ -595,14 +646,11 @@ export function V0ProfilePage(props: { me: any; meLoaded?: boolean; onMeUpdate?:
               )}
             </CardContent>
           </Card>
+        )}
 
+        {profileTab === "friends" && (
           <Card className="border-border/50 flex flex-col">
-            <CardHeader
-              className="pb-4 cursor-pointer select-none"
-              onClick={() => setFriendsExpanded((v) => !v)}
-              role="button"
-              aria-expanded={friendsExpanded}
-            >
+            <CardHeader className="pb-4">
               <div className="flex items-center justify-between gap-2">
                 <CardTitle className="flex items-center gap-2">
                   <Users className="h-5 w-5 text-primary" />
@@ -613,11 +661,10 @@ export function V0ProfilePage(props: { me: any; meLoaded?: boolean; onMeUpdate?:
                     </span>
                   )}
                 </CardTitle>
-                <ChevronDown className={cn("h-4 w-4 text-muted-foreground transition-transform", !friendsExpanded && "-rotate-90")} />
               </div>
               <CardDescription>Добавьте друзей по их ID</CardDescription>
             </CardHeader>
-            <CardContent className={cn("space-y-4 flex-1", !friendsExpanded && "hidden")}>
+            <CardContent className="space-y-4 flex-1">
               <div className="flex gap-2">
                 <Input
                   placeholder="#123456789"
@@ -747,48 +794,38 @@ export function V0ProfilePage(props: { me: any; meLoaded?: boolean; onMeUpdate?:
               ) : null}
             </CardContent>
           </Card>
-        </div>
+        )}
 
-        {ratingHistory.length > 1 && (
+        {profileTab === "graph" && ratingHistory.length > 1 && (
           <Card className="border-border/50">
-            <CardHeader
-              className="pb-4 cursor-pointer select-none"
-              onClick={() => setGraphOpen((o) => !o)}
-              role="button"
-              aria-expanded={graphOpen}
-            >
+            <CardHeader className="pb-4">
               <div className="flex items-center justify-between gap-2">
                 <CardTitle className="flex items-center gap-2">
                   <TrendingUp className="h-5 w-5 text-primary" />
                   График рейтинга
                 </CardTitle>
-                <ChevronDown className={cn("h-4 w-4 text-muted-foreground transition-transform", !graphOpen && "-rotate-90")} />
               </div>
             </CardHeader>
-            <CardContent className={cn(!graphOpen && "hidden")}>
+            <CardContent>
               <RatingGraph points={ratingHistory} />
             </CardContent>
           </Card>
         )}
 
-        <Card className="border-border/50">
-          <CardHeader
-            className="pb-4 cursor-pointer select-none"
-            onClick={() => setHistoryExpanded((v) => !v)}
-            role="button"
-            aria-expanded={historyExpanded}
-          >
-            <div className="flex items-center justify-between gap-2">
-              <CardTitle className="flex items-center gap-2">
-                <Calendar className="h-5 w-5 text-primary" />
-                История матчей
-              </CardTitle>
-              <ChevronDown className={cn("h-4 w-4 text-muted-foreground transition-transform", !historyExpanded && "-rotate-90")} />
-            </div>
-            <CardDescription>История ваших игр и изменение рейтинга</CardDescription>
-          </CardHeader>
-          <CardContent className={cn(!historyExpanded && "hidden")}>{historyContent}</CardContent>
-        </Card>
+        {profileTab === "history" && (
+          <Card className="border-border/50">
+            <CardHeader className="pb-4">
+              <div className="flex items-center justify-between gap-2">
+                <CardTitle className="flex items-center gap-2">
+                  <Calendar className="h-5 w-5 text-primary" />
+                  История матчей
+                </CardTitle>
+              </div>
+              <CardDescription>История ваших игр и изменение рейтинга</CardDescription>
+            </CardHeader>
+            <CardContent>{historyContent}</CardContent>
+          </Card>
+        )}
 
         {details ? (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-6" onClick={() => { setDetails(null); setDetailsStatsOpen(false); }}>
