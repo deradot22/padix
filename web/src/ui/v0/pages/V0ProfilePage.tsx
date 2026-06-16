@@ -328,8 +328,6 @@ export function V0ProfilePage(props: { me: any; meLoaded?: boolean; onMeUpdate?:
   return (
     <TooltipProvider>
       <div className="space-y-8">
-        <h1 className="text-4xl font-bold tracking-tight">Профиль</h1>
-
         <Card className="overflow-hidden border-border/50">
           {/*
             Cover-баннер = стилизованное поле падел-корта (вид сверху). Чистый зелёный
@@ -337,7 +335,7 @@ export function V0ProfilePage(props: { me: any; meLoaded?: boolean; onMeUpdate?:
             корта: рамка, сетка по центру, линии подачи. preserveAspectRatio=slice растягивает
             корт по ширине баннера. Линии белые полупрозрачные — читаются в обеих темах.
           */}
-          <div className="relative h-32 overflow-hidden bg-gradient-to-br from-primary/35 via-primary/15 to-primary/5" aria-hidden="true">
+          <div className="relative h-20 md:h-24 overflow-hidden bg-gradient-to-br from-primary/35 via-primary/15 to-primary/5" aria-hidden="true">
             <svg
               className="absolute inset-0 h-full w-full"
               viewBox="0 0 200 64"
@@ -358,7 +356,7 @@ export function V0ProfilePage(props: { me: any; meLoaded?: boolean; onMeUpdate?:
               </g>
             </svg>
           </div>
-          <CardContent className="relative z-10 -mt-16 pb-8">
+          <CardContent className="relative z-10 -mt-8 md:-mt-10 pb-8">
             <div className="flex flex-col gap-6 sm:flex-row sm:items-end sm:justify-between">
               <div className="flex items-end gap-4">
                 <div className="flex h-24 w-24 items-center justify-center rounded-2xl border-4 border-background bg-gradient-to-br from-primary/20 to-primary/5 shadow-xl overflow-hidden">
@@ -368,7 +366,7 @@ export function V0ProfilePage(props: { me: any; meLoaded?: boolean; onMeUpdate?:
                     <User className="h-12 w-12 text-primary" />
                   )}
                 </div>
-                <div>
+                <div className="pb-1">
                   <h2 className="text-3xl font-bold">{viewMe.name}</h2>
                   <p className="flex items-center gap-2 text-muted-foreground mt-1">
                     <Mail className="h-4 w-4" />
