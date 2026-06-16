@@ -1,12 +1,16 @@
 "use client";
 
 import { Link, NavLink, useLocation, useNavigate } from "react-router-dom";
-import { Bell, Check, LogOut, Menu, MessageSquare, Moon, Settings, Sun, UserPlus, X } from "lucide-react";
+import { Bell, Check, Gamepad2, LogOut, Menu, MessageSquare, Moon, Plus, Settings, Sun, TrendingUp, User, UserPlus, X } from "lucide-react";
+import { motion, AnimatePresence, useReducedMotion } from "motion/react";
 import { Button } from "@/components/ui/button";
+import { useConfirm } from "@/components/ui/confirm-dialog";
 import { cn } from "@/lib/utils";
 import { useEffect, useMemo, useState } from "react";
 import { useRef } from "react";
 import { api, EventInviteItem, FriendRequestItem } from "@/lib/api";
+
+import type { LucideIcon } from "lucide-react";
 
 // Десктоп: "Создать игру" не дублируем — есть hero CTA на / и FAB-кнопка на /games.
 const desktopNavigation = [
@@ -14,11 +18,12 @@ const desktopNavigation = [
   { name: "Игры", href: "/games" },
   { name: "Профиль", href: "/profile" },
 ];
-// Мобильный drawer: главный хаб навигации, "Создать игру" оставляем — FAB на /games может быть не очевиден.
-const mobileNavigation = [
-  ...desktopNavigation.slice(0, 2), // Рейтинг, Игры
-  { name: "Создать игру", href: "/create" },
-  desktopNavigation[2], // Профиль
+// Мобильный drawer: главный хаб навигации с иконками.
+// "Создать игру" больше не отдельный пункт — это кнопка "+" рядом с "Игры".
+const mobileNavigation: { name: string; href: string; icon: LucideIcon }[] = [
+  { name: "Рейтинг", href: "/rating", icon: TrendingUp },
+  { name: "Игры", href: "/games", icon: Gamepad2 },
+  { name: "Профиль", href: "/profile", icon: User },
 ];
 // Совместимость со старым кодом, который ещё может ссылаться на navigation.
 const navigation = mobileNavigation;
@@ -31,6 +36,8 @@ export function Header(props: {
 }) {
   const { pathname } = useLocation();
   const nav = useNavigate();
+  const confirm = useConfirm();
+  const reduceMotion = useReducedMotion();
   const [isDark, setIsDark] = useState(() => document.documentElement.classList.contains("dark"));
   const [notificationsOpen, setNotificationsOpen] = useState(false);
   const [loadingNotifications, setLoadingNotifications] = useState(false);
@@ -472,91 +479,151 @@ export function Header(props: {
         </div>
       </div>
 
-      {mobileOpen ? (
-        <div className="border-t border-border/40 bg-background/95 md:hidden">
-          <div className="mx-auto flex max-w-7xl flex-col gap-1 px-4 py-3">
-            {mobileNavigation.map((item) => (
-              <NavLink
-                key={item.name}
-                to={item.href}
-                onClick={() => setMobileOpen(false)}
-                className={({ isActive }) =>
-                  cn(
-                    "rounded-lg px-3 py-2 text-sm font-medium transition-all duration-200",
-                    isActive || pathname === item.href
-                      ? "bg-secondary text-foreground"
-                      : "text-muted-foreground hover:bg-secondary/50 hover:text-foreground",
-                  )
-                }
-              >
-                {item.name}
-              </NavLink>
-            ))}
-            {props.authed && (
-              <>
-                <NavLink
-                  to="/settings"
-                  onClick={() => setMobileOpen(false)}
-                  className={({ isActive }) =>
-                    cn(
-                      "rounded-lg px-3 py-2 text-sm font-medium transition-all duration-200 flex items-center gap-2",
-                      isActive || pathname === "/settings"
-                        ? "bg-secondary text-foreground"
-                        : "text-muted-foreground hover:bg-secondary/50 hover:text-foreground",
-                    )
-                  }
+      <AnimatePresence>
+        {mobileOpen ? (
+          <motion.div
+            key="mobile-drawer"
+            initial={reduceMotion ? { opacity: 0 } : { opacity: 0, y: -8 }}
+            animate={reduceMotion ? { opacity: 1 } : { opacity: 1, y: 0 }}
+            exit={reduceMotion ? { opacity: 0 } : { opacity: 0, y: -8 }}
+            transition={{ duration: 0.18, ease: "easeOut" }}
+            className="absolute left-0 right-0 top-full z-50 border-b border-border/40 bg-background/95 backdrop-blur-xl md:hidden"
+          >
+            <div className="mx-auto flex max-w-7xl flex-col gap-1 px-4 py-3">
+              {mobileNavigation.map((item) => {
+                const Icon = item.icon;
+                const active = pathname === item.href;
+                const isGames = item.href === "/games";
+                return (
+                  <div key={item.name} className="flex items-center gap-1">
+                    <NavLink
+                      to={item.href}
+                      onClick={() => setMobileOpen(false)}
+                      className={({ isActive }) =>
+                        cn(
+                          "flex flex-1 items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition-all duration-200",
+                          isActive || active
+                            ? "bg-secondary text-foreground"
+                            : "text-muted-foreground hover:bg-secondary/50 hover:text-foreground",
+                        )
+                      }
+                    >
+                      <Icon className="h-4 w-4" />
+                      {item.name}
+                    </NavLink>
+                    {isGames ? (
+                      <NavLink
+                        to="/create"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setMobileOpen(false);
+                        }}
+                        aria-label="Создать игру"
+                        title="Создать игру"
+                        className="flex size-8 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
+                      >
+                        <Plus className="h-4 w-4" />
+                      </NavLink>
+                    ) : null}
+                  </div>
+                );
+              })}
+              {props.authed && (
+                <>
+                  <NavLink
+                    to="/settings"
+                    onClick={() => setMobileOpen(false)}
+                    className={({ isActive }) =>
+                      cn(
+                        "rounded-lg px-3 py-2 text-sm font-medium transition-all duration-200 flex items-center gap-2",
+                        isActive || pathname === "/settings"
+                          ? "bg-secondary text-foreground"
+                          : "text-muted-foreground hover:bg-secondary/50 hover:text-foreground",
+                      )
+                    }
+                  >
+                    <Settings className="h-4 w-4" />
+                    Настройки
+                  </NavLink>
+                  <NavLink
+                    to="/feedback"
+                    onClick={() => setMobileOpen(false)}
+                    className={({ isActive }) =>
+                      cn(
+                        "rounded-lg px-3 py-2 text-sm font-medium transition-all duration-200 flex items-center gap-2",
+                        isActive || pathname === "/feedback"
+                          ? "bg-secondary text-foreground"
+                          : "text-muted-foreground hover:bg-secondary/50 hover:text-foreground",
+                      )
+                    }
+                  >
+                    <MessageSquare className="h-4 w-4" />
+                    Обратная связь
+                  </NavLink>
+                </>
+              )}
+              <div className="my-1 h-px bg-border" />
+              {/* Тема как iOS-свитч: подпись слева, переключатель справа. Меню не закрываем — видно смену темы. */}
+              <div className="flex items-center justify-between rounded-lg px-3 py-2 text-sm font-medium text-muted-foreground">
+                <span className="flex items-center gap-2">
+                  {isDark ? <Moon className="h-4 w-4" /> : <Sun className="h-4 w-4" />}
+                  Тема
+                </span>
+                <button
+                  type="button"
+                  role="switch"
+                  aria-checked={isDark}
+                  aria-label={isDark ? "Переключить на светлую тему" : "Переключить на тёмную тему"}
+                  onClick={() => toggleTheme(!isDark)}
+                  className={cn(
+                    "relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors",
+                    isDark ? "bg-primary" : "bg-secondary",
+                  )}
                 >
-                  <Settings className="h-4 w-4" />
-                  Настройки
-                </NavLink>
-                <NavLink
-                  to="/feedback"
-                  onClick={() => setMobileOpen(false)}
-                  className={({ isActive }) =>
-                    cn(
-                      "rounded-lg px-3 py-2 text-sm font-medium transition-all duration-200 flex items-center gap-2",
-                      isActive || pathname === "/feedback"
-                        ? "bg-secondary text-foreground"
-                        : "text-muted-foreground hover:bg-secondary/50 hover:text-foreground",
-                    )
-                  }
+                  <span
+                    className={cn(
+                      "inline-block h-5 w-5 rounded-full bg-background shadow-sm transition-transform",
+                      isDark ? "translate-x-5" : "translate-x-0.5",
+                    )}
+                  />
+                </button>
+              </div>
+              <div className="my-1 h-px bg-border" />
+              {props.authed ? (
+                <button
+                  type="button"
+                  onClick={async () => {
+                    if (
+                      await confirm({
+                        title: "Выйти из аккаунта?",
+                        description: "Вы уверены, что хотите выйти?",
+                        confirmLabel: "Выйти",
+                        cancelLabel: "Отмена",
+                        confirmVariant: "destructive",
+                      })
+                    ) {
+                      setMobileOpen(false);
+                      props.onLogout?.();
+                    }
+                  }}
+                  className="flex items-center gap-2 rounded-lg px-3 py-2 text-left text-sm font-medium text-muted-foreground hover:bg-secondary/50 hover:text-foreground transition-colors"
                 >
-                  <MessageSquare className="h-4 w-4" />
-                  Обратная связь
-                </NavLink>
-              </>
-            )}
-            <div className="my-1 h-px bg-border" />
-            {/* Переключатель темы перенесён сюда из топбара (мобильная версия). Меню не закрываем — видно смену темы. */}
-            <button
-              type="button"
-              onClick={() => toggleTheme(!isDark)}
-              className="flex items-center gap-2 rounded-lg px-3 py-2 text-left text-sm font-medium text-muted-foreground hover:bg-secondary/50 hover:text-foreground transition-colors"
-            >
-              {isDark ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
-              {isDark ? "Светлая тема" : "Тёмная тема"}
-            </button>
-            <div className="my-1 h-px bg-border" />
-            {props.authed ? (
-              <button
-                type="button"
-                onClick={() => { setMobileOpen(false); props.onLogout?.(); }}
-                className="rounded-lg px-3 py-2 text-left text-sm font-medium text-muted-foreground hover:bg-secondary/50 hover:text-foreground transition-colors"
-              >
-                Выйти
-              </button>
-            ) : (
-              <button
-                type="button"
-                onClick={() => { setMobileOpen(false); nav("/login"); }}
-                className="rounded-lg px-3 py-2 text-left text-sm font-medium text-muted-foreground hover:bg-secondary/50 hover:text-foreground transition-colors"
-              >
-                Войти
-              </button>
-            )}
-          </div>
-        </div>
-      ) : null}
+                  <LogOut className="h-4 w-4" />
+                  Выйти
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => { setMobileOpen(false); nav("/login"); }}
+                  className="rounded-lg px-3 py-2 text-left text-sm font-medium text-muted-foreground hover:bg-secondary/50 hover:text-foreground transition-colors"
+                >
+                  Войти
+                </button>
+              )}
+            </div>
+          </motion.div>
+        ) : null}
+      </AnimatePresence>
     </header>
   );
 }
