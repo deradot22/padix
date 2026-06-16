@@ -348,23 +348,25 @@ export function V0ProfilePage(props: { me: any; meLoaded?: boolean; onMeUpdate?:
             корт по ширине баннера. Линии белые полупрозрачные — читаются в обеих темах.
           */}
           <div className="relative h-20 md:h-24 overflow-hidden bg-gradient-to-br from-primary/35 via-primary/15 to-primary/5" aria-hidden="true">
+            {/* preserveAspectRatio=none — корт растягивается на весь баннер до краёв
+               (со slice верх/низ обрезались). Линии вплотную к кромкам блока. */}
             <svg
               className="absolute inset-0 h-full w-full"
               viewBox="0 0 200 64"
-              preserveAspectRatio="xMidYMid slice"
+              preserveAspectRatio="none"
               fill="none"
             >
-              <g stroke="rgba(255,255,255,0.30)" strokeWidth="0.6" strokeLinecap="round">
-                {/* внешняя рамка корта */}
-                <rect x="6" y="6" width="188" height="52" rx="1.5" />
+              <g stroke="rgba(255,255,255,0.32)" strokeWidth="0.5" strokeLinecap="round" vectorEffect="non-scaling-stroke">
+                {/* внешняя рамка корта — почти до кромок баннера */}
+                <rect x="2" y="2" width="196" height="60" rx="1" />
                 {/* сетка по центру (поперёк) — пунктиром, чуть ярче */}
-                <line x1="100" y1="6" x2="100" y2="58" stroke="rgba(255,255,255,0.42)" strokeWidth="1" strokeDasharray="2.5 1.8" />
+                <line x1="100" y1="2" x2="100" y2="62" stroke="rgba(255,255,255,0.45)" strokeWidth="1" strokeDasharray="2.5 1.8" />
                 {/* линии подачи по обе стороны от сетки */}
-                <line x1="58" y1="6" x2="58" y2="58" />
-                <line x1="142" y1="6" x2="142" y2="58" />
+                <line x1="58" y1="2" x2="58" y2="62" />
+                <line x1="142" y1="2" x2="142" y2="62" />
                 {/* центральные линии зон подачи (от линии подачи к задней стенке) */}
-                <line x1="6" y1="32" x2="58" y2="32" />
-                <line x1="142" y1="32" x2="194" y2="32" />
+                <line x1="2" y1="32" x2="58" y2="32" />
+                <line x1="142" y1="32" x2="198" y2="32" />
               </g>
             </svg>
           </div>
