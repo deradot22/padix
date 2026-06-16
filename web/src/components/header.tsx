@@ -3,6 +3,7 @@
 import { Link, NavLink, useLocation, useNavigate } from "react-router-dom";
 import { Bell, Check, Gamepad2, LogOut, Menu, MessageSquare, Moon, Plus, Settings, Sun, TrendingUp, User, UserPlus, X } from "lucide-react";
 import { motion, AnimatePresence, useReducedMotion } from "motion/react";
+import { createPortal } from "react-dom";
 import { Button } from "@/components/ui/button";
 import { useConfirm } from "@/components/ui/confirm-dialog";
 import { cn } from "@/lib/utils";
@@ -479,15 +480,28 @@ export function Header(props: {
         </div>
       </div>
 
+      {createPortal(
       <AnimatePresence>
         {mobileOpen ? (
+          <>
+            {/* Затемняющий фон под меню: гарантированно скрывает контент + клик закрывает меню. */}
+            <motion.div
+              key="mobile-backdrop"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.18, ease: "easeOut" }}
+              className="fixed inset-x-0 bottom-0 top-16 z-[90] bg-black/60 md:hidden"
+              onClick={() => setMobileOpen(false)}
+              aria-hidden="true"
+            />
           <motion.div
             key="mobile-drawer"
             initial={reduceMotion ? { opacity: 0 } : { opacity: 0, y: -8 }}
             animate={reduceMotion ? { opacity: 1 } : { opacity: 1, y: 0 }}
             exit={reduceMotion ? { opacity: 0 } : { opacity: 0, y: -8 }}
             transition={{ duration: 0.18, ease: "easeOut" }}
-            className="absolute left-0 right-0 top-full z-50 border-b border-border/40 bg-background/95 backdrop-blur-xl md:hidden"
+            className="fixed left-0 right-0 top-16 z-[100] border-b border-border bg-background shadow-2xl md:hidden"
           >
             <div className="mx-auto flex max-w-7xl flex-col gap-1 px-4 py-3">
               {mobileNavigation.map((item) => {
@@ -624,8 +638,11 @@ export function Header(props: {
               </div>
             </div>
           </motion.div>
+          </>
         ) : null}
-      </AnimatePresence>
+      </AnimatePresence>,
+      document.body
+      )}
     </header>
   );
 }
