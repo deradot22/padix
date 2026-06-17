@@ -525,6 +525,7 @@ export function V0ProfilePage(props: { me: any; meLoaded?: boolean; onMeUpdate?:
           </CardContent>
         </Card>
 
+        <Card className="overflow-hidden border-border/50">
         {(() => {
           const invitesCount = (invites ?? [])
             .filter((inv) => !isPastDate(inv.eventDate))
@@ -532,13 +533,13 @@ export function V0ProfilePage(props: { me: any; meLoaded?: boolean; onMeUpdate?:
           const friendsCount = friends?.friends?.length ?? 0;
           const tabBtn = (active: boolean) =>
             cn(
-              "inline-flex items-center justify-center gap-1.5 rounded-md px-3 py-2 text-sm transition-colors",
+              "inline-flex items-center justify-center gap-1.5 px-3 py-2.5 text-sm whitespace-nowrap transition-colors",
               active
-                ? "bg-background text-foreground font-medium shadow-sm"
+                ? "text-foreground font-medium border-b-2 border-primary -mb-px"
                 : "text-muted-foreground",
             );
           return (
-            <div className="flex flex-wrap gap-1 rounded-lg bg-secondary/40 p-1 sm:inline-flex sm:flex-nowrap">
+            <div className="flex w-full overflow-x-auto border-b border-border px-2">
               {ratingHistory.length > 1 && (
                 <button
                   type="button"
@@ -580,7 +581,7 @@ export function V0ProfilePage(props: { me: any; meLoaded?: boolean; onMeUpdate?:
         })()}
 
         {profileTab === "invites" && (
-          <Card className="border-border/50 flex flex-col">
+          <>
             <CardHeader className="pb-4">
               <CardTitle className="flex items-center gap-2">
                 <Gamepad2 className="h-6 w-6 text-primary" />
@@ -695,11 +696,11 @@ export function V0ProfilePage(props: { me: any; meLoaded?: boolean; onMeUpdate?:
                 })
               )}
             </CardContent>
-          </Card>
+          </>
         )}
 
         {profileTab === "friends" && (
-          <Card className="border-border/50 flex flex-col">
+          <>
             <CardHeader className="pb-4">
               <div className="flex items-center justify-between gap-2">
                 <CardTitle className="flex items-center gap-2">
@@ -843,11 +844,11 @@ export function V0ProfilePage(props: { me: any; meLoaded?: boolean; onMeUpdate?:
                 </div>
               ) : null}
             </CardContent>
-          </Card>
+          </>
         )}
 
         {profileTab === "graph" && ratingHistory.length > 1 && (
-          <Card className="border-border/50">
+          <>
             <CardHeader className="pb-4">
               <div className="flex items-center justify-between gap-2">
                 <CardTitle className="flex items-center gap-2">
@@ -859,11 +860,11 @@ export function V0ProfilePage(props: { me: any; meLoaded?: boolean; onMeUpdate?:
             <CardContent>
               <RatingGraph points={ratingHistory} />
             </CardContent>
-          </Card>
+          </>
         )}
 
         {profileTab === "history" && (
-          <Card className="border-border/50">
+          <>
             <CardHeader className="pb-4">
               <div className="flex items-center justify-between gap-2">
                 <CardTitle className="flex items-center gap-2">
@@ -874,8 +875,9 @@ export function V0ProfilePage(props: { me: any; meLoaded?: boolean; onMeUpdate?:
               <CardDescription>История ваших игр и изменение рейтинга</CardDescription>
             </CardHeader>
             <CardContent>{historyContent}</CardContent>
-          </Card>
+          </>
         )}
+        </Card>
 
         {details ? (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-6" onClick={() => { setDetails(null); setDetailsStatsOpen(false); }}>
