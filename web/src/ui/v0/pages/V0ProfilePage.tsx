@@ -533,13 +533,15 @@ export function V0ProfilePage(props: { me: any; meLoaded?: boolean; onMeUpdate?:
           const friendsCount = friends?.friends?.length ?? 0;
           const tabBtn = (active: boolean) =>
             cn(
-              "inline-flex items-center justify-center gap-1.5 px-3 py-2.5 text-sm whitespace-nowrap transition-colors",
+              // Мобилка: равная ширина (flex-1), вертикально иконка+подпись, мельче — все 4 влезают без скролла.
+              // Десктоп: горизонтально как обычные вкладки.
+              "flex flex-1 flex-col items-center justify-center gap-0.5 px-1 py-2 text-[11px] leading-tight transition-colors sm:flex-row sm:gap-1.5 sm:px-3 sm:py-2.5 sm:text-sm",
               active
                 ? "text-foreground font-medium border-b-2 border-primary -mb-px"
                 : "text-muted-foreground",
             );
           return (
-            <div className="flex w-full overflow-x-auto border-b border-border px-2">
+            <div className="flex w-full border-b border-border">
               {ratingHistory.length > 1 && (
                 <button
                   type="button"
@@ -565,7 +567,7 @@ export function V0ProfilePage(props: { me: any; meLoaded?: boolean; onMeUpdate?:
               >
                 <Users className="h-4 w-4 shrink-0" />
                 <span>Друзья</span>
-                {friendsCount > 0 && <span className="tabular-nums">({friendsCount})</span>}
+                {friendsCount > 0 && <span className="hidden tabular-nums sm:inline">({friendsCount})</span>}
               </button>
               <button
                 type="button"
@@ -574,7 +576,7 @@ export function V0ProfilePage(props: { me: any; meLoaded?: boolean; onMeUpdate?:
               >
                 <Gamepad2 className="h-4 w-4 shrink-0" />
                 <span>Приглашения</span>
-                {invitesCount > 0 && <span className="tabular-nums">({invitesCount})</span>}
+                {invitesCount > 0 && <span className="hidden tabular-nums sm:inline">({invitesCount})</span>}
               </button>
             </div>
           );
