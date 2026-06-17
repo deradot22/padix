@@ -534,8 +534,8 @@ export function V0ProfilePage(props: { me: any; meLoaded?: boolean; onMeUpdate?:
           const tabBtn = (active: boolean) =>
             cn(
               // Мобилка: равная ширина (flex-1), вертикально иконка+подпись, мельче — все 4 влезают без скролла.
-              // Десктоп: горизонтально как обычные вкладки.
-              "flex flex-1 flex-col items-center justify-center gap-0.5 px-1 py-2 text-[11px] leading-tight transition-colors sm:flex-row sm:gap-1.5 sm:px-3 sm:py-2.5 sm:text-sm",
+              // Десктоп: компактные вкладки по содержимому (flex-none), прижатые влево, горизонтально.
+              "flex flex-1 flex-col items-center justify-center gap-0.5 px-1 py-2 text-[11px] leading-tight transition-colors sm:flex-none sm:flex-row sm:gap-1.5 sm:px-4 sm:py-2.5 sm:text-sm",
               active
                 ? "text-foreground font-medium border-b-2 border-primary -mb-px"
                 : "text-muted-foreground",
