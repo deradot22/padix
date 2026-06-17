@@ -194,9 +194,9 @@ export function Header(props: {
               className={cn(
                 // Стекло как у мобильного меню: bg-background/70 + backdrop-blur. scale убран —
                 // transform отключает backdrop-filter (blur не работал бы). Анимация — opacity.
-                // На мобиле — полоса во всю ширину под шапкой (как меню): left/right-0, border-b, без скругления.
-                // На sm+ — обычный dropdown справа (rounded, border со всех сторон).
-                "fixed left-0 right-0 top-16 border-b border-border bg-background/70 backdrop-blur-2xl p-4 shadow-2xl z-50 sm:absolute sm:top-auto sm:left-auto sm:right-0 sm:w-[360px] sm:max-w-[calc(100vw-2rem)] sm:rounded-xl sm:border transition-opacity duration-150 origin-top opacity-0 pointer-events-none",
+                // Форма как у мобильного меню (drawer): скруглённая карточка с отступами от краёв.
+                // На sm+ — dropdown справа фиксированной ширины.
+                "fixed left-2 right-2 top-16 rounded-xl border border-border bg-background/70 backdrop-blur-2xl p-4 shadow-2xl z-50 sm:absolute sm:top-auto sm:left-auto sm:right-0 sm:w-[360px] sm:max-w-[calc(100vw-2rem)] transition-opacity duration-150 origin-top opacity-0 pointer-events-none",
                 notificationsOpen ? "opacity-100 pointer-events-auto" : "",
               )}
               onClick={(e) => e.stopPropagation()}
