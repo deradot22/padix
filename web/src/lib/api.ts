@@ -119,6 +119,25 @@ export type BalancePreview = {
   shouldWarn: boolean;
 };
 
+/** Краткая инфа об игроке для виджетов-списков. */
+export type PlayerShort = {
+  id: string;
+  name: string;
+  rating: number;
+  avatarUrl?: string | null;
+};
+
+/** Лучший напарник игрока: агрегированная статистика совместных игр. */
+export type TopPartner = {
+  player: PlayerShort;
+  gamesTogether: number;
+  winsTogether: number;
+  /** Доля побед 0..1. */
+  winRate: number;
+  /** Ранжирующий скор — баланс качества и наигранности (сортировка на бэке идёт по нему). */
+  score: number;
+};
+
 export type AuthProvidersInfo = {
   telegram: boolean;
   google: boolean;
@@ -642,6 +661,21 @@ export const api = {
       body: JSON.stringify({ confirm }),
     }),
   /**
+   * bot-link flow для УЖЕ-залогиненного юзера, который хочет привязать Telegram.
+   * Отличается от bot-login: токен помечается link_target_user_id, complete не
+   * создаёт нового юзера а линкует TG к currentUserId.
+   */
+  telegramBotLinkStart: () =>
+    request<{ token: string; deepLink: string; botUsername: string }>(
+      "/api/auth/telegram/bot-link/start",
+      { method: "POST" },
+    ),
+  telegramBotLinkComplete: (token: string) =>
+    request<MeResponse>("/api/auth/telegram/bot-link/complete", {
+      method: "POST",
+      body: JSON.stringify({ token }),
+    }),
+  /**
    * URL для старта Twitter OAuth — браузер должен сделать window.location.href = это.
    * Бэк 302-редиректит на x.com/authorize, потом вернётся на /auth/oauth-callback#token=...
    */
@@ -701,6 +735,8 @@ export const api = {
     }>("/api/survey/current"),
   submitSurvey: (payload: { version: number; answers: Record<string, string> }) =>
     request("/api/survey/submit", { method: "POST", body: JSON.stringify(payload) }),
+  topPartners: (playerId: string, limit = 3) =>
+    request<TopPartner[]>(`/api/players/${playerId}/top-partners?limit=${limit}`),
   myHistory: () => request<EventHistoryItem[]>("/api/me/history"),
   myHistoryEvent: (eventId: string) =>
     request<EventHistoryMatch[]>(`/api/me/history/${eventId}`),

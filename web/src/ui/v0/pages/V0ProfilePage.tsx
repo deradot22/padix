@@ -1,16 +1,18 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { api, EventHistoryItem, EventHistoryMatch, EventInviteItem, FriendsSnapshot, hasToken } from "../../../lib/api";
+import { api, EventHistoryItem, EventHistoryMatch, EventInviteItem, FriendsSnapshot, Round, TopPartner, hasToken } from "../../../lib/api";
 import { ntrpLevel } from "../../../lib/rating";
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { EditProfileDialog } from "@/components/edit-profile-dialog";
 import { Input } from "@/components/ui/input";
 import { ModalScrollArea } from "@/components/ui/modal-scroll-area";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { PlayerTooltip } from "@/components/player-tooltip";
+import { EventLeaderboard } from "@/components/event-leaderboard";
 import { RatingGraph } from "@/components/rating-graph";
 import {
   Calendar,
@@ -74,7 +76,7 @@ export function V0ProfilePage(props: { me: any; meLoaded?: boolean; onMeUpdate?:
   const [detailsTitle, setDetailsTitle] = useState<string | null>(null);
   const [detailsEventId, setDetailsEventId] = useState<string | null>(null);
   const [detailsStatsOpen, setDetailsStatsOpen] = useState(false);
-  const [detailsStats, setDetailsStats] = useState<{ id: string; name: string; points: number; avatarUrl?: string | null }[]>([]);
+  const [detailsRounds, setDetailsRounds] = useState<Round[]>([]);
   const [historyError, setHistoryError] = useState<string | null>(null);
   const [historyLoading, setHistoryLoading] = useState(true);
   const [acceptedInvites, setAcceptedInvites] = useState<Record<string, boolean>>({});
@@ -82,12 +84,27 @@ export function V0ProfilePage(props: { me: any; meLoaded?: boolean; onMeUpdate?:
   const [avatar, setAvatar] = useState<string | null>(null);
   const [info, setInfo] = useState<string | null>(null);
   const [idCopied, setIdCopied] = useState(false);
-  const [profileTab, setProfileTab] = useState<"graph" | "history" | "friends" | "invites">("history");
+  const [profileTab, setProfileTab] = useState<"graph" | "history" | "friends" | "invites" | "partners">("history");
+  const [partners, setPartners] = useState<TopPartner[] | null>(null);
+  const [partnersLoading, setPartnersLoading] = useState(false);
+  const [partnersError, setPartnersError] = useState<string | null>(null);
   const [ratingHistory, setRatingHistory] = useState<{ date: string; rating: number; delta: number | null }[]>([]);
   const [ratingHistoryLoaded, setRatingHistoryLoaded] = useState(false);
   const [invitesDetailsLoaded, setInvitesDetailsLoaded] = useState(false);
   const [editGameOpen, setEditGameOpen] = useState(false);
   const [editGameEventId, setEditGameEventId] = useState<string | null>(null);
+  const [editProfileOpen, setEditProfileOpen] = useState(false);
+
+  // Блокируем прокрутку фона, пока открыта модалка деталей игры: это кастомный
+  // fixed-оверлей, который (в отличие от Radix Dialog) не лочит body сам.
+  useEffect(() => {
+    if (!details) return;
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = prev;
+    };
+  }, [details]);
 
   useEffect(() => {
     if (!props.meLoaded) return;
@@ -203,6 +220,20 @@ export function V0ProfilePage(props: { me: any; meLoaded?: boolean; onMeUpdate?:
     return () => { cancelled = true; };
   }, [props.me?.playerId]);
 
+  useEffect(() => {
+    // Лучших напарников грузим лениво — только при открытии вкладки «Напарники».
+    if (profileTab !== "partners" || partners !== null || !props.me?.playerId) return;
+    let cancelled = false;
+    setPartnersLoading(true);
+    setPartnersError(null);
+    api
+      .topPartners(props.me.playerId, 3)
+      .then((d) => { if (!cancelled) setPartners(d); })
+      .catch((e: any) => { if (!cancelled) setPartnersError(e?.message ?? "Ошибка"); })
+      .finally(() => { if (!cancelled) setPartnersLoading(false); });
+    return () => { cancelled = true; };
+  }, [profileTab, partners, props.me?.playerId]);
+
   const historyContent = useMemo(() => {
     if (historyLoading) return <div className="text-sm text-muted-foreground">Загрузка…</div>;
     if (historyError)
@@ -240,7 +271,7 @@ export function V0ProfilePage(props: { me: any; meLoaded?: boolean; onMeUpdate?:
                     setDetails(res);
                     setDetailsEventId(it.eventId);
                     setDetailsStatsOpen(false);
-                    setDetailsStats([]);
+                    setDetailsRounds([]);
                     setDetailsTitle(it.eventTitle);
                   } catch (err: any) {
                     setHistoryError(err?.message ?? "Ошибка");
@@ -381,7 +412,19 @@ export function V0ProfilePage(props: { me: any; meLoaded?: boolean; onMeUpdate?:
                   )}
                 </div>
                 <div className="relative top-3 pb-1">
-                  <h2 className="text-2xl md:text-3xl font-bold">{viewMe.name}</h2>
+                  <div className="flex items-center gap-2">
+                    <h2 className="text-2xl md:text-3xl font-bold">{viewMe.name}</h2>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-8 w-8 text-muted-foreground hover:text-foreground"
+                      onClick={() => setEditProfileOpen(true)}
+                      aria-label="Редактировать профиль"
+                      title="Редактировать профиль"
+                    >
+                      <Pencil className="h-4 w-4" />
+                    </Button>
+                  </div>
                   <p className="flex items-center gap-2 text-muted-foreground mt-1">
                     <Mail className="h-4 w-4" />
                     {viewMe.email}
@@ -577,6 +620,14 @@ export function V0ProfilePage(props: { me: any; meLoaded?: boolean; onMeUpdate?:
                 <Gamepad2 className="h-4 w-4 shrink-0" />
                 <span>Приглашения</span>
                 {invitesCount > 0 && <span className="hidden tabular-nums sm:inline">({invitesCount})</span>}
+              </button>
+              <button
+                type="button"
+                onClick={() => setProfileTab("partners")}
+                className={tabBtn(profileTab === "partners")}
+              >
+                <Users2 className="h-4 w-4 shrink-0" />
+                <span>Напарники</span>
               </button>
             </div>
           );
@@ -879,77 +930,115 @@ export function V0ProfilePage(props: { me: any; meLoaded?: boolean; onMeUpdate?:
             <CardContent>{historyContent}</CardContent>
           </>
         )}
+
+        {profileTab === "partners" && (
+          <>
+            <CardHeader className="pb-4">
+              <CardTitle className="flex items-center gap-2">
+                <Users2 className="h-5 w-5 text-primary" />
+                Лучшие напарники
+              </CardTitle>
+              <CardDescription>С кем ты чаще всего побеждаешь</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-2">
+            {partnersLoading ? (
+              <div className="text-sm text-muted-foreground">Загрузка…</div>
+            ) : partnersError ? (
+              <div className="rounded-lg border border-destructive/30 bg-destructive/10 p-3 text-sm">
+                Не удалось загрузить: {partnersError}
+              </div>
+            ) : !partners?.length ? (
+              <div className="text-sm text-muted-foreground">Пока недостаточно игр.</div>
+            ) : (
+              partners.map((p, i) => (
+                <div
+                  key={p.player.id}
+                  className="flex items-center gap-3 rounded-lg bg-secondary/50 p-2 px-3"
+                >
+                  <span className="w-5 shrink-0 text-center text-sm font-bold text-muted-foreground tabular-nums">
+                    {i + 1}
+                  </span>
+                  <div className="h-10 w-10 shrink-0 rounded-full bg-secondary/60 border border-border overflow-hidden flex items-center justify-center text-sm font-semibold">
+                    {p.player.avatarUrl ? (
+                      <img src={p.player.avatarUrl} alt="" className="h-full w-full object-cover" />
+                    ) : (
+                      p.player.name?.trim().split(/\s+/).slice(0, 2).map((w) => w[0]?.toUpperCase()).join("") || "?"
+                    )}
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm font-medium truncate">{p.player.name}</p>
+                    <p className="text-xs text-muted-foreground">
+                      {p.gamesTogether} игр, {p.winsTogether} побед, {Math.round(p.winRate * 100)}% wr
+                    </p>
+                  </div>
+                </div>
+              ))
+            )}
+          </CardContent>
+          </>
+        )}
         </Card>
 
         {details ? (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-6" onClick={() => { setDetails(null); setDetailsStatsOpen(false); }}>
-            <ModalScrollArea className="w-full max-w-5xl max-h-[90dvh] overflow-y-auto rounded-xl border border-border bg-card p-6" onClick={(e) => e.stopPropagation()}>
-              <div className="flex items-start justify-between gap-3">
-                <div>
-                  <div className="text-lg font-semibold">{detailsTitle}</div>
-                  {details?.[0]?.eventStartTime ? (
-                    <div className="text-sm text-muted-foreground">
-                      {details[0].eventStartTime.slice(0, 5)}
-                      {details[0].eventEndTime ? `–${details[0].eventEndTime.slice(0, 5)}` : ""}
-                    </div>
-                  ) : null}
-                  {details?.[0]?.eventDate ? (
-                    <div className="text-sm text-muted-foreground">{details[0].eventDate}</div>
-                  ) : null}
-                </div>
-                <div className="flex items-center gap-2 shrink-0">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => {
-                      setEditGameEventId(detailsEventId);
-                      setEditGameOpen(true);
-                    }}
-                  >
-                    <Pencil className="h-4 w-4 mr-1.5" />
-                    Редактировать счет
-                  </Button>
-                  <Button variant="outline" size="sm" onClick={() => { setDetails(null); setDetailsStatsOpen(false); }}>
-                    Закрыть
-                  </Button>
+            <div
+              className="flex w-full max-w-5xl max-h-[90dvh] flex-col overflow-hidden rounded-xl border border-border bg-card"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="shrink-0 border-b border-border px-4 py-3 sm:px-6 sm:py-4">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <div className="truncate text-lg font-semibold">{detailsTitle}</div>
+                    {details?.[0]?.eventStartTime ? (
+                      <div className="text-sm text-muted-foreground">
+                        {details[0].eventStartTime.slice(0, 5)}
+                        {details[0].eventEndTime ? `–${details[0].eventEndTime.slice(0, 5)}` : ""}
+                      </div>
+                    ) : null}
+                    {details?.[0]?.eventDate ? (
+                      <div className="text-sm text-muted-foreground">{details[0].eventDate}</div>
+                    ) : null}
+                  </div>
+                  <div className="flex items-center gap-2 shrink-0">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => {
+                        setEditGameEventId(detailsEventId);
+                        setEditGameOpen(true);
+                      }}
+                    >
+                      <Pencil className="h-4 w-4 sm:mr-1.5" />
+                      <span className="hidden sm:inline">Редактировать счет</span>
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="icon"
+                      aria-label="Закрыть"
+                      onClick={() => { setDetails(null); setDetailsStatsOpen(false); }}
+                    >
+                      <X className="h-4 w-4" />
+                    </Button>
+                  </div>
                 </div>
               </div>
+              <div className="flex-1 overflow-y-auto px-4 py-4 sm:px-6" style={{ scrollbarWidth: "none" }}>
               <Button
                 variant="secondary"
-                className="w-full mt-3"
+                className="w-full"
                 onClick={async () => {
                   if (detailsStatsOpen) {
                     setDetailsStatsOpen(false);
                     return;
                   }
-                  if (detailsStats.length > 0) {
+                  if (detailsRounds.length > 0) {
                     setDetailsStatsOpen(true);
                     return;
                   }
                   if (!detailsEventId) return;
                   try {
                     const d = await api.getEventDetails(detailsEventId);
-                    const totals = new Map<string, { id: string; name: string; points: number; avatarUrl?: string | null }>();
-                    d.rounds.flatMap((r: any) => r.matches).forEach((m: any) => {
-                      const score = m.score;
-                      if (!score || score.mode !== "POINTS") return;
-                      const ptsA = score.points?.teamAPoints ?? 0;
-                      const ptsB = score.points?.teamBPoints ?? 0;
-                      m.teamA.forEach((p: any) => {
-                        if (!p?.id) return;
-                        const row = totals.get(p.id) ?? { id: p.id, name: p.name, points: 0, avatarUrl: p.avatarUrl };
-                        row.points += ptsA;
-                        totals.set(p.id, row);
-                      });
-                      m.teamB.forEach((p: any) => {
-                        if (!p?.id) return;
-                        const row = totals.get(p.id) ?? { id: p.id, name: p.name, points: 0, avatarUrl: p.avatarUrl };
-                        row.points += ptsB;
-                        totals.set(p.id, row);
-                      });
-                    });
-                    const rows = Array.from(totals.values()).sort((a, b) => b.points - a.points || a.name.localeCompare(b.name));
-                    setDetailsStats(rows);
+                    setDetailsRounds(d.rounds ?? []);
                     setDetailsStatsOpen(true);
                   } catch {}
                 }}
@@ -958,27 +1047,8 @@ export function V0ProfilePage(props: { me: any; meLoaded?: boolean; onMeUpdate?:
                 Статистика
               </Button>
 
-              {detailsStatsOpen && detailsStats.length > 0 ? (
-                <div className="mt-4 space-y-2">
-                  {detailsStats.map((row) => (
-                    <div
-                      key={row.id}
-                      className="flex items-center justify-between rounded-md border border-border/60 bg-secondary/40 px-3 py-2"
-                    >
-                      <div className="flex items-center gap-2 min-w-0">
-                        <div className="h-6 w-6 shrink-0 rounded-full bg-secondary/60 border border-border overflow-hidden flex items-center justify-center text-[10px] font-semibold">
-                          {row.avatarUrl ? (
-                            <img src={row.avatarUrl} alt="" className="h-full w-full object-cover" />
-                          ) : (
-                            row.name?.[0]?.toUpperCase() ?? "?"
-                          )}
-                        </div>
-                        <span className="text-sm font-medium truncate">{row.name}</span>
-                      </div>
-                      <div className="text-sm font-semibold shrink-0 ml-2">{row.points}</div>
-                    </div>
-                  ))}
-                </div>
+              {detailsStatsOpen && detailsRounds.length > 0 ? (
+                <EventLeaderboard rounds={detailsRounds} className="mt-4" />
               ) : null}
 
               <div className="mt-4 hidden sm:block overflow-x-auto">
@@ -1102,7 +1172,8 @@ export function V0ProfilePage(props: { me: any; meLoaded?: boolean; onMeUpdate?:
                   );
                 })}
               </div>
-            </ModalScrollArea>
+            </div>
+            </div>
           </div>
         ) : null}
 
@@ -1125,6 +1196,16 @@ export function V0ProfilePage(props: { me: any; meLoaded?: boolean; onMeUpdate?:
             }}
           />
         ) : null}
+
+        <EditProfileDialog
+          open={editProfileOpen}
+          onOpenChange={setEditProfileOpen}
+          me={viewMe}
+          onSaved={(updated) => {
+            setMeLive(updated);
+            props.onMeUpdate?.(updated);
+          }}
+        />
       </div>
     </TooltipProvider>
   );

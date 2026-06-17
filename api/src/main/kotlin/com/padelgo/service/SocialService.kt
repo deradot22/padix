@@ -78,7 +78,7 @@ class SocialService(
                 ntrp = player?.ntrp ?: "1.0",
                 gamesPlayed = player?.gamesPlayed ?: 0,
                 calibrationEventsRemaining = user.calibrationEventsRemaining,
-                avatarUrl = player?.avatarUrl
+                avatarUrl = com.padelgo.api.AvatarLinks.publicUrl(player?.id, player?.avatarUrl)
             )
         }.sortedBy { it.name.lowercase() }
 
@@ -207,7 +207,7 @@ class SocialService(
             FriendRequestItem(
                 publicId = formatPublicId(user.publicId),
                 name = player?.name ?: user.email ?: "Пользователь",
-                avatarUrl = player?.avatarUrl
+                avatarUrl = com.padelgo.api.AvatarLinks.publicUrl(player?.id, player?.avatarUrl)
             )
         }.sortedBy { it.name.lowercase() }
     }

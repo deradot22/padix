@@ -24,6 +24,10 @@ logging:
 
 app:
   public-base-url: ${APP_PUBLIC_BASE_URL:http://localhost:8083}
+  # Используется bot → api направлением (callback «Зарегистрироваться»).
+  # В compose: http://api:8080. В прод: внутренний URL Render-сервиса api.
+  api:
+    base-url: ${APP_API_BASE_URL:}
   telegram:
     enabled: ${APP_TELEGRAM_ENABLED:false}
     bot-token: ${TELEGRAM_BOT_TOKEN:}

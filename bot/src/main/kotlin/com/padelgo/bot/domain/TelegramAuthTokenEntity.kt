@@ -52,6 +52,15 @@ class BotTelegramAuthToken(
 
     @Column(name = "created_at")
     var createdAt: Instant? = null,
+
+    /**
+     * bot-link flow: какому юзеру привязать TG. Если != null — бот после approve
+     * зовёт api `/api/internal/bot/finalize-link` для немедленной линковки
+     * (чтобы юзер мог сразу регистрироваться на игры через callback в группе,
+     * не возвращаясь на сайт).
+     */
+    @Column(name = "link_target_user_id")
+    var linkTargetUserId: java.util.UUID? = null,
 )
 
 interface BotTelegramAuthTokenRepository : JpaRepository<BotTelegramAuthToken, String>

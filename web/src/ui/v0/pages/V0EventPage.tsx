@@ -4,6 +4,7 @@ import { AlertTriangle, ArrowLeft, Check, ChevronDown, Clock, Globe, Lock, MapPi
 import { useNavigate } from "react-router-dom";
 import { api, BalancePreview, EventDetails, FriendItem, FriendsSnapshot, Match } from "../../../lib/api";
 import { PlayerTooltip } from "@/components/player-tooltip";
+import { EventLeaderboard } from "@/components/event-leaderboard";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { ModalScrollArea } from "@/components/ui/modal-scroll-area";
@@ -535,34 +536,6 @@ export function V0EventPage(props: { me: any; meLoaded?: boolean }) {
     });
   }, [data]);
 
-  const statsRows = useMemo(() => {
-    if (!data?.rounds?.length) return [];
-    const totals = new Map<string, { id: string; name: string; points: number; avatarUrl?: string | null }>();
-
-    data.rounds.flatMap((r) => r.matches).forEach((m) => {
-      const score = m.score;
-      if (!score) return;
-      const mode = score.mode;
-      if (mode !== "POINTS") return;
-      const pointsA = score.points?.teamAPoints ?? 0;
-      const pointsB = score.points?.teamBPoints ?? 0;
-
-      m.teamA.forEach((p) => {
-        if (!p?.id) return;
-        const row = totals.get(p.id) ?? { id: p.id, name: p.name, points: 0, avatarUrl: p.avatarUrl };
-        row.points += pointsA;
-        totals.set(p.id, row);
-      });
-      m.teamB.forEach((p) => {
-        if (!p?.id) return;
-        const row = totals.get(p.id) ?? { id: p.id, name: p.name, points: 0, avatarUrl: p.avatarUrl };
-        row.points += pointsB;
-        totals.set(p.id, row);
-      });
-    });
-
-    return Array.from(totals.values()).sort((a, b) => b.points - a.points || a.name.localeCompare(b.name));
-  }, [data]);
 
   const content = useMemo(() => {
     if (!props.me) {
@@ -2271,7 +2244,10 @@ export function V0EventPage(props: { me: any; meLoaded?: boolean }) {
         <Dialog open={statsOpen} onOpenChange={setStatsOpen}>
           <DialogContent className="sm:max-w-lg">
             <DialogHeader>
-              <DialogTitle>Таблица лидеров</DialogTitle>
+              <DialogTitle className="flex items-center gap-2">
+                <Trophy className="h-5 w-5 text-amber-500" />
+                Таблица лидеров
+              </DialogTitle>
               {finalRoundLocked && (data.rounds?.length ?? 0) > 0 && (
                 <p className="text-sm text-muted-foreground flex items-center gap-1.5 mt-1">
                   <Trophy className="h-4 w-4 text-amber-500" />
@@ -2279,32 +2255,7 @@ export function V0EventPage(props: { me: any; meLoaded?: boolean }) {
                 </p>
               )}
             </DialogHeader>
-            {statsRows.length === 0 ? (
-              <div className="text-sm text-muted-foreground">
-                Нет данных по очкам. (Раундов: {data?.rounds?.length}, Матчей: {data?.rounds?.flatMap(r => r.matches).length})
-              </div>
-            ) : (
-              <div className="space-y-2">
-                {statsRows.map((row) => (
-                  <div
-                    key={row.id}
-                    className="flex items-center justify-between rounded-md border border-border/60 bg-secondary/40 px-3 py-2"
-                  >
-                    <div className="flex items-center gap-2 min-w-0">
-                      <div className="h-6 w-6 shrink-0 rounded-full bg-secondary/60 border border-border overflow-hidden flex items-center justify-center text-[10px] font-semibold">
-                        {row.avatarUrl ? (
-                          <img src={row.avatarUrl} alt="" className="h-full w-full object-cover" />
-                        ) : (
-                          row.name?.[0]?.toUpperCase() ?? "?"
-                        )}
-                      </div>
-                      <span className="text-sm font-medium truncate">{row.name}</span>
-                    </div>
-                    <div className="text-sm font-semibold shrink-0 ml-2">{row.points}</div>
-                  </div>
-                ))}
-              </div>
-            )}
+            <EventLeaderboard rounds={data.rounds ?? []} />
           </DialogContent>
         </Dialog>
 
@@ -2338,7 +2289,6 @@ export function V0EventPage(props: { me: any; meLoaded?: boolean }) {
     finalRoundLocked,
     roundsOpen,
     statsOpen,
-    statsRows,
     expandedRoundId,
     activeMatchId,
     activeTeam,

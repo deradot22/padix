@@ -32,7 +32,8 @@ private val logger = LoggerFactory.getLogger("EventController")
 @RequestMapping("/api/players")
 class PlayerController(
     private val service: EventService,
-    private val userRepo: com.padelgo.auth.UserRepository
+    private val userRepo: com.padelgo.auth.UserRepository,
+    private val playerRepo: PlayerRepository
 ) {
     @Operation(
         summary = "Список игроков по рейтингу (убывание)",
@@ -49,6 +50,60 @@ class PlayerController(
             PlayerResponse.from(p, calibration, publicId)
         }
     }
+
+    @Operation(
+        summary = "Аватар игрока (картинкой)",
+        description = "Отдаёт аватар игрока как изображение с кешированием. Если аватар хранится как " +
+            "base64 data-URL — декодирует в байты; если это внешняя ссылка — редиректит на неё; иначе 404. " +
+            "Публичный эндпоинт (рендерится тегом <img>), чтобы списочные JSON-ответы не таскали base64."
+    )
+    @GetMapping("/{id}/avatar")
+    fun avatar(@PathVariable id: UUID): org.springframework.http.ResponseEntity<ByteArray> {
+        val player = playerRepo.findById(id).orElse(null)
+            ?: return org.springframework.http.ResponseEntity.status(org.springframework.http.HttpStatus.NOT_FOUND).build()
+        val url = player.avatarUrl
+            ?: return org.springframework.http.ResponseEntity.status(org.springframework.http.HttpStatus.NOT_FOUND).build()
+        if (!url.startsWith("data:")) {
+            // Внешний URL (dicebear/telegram/...) — редиректим, чтобы фронт мог единообразно
+            // указывать на /avatar для любого игрока.
+            return org.springframework.http.ResponseEntity.status(org.springframework.http.HttpStatus.FOUND)
+                .location(java.net.URI.create(url))
+                .build()
+        }
+        val comma = url.indexOf(',')
+        if (comma < 0) return org.springframework.http.ResponseEntity.status(org.springframework.http.HttpStatus.NOT_FOUND).build()
+        // "data:image/jpeg;base64,...."  ->  mime = image/jpeg
+        val mime = url.substring("data:".length, comma).substringBefore(";").ifBlank { "image/jpeg" }
+        val bytes = try {
+            java.util.Base64.getDecoder().decode(url.substring(comma + 1))
+        } catch (e: IllegalArgumentException) {
+            return org.springframework.http.ResponseEntity.status(org.springframework.http.HttpStatus.NOT_FOUND).build()
+        }
+        val etag = "\"" + Integer.toHexString(bytes.contentHashCode()) + "\""
+        return org.springframework.http.ResponseEntity.ok()
+            .contentType(org.springframework.http.MediaType.parseMediaType(mime))
+            .cacheControl(org.springframework.http.CacheControl.maxAge(java.time.Duration.ofDays(7)).cachePublic())
+            .eTag(etag)
+            .body(bytes)
+    }
+
+    @Operation(
+        summary = "Лучшие напарники игрока (ТОП по балансу побед и наигранности)",
+        description = "Партнёры, с которыми игрок чаще всего и успешнее всего играл, отсортированные по полю score — " +
+            "баланс качества и наигранности (winsTogether − поражения×0.5 + log2(games+1)): " +
+            "частые успешные напарники стоят выше редких, но частые проигрышные наверх не лезут. " +
+            "Учитываются только сыгранные матчи (с зафиксированным счётом). " +
+            "В выдачу попадают только откалиброванные напарники с минимум " +
+            "${com.padelgo.service.EventService.MIN_GAMES_TOGETHER} совместными играми, " +
+            "с которыми была хотя бы одна совместная игра за последние " +
+            "${com.padelgo.service.EventService.RECENT_DAYS} дней."
+    )
+    @GetMapping("/{id}/top-partners")
+    fun topPartners(
+        @PathVariable id: UUID,
+        @Parameter(description = "Сколько напарников вернуть (ТОП-N), по умолчанию 3")
+        @org.springframework.web.bind.annotation.RequestParam(required = false, defaultValue = "3") limit: Int
+    ): List<TopPartnerResponse> = service.getTopPartners(id, limit)
 }
 
 @Tag(name = "Events", description = "Управление играми: создание, регистрация, старт, счёт, финиш")

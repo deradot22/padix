@@ -63,6 +63,82 @@ class TelegramBotLoginService(
     }
 
     /**
+     * Шаг 1 для bot-link flow: юзер уже залогинен в Padix, нажал «Привязать Telegram».
+     * Создаём токен и сразу помечаем link_target_user_id = currentUserId. Дальше всё как
+     * в /bot-login: юзер тапает Start в боте → бот вызывает [registerStart] → юзер
+     * approve'ает → фронт зовёт [completeLink] (вместо [complete]).
+     */
+    @Transactional
+    fun startLink(userId: UUID): BotLoginStartResult {
+        if (botUsername.isBlank()) {
+            throw ApiException(HttpStatus.SERVICE_UNAVAILABLE, "Telegram bot login is not configured")
+        }
+        val token = randomToken()
+        tokenRepo.save(
+            TelegramAuthToken(
+                token = token,
+                status = TelegramAuthTokenStatus.PENDING.name,
+                expiresAt = Instant.now().plus(5, ChronoUnit.MINUTES),
+                linkTargetUserId = userId,
+            )
+        )
+        return BotLoginStartResult(
+            token = token,
+            deepLink = "https://t.me/$botUsername?start=auth_$token",
+            botUsername = botUsername,
+        )
+    }
+
+    /**
+     * Шаг 6 для bot-link flow: фронт зовёт ПОСЛЕ APPROVED. Линкует telegram_user_id к
+     * существующему юзеру (currentUserId из JWT). Защита: токен должен иметь
+     * link_target_user_id == currentUserId, иначе кидаем 403 (защита от перехвата токена).
+     * Не создаёт нового юзера; не возвращает JWT (юзер уже залогинен).
+     */
+    @Transactional
+    fun completeLink(token: String, currentUserId: UUID) {
+        val tok = tokenRepo.findById(token).orElseThrow {
+            ApiException(HttpStatus.NOT_FOUND, "Token not found")
+        }
+        if (tok.consumedAt != null) {
+            throw ApiException(HttpStatus.CONFLICT, "Token already used")
+        }
+        if (tok.status != TelegramAuthTokenStatus.APPROVED.name) {
+            throw ApiException(HttpStatus.CONFLICT, "Token not approved yet (status=${tok.status})")
+        }
+        if (tok.expiresAt.isBefore(Instant.now())) {
+            throw ApiException(HttpStatus.GONE, "Token expired")
+        }
+        val targetUserId = tok.linkTargetUserId
+            ?: throw ApiException(HttpStatus.CONFLICT, "Token is not a link-token")
+        if (targetUserId != currentUserId) {
+            throw ApiException(HttpStatus.FORBIDDEN, "Token belongs to a different user")
+        }
+        val tgUserId = tok.telegramUserId
+            ?: throw ApiException(HttpStatus.CONFLICT, "Missing telegram user data")
+
+        val user = users.findById(currentUserId).orElseThrow {
+            ApiException(HttpStatus.NOT_FOUND, "User not found")
+        }
+        // У этого юзера уже привязан другой TG?
+        if (user.telegramUserId != null && user.telegramUserId != tgUserId) {
+            throw ApiException(HttpStatus.CONFLICT, "К аккаунту уже привязан другой Telegram. Сначала отвяжите его.")
+        }
+        // Этот TG уже привязан к другому юзеру?
+        val takenBy = users.findByTelegramUserId(tgUserId)
+        if (takenBy != null && takenBy.id != user.id) {
+            throw ApiException(HttpStatus.CONFLICT, "Этот Telegram уже привязан к другому аккаунту Padix")
+        }
+        user.telegramUserId = tgUserId
+        user.telegramUsername = tok.telegramUsername ?: user.telegramUsername
+        user.telegramPhotoUrl = tok.photoUrl ?: user.telegramPhotoUrl
+        users.save(user)
+
+        tok.consumedAt = Instant.now()
+        tokenRepo.save(tok)
+    }
+
+    /**
      * Шаг 4: бот получил /start, теперь знает кто пытается войти. Помечаем токен AWAITING_APPROVAL
      * и сохраняем данные юзера (но JWT пока не выдаём — ждём явного подтверждения).
      * Вызывается ботом по internal-api.
@@ -96,11 +172,33 @@ class TelegramBotLoginService(
         if (tok.expiresAt.isBefore(Instant.now())) {
             throw ApiException(HttpStatus.GONE, "Token expired")
         }
-        if (tok.telegramUserId == null) {
-            throw ApiException(HttpStatus.CONFLICT, "Token not bound to a Telegram user yet")
-        }
+        val tgUserId = tok.telegramUserId
+            ?: throw ApiException(HttpStatus.CONFLICT, "Token not bound to a Telegram user yet")
         tok.status = TelegramAuthTokenStatus.APPROVED.name
         tok.approvedAt = Instant.now()
+
+        // bot-link flow: если токен помечен link_target_user_id — линкуем СРАЗУ, не
+        // дожидаясь возвращения юзера на сайт. Сценарий с iPhone: юзер approve'ает в
+        // боте и сразу идёт в чат с играми тапнуть «📝 Зарегистрироваться»; если бы
+        // линковка ждала /bot-link/complete на фронте — callback ловил бы NOT_LINKED.
+        // /bot-link/complete остаётся идемпотентным (повторный вызов = no-op, линк уже
+        // на месте) — чтобы waiting-страница на сайте могла нормально завершиться.
+        val linkTarget = tok.linkTargetUserId
+        if (linkTarget != null && tok.consumedAt == null) {
+            val user = users.findById(linkTarget).orElse(null)
+            // Best-effort: если уже привязан или конфликт — оставляем как есть и не падаем.
+            // Точные проверки и user-facing ошибки делает completeLink на фронте.
+            if (user != null &&
+                (user.telegramUserId == null || user.telegramUserId == tgUserId) &&
+                users.findByTelegramUserId(tgUserId).let { it == null || it.id == user.id }
+            ) {
+                user.telegramUserId = tgUserId
+                user.telegramUsername = tok.telegramUsername ?: user.telegramUsername
+                user.telegramPhotoUrl = tok.photoUrl ?: user.telegramPhotoUrl
+                users.save(user)
+                log.info("Eager link: telegram_user_id={} → user={}", tgUserId, user.id)
+            }
+        }
         return tokenRepo.save(tok)
     }
 

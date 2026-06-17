@@ -56,10 +56,56 @@ data class PlayerResponse(
             gamesPlayed = p.gamesPlayed,
             calibrationEventsRemaining = calibrationEventsRemaining,
             publicId = publicId,
-            avatarUrl = p.avatarUrl
+            avatarUrl = AvatarLinks.publicUrl(p.id, p.avatarUrl)
         )
     }
 }
+
+@Schema(description = "Игрок (минимальная информация для списков/виджетов)")
+data class PlayerShort(
+    @Schema(description = "Внутренний UUID игрока")
+    val id: UUID,
+
+    @Schema(description = "Отображаемое имя")
+    val name: String,
+
+    @Schema(description = "Рейтинг ELO игрока")
+    val rating: Int,
+
+    @Schema(description = "URL аватара или null")
+    val avatarUrl: String? = null
+) {
+    companion object {
+        fun from(p: Player) = PlayerShort(
+            id = p.id!!,
+            name = p.name,
+            rating = p.rating,
+            avatarUrl = AvatarLinks.publicUrl(p.id, p.avatarUrl)
+        )
+    }
+}
+
+@Schema(description = "Лучший напарник игрока: агрегированная статистика совместных игр")
+data class TopPartnerResponse(
+    @Schema(description = "Напарник")
+    val player: PlayerShort,
+
+    @Schema(description = "Сколько матчей сыграно вместе (только с зафиксированным счётом)")
+    val gamesTogether: Int,
+
+    @Schema(description = "Сколько из них выиграно вместе")
+    val winsTogether: Int,
+
+    @Schema(description = "Доля побед: winsTogether / gamesTogether, от 0.0 до 1.0")
+    val winRate: Double,
+
+    @Schema(
+        description = "Ранжирующий скор — баланс качества и наигранности: " +
+            "winsTogether − поражения×0.5 + log2(gamesTogether+1). " +
+            "Частые успешные напарники стоят выше редких; используется для сортировки вместо сырого winRate."
+    )
+    val score: Double
+)
 
 @Schema(description = "Запрос на создание игры")
 data class CreateEventRequest(

@@ -99,6 +99,20 @@ data class TelegramCancellationOriginalPost(
     val pinnedMessageId: Long?
 )
 
+/** Результат backfill-операции `repinAllUpcoming`. */
+data class RepinUpcomingResult(
+    val pinned: Int,
+    val skipped: Int,
+    val reorderedChats: Int,
+)
+
+/** Результат backfill-операции `refreshUpcomingKeyboards`. */
+data class RefreshKeyboardsResult(
+    val edited: Int,
+    val skipped: Int,
+    val failed: Int,
+)
+
 @Service
 class TelegramService(
     private val client: TelegramClient,
@@ -112,6 +126,7 @@ class TelegramService(
     private val eventRepo: com.padelgo.bot.repo.BotEventRepository,
     private val regRepo: com.padelgo.bot.repo.BotRegistrationRepository,
     private val authTokenRepo: com.padelgo.bot.domain.BotTelegramAuthTokenRepository,
+    private val apiClient: ApiClient,
 ) {
     private val log = LoggerFactory.getLogger(TelegramService::class.java)
     private val random = SecureRandom()
@@ -249,14 +264,16 @@ class TelegramService(
 
     @Transactional
     fun handleUpdate(update: TgUpdate) {
-        // 1) Inline-кнопки бот-логина — отдельный путь без message.
+        // 1) Inline-кнопки — отдельный путь без message.
         update.callbackQuery?.let { cb ->
             val data = cb.data.orEmpty()
-            if (data.startsWith("padix_auth:")) {
-                handleAuthCallback(cb, data)
-            } else {
-                // Неизвестный callback — отвечаем чтобы спиннер у юзера не висел.
-                runCatching { client.answerCallbackQuery(cb.id) }
+            when {
+                data.startsWith("padix_auth:") -> handleAuthCallback(cb, data)
+                data.startsWith("reg:") -> handleRegisterCallback(cb, data)
+                else -> {
+                    // Неизвестный callback — отвечаем чтобы спиннер у юзера не висел.
+                    runCatching { client.answerCallbackQuery(cb.id) }
+                }
             }
             return
         }
@@ -413,6 +430,34 @@ class TelegramService(
         client.sendMessage(chat.id, text, replyMarkup = markup)
     }
 
+    /**
+     * Inline-кнопка «📝 Зарегистрироваться» из CREATED-анонса. Формат `reg:<eventId>`.
+     * Идём в api `/api/internal/bot/register-user` с tg user id и event id; api по
+     * `users.telegram_user_id` находит padix-юзера и регистрирует.
+     *
+     * Сам бот сообщения с CTA не меняет — после регистрации api вызовет
+     * notifyRosterChanged, и бот через `handleRosterChanged` отредактирует исходное
+     * CREATED-сообщение (счётчик 2/4 → 3/4).
+     */
+    private fun handleRegisterCallback(cb: TgCallbackQuery, data: String) {
+        val rawEventId = data.removePrefix("reg:")
+        val eventId = runCatching { UUID.fromString(rawEventId) }.getOrNull()
+        if (eventId == null) {
+            runCatching { client.answerCallbackQuery(cb.id, "Некорректная игра") }
+            return
+        }
+        val result = apiClient.registerUser(cb.from.id, eventId)
+        runCatching {
+            // Для NOT_LINKED показываем alert (модальный popup) с инструкцией.
+            // Остальное (OK/ALREADY/FULL/...) — обычный тост сверху.
+            client.answerCallbackQuery(
+                callbackQueryId = cb.id,
+                text = result.message,
+                showAlert = result.status == "NOT_LINKED"
+            )
+        }
+    }
+
     /** Бот-логин шаг 2: юзер нажал inline-кнопку. */
     @Transactional
     private fun handleAuthCallback(cb: TgCallbackQuery, data: String) {
@@ -448,6 +493,14 @@ class TelegramService(
                 tok.status = "APPROVED"
                 tok.approvedAt = now
                 authTokenRepo.save(tok)
+                // bot-link flow: если токен помечен link_target_user_id, сразу зовём api
+                // финализировать линковку — чтобы юзер мог регистрироваться на игры через
+                // callback в группе, не возвращаясь на сайт. Best-effort: если api недоступен
+                // или конфликт — просто продолжаем (waiting-страница на сайте всё равно
+                // дозвонится через completeLink).
+                if (tok.linkTargetUserId != null) {
+                    runCatching { apiClient.finalizeLink(token) }
+                }
                 newText = "✅ <b>Вход подтверждён</b>\n\nВернитесь на padix.club — вы уже залогинены."
                 tooltipText = "Готово"
             }
@@ -537,7 +590,7 @@ class TelegramService(
             .filter { it.chatType != TelegramChatType.PRIVATE.name }
         if (chats.isEmpty()) return 0
 
-        val cta = cta(eventId, "📝 Зарегистрироваться")
+        val cta = registerCta(eventId)
         val text = renderEventCreated(event, registeredCount) + cta.textSuffix
         // Закрепляем анонс только если включено. Приоритет: per-series override → глобальный.
         // Перед pin снимаем предыдущий pin Padix в каждом чате.
@@ -580,7 +633,7 @@ class TelegramService(
         val posts = postRepo.findAllByEventId(eventId)
         if (posts.isNotEmpty()) {
             val chatById = chatRepo.findAllByUserIdOrderByLinkedAtAsc(ownerUserId).associateBy { it.id!! }
-            val ctaCreated = cta(eventId, "📝 Зарегистрироваться")
+            val ctaCreated = registerCta(eventId)
             val text = renderEventCreated(fullEvent, registered) + ctaCreated.textSuffix
             for (post in posts) {
                 val chat = chatById[post.telegramChatId] ?: continue
@@ -696,7 +749,7 @@ class TelegramService(
         val posts = postRepo.findAllByEventId(eventId)
         if (posts.isNotEmpty()) {
             val chatById = chatRepo.findAllByUserIdOrderByLinkedAtAsc(ownerUserId).associateBy { it.id!! }
-            val ctaData = cta(eventId, "📝 Зарегистрироваться")
+            val ctaData = registerCta(eventId)
             val text = renderEventCreated(event, newCount) + ctaData.textSuffix
             for (post in posts) {
                 val chat = chatById[post.telegramChatId] ?: continue
@@ -900,6 +953,11 @@ class TelegramService(
             PinItem(msgId, startInstant)
         }.sortedBy { it.startInstant }
         if (items.size < 2) return
+        // Идём от ближнего к далёкому: ближайшая по дате игра пинится ПЕРВОЙ, т.е.
+        // становится самым ранним по времени pin'ом. В Telegram полный список pinned
+        // упорядочен по времени pin-операций (старейший pin сверху), поэтому
+        // ближайшая игра окажется ПЕРВОЙ при скролле сверху-вниз — что нужно.
+        // (Шапка чата отдельно показывает самый свежий pin = самую дальнюю игру.)
         for (item in items) {
             try {
                 client.unpinChatMessage(telegramChatId, item.msgId)
@@ -948,6 +1006,127 @@ class TelegramService(
     }
 
     /**
+     * Backfill: для всех ОТКРЫТЫХ будущих игр, у которых есть запись event_telegram_post
+     * без pin (pinned_message_id null), делаем pin (тихо: `disable_notification=true`,
+     * а служебное «Bot pinned a message» бот удалит сам в handleUpdate). После —
+     * пересортировка по дате в каждом затронутом чате. Идемпотентно: уже-закреплённые
+     * посты пропускаются. Прошедшие игры тоже пропускаются (их разруливает cleanupPastPins).
+     */
+    @Transactional
+    fun repinAllUpcoming(): RepinUpcomingResult {
+        if (!client.isConfigured()) return RepinUpcomingResult(0, 0, 0)
+        val now = Instant.now()
+        var pinned = 0
+        var skipped = 0
+        for (post in postRepo.findAll()) {
+            try {
+                if (post.pinnedMessageId != null) { skipped++; continue }
+                val eventId = post.eventId ?: continue
+                val event = eventRepo.findById(eventId).orElse(null) ?: continue
+                val tz = event.seriesId?.let { sid ->
+                    seriesRepo.findById(sid).orElse(null)?.timezone?.let { runCatching { ZoneId.of(it) }.getOrNull() }
+                } ?: ZoneId.of("UTC")
+                val endInstant = LocalDateTime.of(event.date, event.endTime).atZone(tz).toInstant()
+                if (endInstant.isBefore(now)) { skipped++; continue }
+                val chatInternalId = post.telegramChatId ?: continue
+                val tgChat = chatRepo.findById(chatInternalId).orElse(null) ?: continue
+                try {
+                    client.pinChatMessage(tgChat.chatId, post.messageId, disableNotification = true)
+                    post.pinnedMessageId = post.messageId
+                    postRepo.save(post)
+                    pinned++
+                    log.info("Backfill pinned event {} msg {} in chat {}", eventId, post.messageId, tgChat.chatId)
+                } catch (e: Exception) {
+                    log.warn("Backfill pin {} chat {} failed: {}", post.messageId, tgChat.chatId, e.message)
+                    skipped++
+                }
+            } catch (e: Exception) {
+                log.warn("repinAllUpcoming post {}: {}", post.id, e.message)
+                skipped++
+            }
+        }
+        // Перепинить по дате ВСЕ чаты с pin'ами (а не только те, где добавили новый):
+        // иначе при повторном вызове изменения сортировки не подхватятся для существующих pin'ов.
+        val allPinnedChatIds = postRepo.findAllByPinnedMessageIdIsNotNull()
+            .mapNotNull { it.telegramChatId }
+            .toSet()
+        var reorderedCount = 0
+        for (chatInternalId in allPinnedChatIds) {
+            val tgChat = chatRepo.findById(chatInternalId).orElse(null) ?: continue
+            try {
+                reorderPinsByDate(tgChat.chatId, chatInternalId)
+                reorderedCount++
+            } catch (_: Exception) { /* нестрашно */ }
+        }
+        log.info("repinAllUpcoming done: pinned={} skipped={} chats={}", pinned, skipped, reorderedCount)
+        return RepinUpcomingResult(pinned = pinned, skipped = skipped, reorderedChats = reorderedCount)
+    }
+
+    /**
+     * Backfill: переотрисовать клавиатуру у всех CREATED-постов будущих игр
+     * (callback «📝 Зарегистрироваться» + URL «🔍 Игра» вместо одиночной URL-кнопки).
+     * Текст пересобирается актуальным (renderEventCreated со свежим counter),
+     * reply_markup — registerCta. Прошедшие игры пропускаются.
+     *
+     * Используется один раз после деплоя фичи in-chat registration — чтобы старые
+     * закреплённые анонсы получили новые кнопки без пересоздания.
+     */
+    @Transactional
+    fun refreshUpcomingKeyboards(): RefreshKeyboardsResult {
+        if (!client.isConfigured()) return RefreshKeyboardsResult(0, 0, 0)
+        val now = Instant.now()
+        var edited = 0
+        var skipped = 0
+        var failed = 0
+        for (post in postRepo.findAll()) {
+            try {
+                val eventId = post.eventId
+                val chatInternalId = post.telegramChatId
+                if (eventId == null || chatInternalId == null) {
+                    skipped++
+                    continue
+                }
+                val event = eventRepo.findById(eventId).orElse(null)
+                val tgChat = chatRepo.findById(chatInternalId).orElse(null)
+                if (event == null || tgChat == null) {
+                    skipped++
+                    continue
+                }
+                // Кнопка регистрации релевантна только для открытых на регистрацию игр.
+                if (event.status != com.padelgo.bot.domain.EventStatus.OPEN_FOR_REGISTRATION) {
+                    skipped++
+                    continue
+                }
+                val tz = event.seriesId?.let { sid ->
+                    seriesRepo.findById(sid).orElse(null)?.timezone?.let { runCatching { ZoneId.of(it) }.getOrNull() }
+                } ?: ZoneId.of("UTC")
+                val endInstant = LocalDateTime.of(event.date, event.endTime).atZone(tz).toInstant()
+                if (endInstant.isBefore(now)) {
+                    skipped++
+                    continue
+                }
+
+                val capacity = event.courtsCount * 4
+                val registered = regRepo.countByEventIdAndStatus(eventId).toInt().coerceAtMost(capacity)
+                val cta = registerCta(eventId)
+                val text = renderEventCreated(event, registered) + cta.textSuffix
+                try {
+                    client.editMessageText(tgChat.chatId, post.messageId, text, replyMarkup = cta.replyMarkup)
+                    edited++
+                } catch (e: Exception) {
+                    log.warn("refreshUpcomingKeyboards edit {}/{} failed: {}", tgChat.chatId, post.messageId, e.message)
+                    failed++
+                }
+            } catch (e: Exception) {
+                log.warn("refreshUpcomingKeyboards post {}: {}", post.id, e.message)
+                failed++
+            }
+        }
+        log.info("refreshUpcomingKeyboards done: edited={} skipped={} failed={}", edited, skipped, failed)
+        return RefreshKeyboardsResult(edited = edited, skipped = skipped, failed = failed)
+    }
+
+    /**
      * CTA для сообщения: либо inline-кнопка с URL (если URL публичный), либо хвост
      * с plain-text URL. Telegram отказывается рендерить inline-кнопки с localhost / private IP
      * (Bad Request: Wrong HTTP URL), а в plain-text такие ссылки видны как кликабельные
@@ -961,6 +1140,29 @@ class TelegramService(
             Cta(TelegramInlineKeyboard.urlButton(buttonText, url), "")
         } else {
             Cta(null, "\n\n$url")
+        }
+    }
+
+    /**
+     * CTA для CREATED/edit-постов: «📝 Зарегистрироваться» как callback_data
+     * (бот сам регистрирует юзера, не открывая сайт) + «🔍 Игра» как URL для тех,
+     * кто хочет посмотреть детали в браузере. Если url не публичный (localhost) —
+     * показываем только callback-кнопку и кладём ссылку текстом.
+     */
+    private fun registerCta(eventId: UUID): Cta {
+        val url = eventUrl(eventId)
+        val callbackBtn = TelegramInlineKeyboard.Btn.Callback("📝 Зарегистрироваться", "reg:$eventId")
+        return if (isPublicHttpUrl(url)) {
+            val markup = TelegramInlineKeyboard.mixedKeyboard(listOf(
+                listOf(
+                    callbackBtn,
+                    TelegramInlineKeyboard.Btn.Url("🔍 Игра", url)
+                )
+            ))
+            Cta(markup, "")
+        } else {
+            val markup = TelegramInlineKeyboard.mixedKeyboard(listOf(listOf(callbackBtn)))
+            Cta(markup, "\n\n$url")
         }
     }
 

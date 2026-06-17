@@ -59,6 +59,40 @@ class EventService(
          * мало раундов.
          */
         const val BALANCED_TEAM_DIFF_CAP = 60
+
+        /** Минимум совместных сыгранных матчей, чтобы напарник попал в «Лучшие напарники». */
+        const val MIN_GAMES_TOGETHER = 3
+
+        /** Сколько напарников отдаём по умолчанию (ТОП-N). */
+        const val DEFAULT_TOP_PARTNERS_LIMIT = 3
+
+        /**
+         * Окно «активности»: напарник попадёт в ТОП, только если хотя бы один совместный матч
+         * сыгран за последние столько дней. Иначе старые связки (давно не играли вместе)
+         * вытесняли бы актуальных партнёров.
+         */
+        const val RECENT_DAYS = 60L
+
+        /**
+         * Ранжирующий балл напарника — баланс «качества» (доли побед) и «наигранности»
+         * (объёма совместных игр):
+         *
+         *     score = winsTogether − поражения × 0.5 + log2(gamesTogether + 1)
+         *
+         * - каждая совместная победа добавляет балл, поэтому частые успешные напарники
+         *   поднимаются выше редких (даже если у редкого выше сырой процент);
+         * - каждое поражение снимает полбалла, поэтому «много играли, но часто проигрывали»
+         *   наверх не лезет;
+         * - log2(games+1) — мягкий бонус за объём (быстро растёт на первых играх, потом плавно).
+         *
+         * Пример: 20 игр / 67% даёт больший балл, чем 9 игр / 78% — наигранность перевешивает
+         * небольшую разницу в проценте; но 30 игр / 40% остаётся внизу из-за штрафа за поражения.
+         */
+        fun partnerScore(wins: Int, games: Int): Double {
+            if (games <= 0) return 0.0
+            val losses = games - wins
+            return wins - losses * 0.5 + kotlin.math.log2((games + 1).toDouble())
+        }
     }
 
     fun getToday(date: LocalDate = LocalDate.now()): List<Event> =
@@ -1388,10 +1422,8 @@ class EventService(
     }
 
     fun getMatchesForPlayer(playerId: UUID): List<PlayerMatchHistoryItem> {
-        val allMatches = matchRepo.findAll()
-        val my = allMatches.filter { m ->
-            m.teamAPlayer1Id == playerId || m.teamAPlayer2Id == playerId || m.teamBPlayer1Id == playerId || m.teamBPlayer2Id == playerId
-        }
+        // Берём только матчи игрока (а не findAll() по всей таблице) — иначе профиль тормозит.
+        val my = matchRepo.findAllByPlayerParticipating(playerId)
         if (my.isEmpty()) return emptyList()
 
         val playerIds = my.flatMap {
@@ -1403,12 +1435,12 @@ class EventService(
         val eventIds = rounds.values.mapNotNull { it.eventId }.toSet()
         val events = eventRepo.findAllById(eventIds).associateBy { it.id!! }
 
-        val scores = my.associate { m ->
-            m.id!! to scoreRepo.findAllByMatchIdOrderBySetNumberAsc(m.id!!)
-        }
-        val draftScores = my.associate { m ->
-            m.id!! to (draftScoreRepo.findByMatchId(m.id!!)?.let { listOf(it) } ?: emptyList())
-        }
+        // Счёт и драфт-счёт по всем матчам одним запросом каждый вместо N+1 на каждый матч.
+        val matchIds = my.mapNotNull { it.id }
+        val scores = scoreRepo.findAllByMatchIdInOrderBySetNumberAsc(matchIds)
+            .groupBy { it.matchId }
+        val draftScores = draftScoreRepo.findAllByMatchIdIn(matchIds)
+            .groupBy { it.matchId }
         val ratingByMatch = ratingChangeRepo.findAllByPlayerId(playerId)
             .filter { it.matchId != null }
             .groupBy { it.matchId!! }
@@ -1428,8 +1460,8 @@ class EventService(
             val opponentText = if (isTeamA) teamB.joinToString(" + ") else teamA.joinToString(" + ")
             val myIds = if (isTeamA) teamAIds else teamBIds
             val oppIds = if (isTeamA) teamBIds else teamAIds
-            val teamPlayerInfos = myIds.mapNotNull { id -> playersById[id]?.let { MatchPlayerInfo(it.name, it.avatarUrl) } }
-            val opponentPlayerInfos = oppIds.mapNotNull { id -> playersById[id]?.let { MatchPlayerInfo(it.name, it.avatarUrl) } }
+            val teamPlayerInfos = myIds.mapNotNull { id -> playersById[id]?.let { MatchPlayerInfo(it.name, com.padelgo.api.AvatarLinks.publicUrl(it.id, it.avatarUrl)) } }
+            val opponentPlayerInfos = oppIds.mapNotNull { id -> playersById[id]?.let { MatchPlayerInfo(it.name, com.padelgo.api.AvatarLinks.publicUrl(it.id, it.avatarUrl)) } }
             // Для POINTS-режима счёт может лежать либо в финальном MatchSetScore (после submitScore),
             // либо в драфте (до submitScore). После submitScore драфт удаляется (см. submitScore line ~998),
             // поэтому читаем MatchSetScore первым, иначе исторические матчи показывают «—».
@@ -1489,6 +1521,110 @@ class EventService(
         }.sortedWith(compareByDescending<PlayerMatchHistoryItem> { it.eventDate }.thenByDescending { it.roundNumber })
     }
 
+    /**
+     * Лучшие напарники игрока по win-rate. Напарник — игрок, стоявший с ним в одной команде
+     * в сыгранном (с зафиксированным счётом) матче.
+     *
+     * Логика:
+     *  - проходим по всем матчам игрока;
+     *  - учитываем только матчи с записанным итоговым счётом (есть строки MatchSetScore) —
+     *    у незавершённых матчей нет результата, win-rate по ним не имеет смысла;
+     *  - для каждого такого матча определяем напарника и исход с точки зрения игрока
+     *    (ничья считается как сыгранная игра, но не как победа);
+     *  - агрегируем gamesTogether / winsTogether, winRate = winsTogether / gamesTogether.
+     *
+     * В выдачу попадают только напарники с >= [MIN_GAMES_TOGETHER] совместных игр,
+     * и только откалиброванные (calibrationMatchesRemaining == 0): пока игрок калибруется,
+     * его статистика ещё не показательна;
+     * и только «активные» — хотя бы один совместный матч за последние [RECENT_DAYS] дней (от [today]).
+     * Сортировка: score desc (баланс качества и наигранности, см. [partnerScore]), затем gamesTogether desc.
+     */
+    fun getTopPartners(
+        playerId: UUID,
+        limit: Int = DEFAULT_TOP_PARTNERS_LIMIT,
+        today: LocalDate = LocalDate.now()
+    ): List<com.padelgo.api.TopPartnerResponse> {
+        // Берём только матчи игрока (а не findAll() по всей таблице) — иначе профиль тормозит.
+        val my = matchRepo.findAllByPlayerParticipating(playerId)
+        if (my.isEmpty()) return emptyList()
+
+        val roundIds = my.mapNotNull { it.roundId }.toSet()
+        val rounds = roundRepo.findAllById(roundIds).associateBy { it.id!! }
+        val eventIds = rounds.values.mapNotNull { it.eventId }.toSet()
+        val events = eventRepo.findAllById(eventIds).associateBy { it.id!! }
+        // Счёт по всем матчам одним запросом вместо N+1 на каждый матч.
+        val setsByMatch = scoreRepo.findAllByMatchIdInOrderBySetNumberAsc(my.mapNotNull { it.id })
+            .groupBy { it.matchId }
+
+        // partnerId -> (количество совместных игр, количество совместных побед)
+        val gamesTogether = HashMap<UUID, Int>()
+        val winsTogether = HashMap<UUID, Int>()
+        // partnerId -> дата последнего совместного матча (для фильтра активности).
+        val lastPlayedTogether = HashMap<UUID, LocalDate>()
+
+        for (m in my) {
+            val round = rounds[m.roundId] ?: continue
+            val event = events[round.eventId] ?: continue
+            val sets = setsByMatch[m.id].orEmpty()
+            if (sets.isEmpty()) continue  // матч без счёта — в win-rate не учитываем
+
+            val isTeamA = m.teamAPlayer1Id == playerId || m.teamAPlayer2Id == playerId
+            val partnerId = (
+                if (isTeamA) {
+                    if (m.teamAPlayer1Id == playerId) m.teamAPlayer2Id else m.teamAPlayer1Id
+                } else {
+                    if (m.teamBPlayer1Id == playerId) m.teamBPlayer2Id else m.teamBPlayer1Id
+                }
+                ) ?: continue
+
+            val scoreA = scoreAFromSets(event.scoringMode, sets)
+            val playerScore = if (isTeamA) scoreA else 1.0 - scoreA
+
+            gamesTogether[partnerId] = (gamesTogether[partnerId] ?: 0) + 1
+            if (playerScore > 0.5) winsTogether[partnerId] = (winsTogether[partnerId] ?: 0) + 1
+            val prev = lastPlayedTogether[partnerId]
+            if (prev == null || event.date.isAfter(prev)) lastPlayedTogether[partnerId] = event.date
+        }
+
+        val qualified = gamesTogether.filterValues { it >= MIN_GAMES_TOGETHER }
+        if (qualified.isEmpty()) return emptyList()
+
+        // Фильтр активности: последняя совместная игра — не позднее RECENT_DAYS назад.
+        val cutoff = today.minusDays(RECENT_DAYS)
+        val recent = qualified.filterKeys { pid ->
+            lastPlayedTogether[pid]?.isBefore(cutoff) == false
+        }
+        if (recent.isEmpty()) return emptyList()
+
+        // В ТОП попадают только откалиброванные напарники (calibrationMatchesRemaining == 0).
+        // Партнёр без аккаунта (нет UserAccount) калибровку пройти не мог — исключаем.
+        val calibratedPlayerIds = userRepo.findAllByPlayerIdIn(recent.keys)
+            .filter { it.calibrationMatchesRemaining == 0 }
+            .mapNotNull { it.playerId }
+            .toSet()
+        val eligible = recent.filterKeys { it in calibratedPlayerIds }
+        if (eligible.isEmpty()) return emptyList()
+
+        val partners = playerRepo.findAllById(eligible.keys).associateBy { it.id!! }
+
+        return eligible.entries.mapNotNull { (partnerId, games) ->
+            val partner = partners[partnerId] ?: return@mapNotNull null
+            val wins = winsTogether[partnerId] ?: 0
+            com.padelgo.api.TopPartnerResponse(
+                player = com.padelgo.api.PlayerShort.from(partner),
+                gamesTogether = games,
+                winsTogether = wins,
+                winRate = wins.toDouble() / games,
+                // Сортируем по баллу-балансу качества и наигранности (см. partnerScore),
+                // а не по сырому winRate: частые успешные напарники должны быть выше редких.
+                score = partnerScore(wins, games)
+            )
+        }.sortedWith(
+            compareByDescending<com.padelgo.api.TopPartnerResponse> { it.score }
+                .thenByDescending { it.gamesTogether }
+        ).take(limit)
+    }
+
     fun getMatchesForPlayerInEvent(playerId: UUID, eventId: UUID): List<PlayerMatchHistoryItem> {
         return getMatchesForPlayer(playerId).filter { it.eventId == eventId }
     }
@@ -1503,18 +1639,18 @@ class EventService(
         val ratingDeltas = ratingChanges.groupBy { it.eventId }.mapValues { (_, v) -> v.sumOf { it.delta } }
         val finishedAtByEvent = ratingChanges.groupBy { it.eventId }.mapValues { (_, v) -> v.maxOfOrNull { it.createdAt!! } }
 
-        val scoresByMatch = matches.associate { m ->
-            m.matchId to scoreRepo.findAllByMatchIdOrderBySetNumberAsc(m.matchId)
-        }
-        val draftScoresByMatch = matches.associate { m ->
-            m.matchId to (draftScoreRepo.findByMatchId(m.matchId)?.let { listOf(it) } ?: emptyList())
-        }
+        // Батч вместо N+1: счёт и драфты всех матчей грузим двумя запросами, а не по одному на матч.
+        val matchIds = matches.map { it.matchId }
+        val scoresByMatch = scoreRepo.findAllByMatchIdInOrderBySetNumberAsc(matchIds).groupBy { it.matchId }
+        val draftByMatch = draftScoreRepo.findAllByMatchIdIn(matchIds).associateBy { it.matchId }
 
+        // Батч вместо N+1: регистрации всех эвентов одним запросом, имена игроков — одним.
+        val regsByEvent = regRepo.findAllByEventIdInAndStatus(eventIds).groupBy { it.eventId }
+        val regPlayersById = playerRepo
+            .findAllById(regsByEvent.values.flatten().mapNotNull { it.playerId }.toSet())
+            .associateBy { it.id!! }
         val participantsByEvent = eventIds.associateWith { eid ->
-            val regs = regRepo.findAllByEventIdAndStatus(eid)
-            val pids = regs.mapNotNull { it.playerId }
-            val players = playerRepo.findAllById(pids)
-            players.map { it.name }.sorted()
+            regsByEvent[eid].orEmpty().mapNotNull { regPlayersById[it.playerId]?.name }.sorted()
         }
 
         return matches
@@ -1525,15 +1661,13 @@ class EventService(
                     items.sumOf { item ->
                         // Сначала пытаемся прочитать финальный счёт (MatchSetScore), потом fallback на драфт —
                         // иначе после submitScore (драфт удалён) totalPoints не считается.
-                        val finalScores = scoresByMatch[item.matchId].orEmpty()
-                        val draftScores = draftScoresByMatch[item.matchId].orEmpty()
-                        val match = matchRepo.findById(item.matchId).orElse(null) ?: return@sumOf 0
-                        val isTeamA = match.teamAPlayer1Id == playerId || match.teamAPlayer2Id == playerId
-                        val finalScore = finalScores.firstOrNull()
+                        // isTeamA уже посчитан в PlayerMatchHistoryItem — повторный matchRepo.findById не нужен.
+                        val finalScore = scoresByMatch[item.matchId]?.firstOrNull()
+                        val isTeamA = item.isTeamA
                         if (finalScore != null) {
                             if (isTeamA) finalScore.teamAGames else finalScore.teamBGames
                         } else {
-                            draftScores.firstOrNull()?.let { ds ->
+                            draftByMatch[item.matchId]?.let { ds ->
                                 if (isTeamA) ds.teamAPoints else ds.teamBPoints
                             } ?: 0
                         }
