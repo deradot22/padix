@@ -370,17 +370,17 @@ export function V0ProfilePage(props: { me: any; meLoaded?: boolean; onMeUpdate?:
               </g>
             </svg>
           </div>
-          <CardContent className="relative z-10 -mt-8 md:-mt-10 pb-5">
+          <CardContent className="relative z-10 -mt-8 md:-mt-9 pb-5">
             <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
               <div className="flex items-end gap-4">
-                <div className="flex h-20 w-20 items-center justify-center rounded-2xl border-4 border-background bg-gradient-to-br from-primary/20 to-primary/5 shadow-xl overflow-hidden">
+                <div className="flex h-24 w-24 -mt-7 items-center justify-center rounded-2xl border-4 border-background bg-gradient-to-br from-primary/20 to-primary/5 shadow-xl overflow-hidden">
                   {avatar ? (
                     <img src={avatar} alt="Avatar" className="h-full w-full object-cover" />
                   ) : (
-                    <User className="h-10 w-10 text-primary" />
+                    <User className="h-12 w-12 text-primary" />
                   )}
                 </div>
-                <div className="pb-1">
+                <div className="relative top-3 pb-1">
                   <h2 className="text-2xl md:text-3xl font-bold">{viewMe.name}</h2>
                   <p className="flex items-center gap-2 text-muted-foreground mt-1">
                     <Mail className="h-4 w-4" />
