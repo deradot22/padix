@@ -194,9 +194,9 @@ export function Header(props: {
               className={cn(
                 // Стекло как у мобильного меню: bg-background/70 + backdrop-blur. scale убран —
                 // transform отключает backdrop-filter (blur не работал бы). Анимация — opacity.
-                // Форма как у мобильного меню (drawer): скруглённая карточка с отступами от краёв.
-                // На sm+ — dropdown справа фиксированной ширины.
-                "fixed left-2 right-2 top-16 rounded-xl border border-border bg-background/70 backdrop-blur-2xl p-4 shadow-2xl z-50 sm:absolute sm:top-auto sm:left-auto sm:right-0 sm:w-[360px] sm:max-w-[calc(100vw-2rem)] transition-opacity duration-150 origin-top opacity-0 pointer-events-none",
+                // Форма и прозрачность как у мобильного меню: full-width под шапкой, верх прямой
+                // (rounded-b), прижато без зазора, bg-background/80 + blur. На sm+ — dropdown справа.
+                "fixed left-0 right-0 top-16 rounded-b-2xl border-x border-b border-border bg-background/80 backdrop-blur-2xl p-4 shadow-2xl z-50 sm:absolute sm:top-auto sm:left-auto sm:right-0 sm:w-[360px] sm:max-w-[calc(100vw-2rem)] sm:rounded-xl sm:border transition-opacity duration-150 origin-top opacity-0 pointer-events-none",
                 notificationsOpen ? "opacity-100 pointer-events-auto" : "",
               )}
               onClick={(e) => e.stopPropagation()}
@@ -511,7 +511,7 @@ export function Header(props: {
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             transition={{ duration: reduceMotion ? 0 : 0.18, ease: "easeOut" }}
-            className="fixed left-2 right-2 top-16 z-[100] rounded-xl border border-border bg-background/70 backdrop-blur-2xl shadow-2xl md:hidden"
+            className="fixed left-0 right-0 top-16 z-[100] rounded-b-2xl border-x border-b border-border bg-background/80 backdrop-blur-2xl shadow-2xl md:hidden"
           >
             <div className="mx-auto flex max-w-7xl flex-col gap-1 px-4 py-3">
               {/* Основная навигация (Рейтинг/Игры/Создать/Профиль) теперь в нижней панели BottomNav.
