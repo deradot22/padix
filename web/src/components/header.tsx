@@ -191,8 +191,10 @@ export function Header(props: {
             <div
               ref={panelRef}
               className={cn(
-                "fixed left-2 right-2 top-16 w-auto rounded-xl border border-border bg-card p-4 shadow-xl z-50 sm:absolute sm:top-auto sm:left-auto sm:right-0 sm:w-[360px] sm:max-w-[calc(100vw-2rem)] transition-all duration-150 origin-top opacity-0 scale-95 pointer-events-none",
-                notificationsOpen ? "opacity-100 scale-100 pointer-events-auto" : "",
+                // Стекло как у мобильного меню: bg-background/70 + backdrop-blur. scale убран —
+                // transform отключает backdrop-filter (blur не работал бы). Анимация — opacity.
+                "fixed left-2 right-2 top-16 w-auto rounded-xl border border-border bg-background/70 backdrop-blur-2xl p-4 shadow-2xl z-50 sm:absolute sm:top-auto sm:left-auto sm:right-0 sm:w-[360px] sm:max-w-[calc(100vw-2rem)] transition-opacity duration-150 origin-top opacity-0 pointer-events-none",
+                notificationsOpen ? "opacity-100 pointer-events-auto" : "",
               )}
               onClick={(e) => e.stopPropagation()}
             >
