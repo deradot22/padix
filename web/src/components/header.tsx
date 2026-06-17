@@ -188,7 +188,9 @@ export function Header(props: {
                 </span>
               ) : null}
             </Button>
+          </div>
 
+          {createPortal(
             <div
               ref={panelRef}
               className={cn(
@@ -196,7 +198,7 @@ export function Header(props: {
                 // transform отключает backdrop-filter (blur не работал бы). Анимация — opacity.
                 // Форма и прозрачность как у мобильного меню: full-width под шапкой, верх прямой
                 // (rounded-b), прижато без зазора, bg-background/80 + blur. На sm+ — dropdown справа.
-                "fixed left-0 right-0 top-16 rounded-b-2xl border-x border-b border-border bg-background/80 backdrop-blur-2xl p-4 shadow-2xl z-50 sm:absolute sm:top-auto sm:left-auto sm:right-0 sm:w-[360px] sm:max-w-[calc(100vw-2rem)] sm:rounded-xl sm:border transition-opacity duration-150 origin-top opacity-0 pointer-events-none",
+                "fixed left-0 right-0 top-16 rounded-b-2xl border-x border-b border-border bg-background/80 backdrop-blur-2xl p-4 shadow-2xl z-[60] sm:left-auto sm:right-4 sm:top-16 sm:w-[360px] sm:max-w-[calc(100vw-2rem)] sm:rounded-xl sm:border transition-opacity duration-150 origin-top opacity-0 pointer-events-none",
                 notificationsOpen ? "opacity-100 pointer-events-auto" : "",
               )}
               onClick={(e) => e.stopPropagation()}
@@ -384,8 +386,9 @@ export function Header(props: {
                     ) : null}
                   </div>
                 )}
-              </div>
-          </div>
+              </div>,
+            document.body,
+          )}
 
           <button
             type="button"
