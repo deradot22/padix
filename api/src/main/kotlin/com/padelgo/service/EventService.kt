@@ -1017,9 +1017,14 @@ class EventService(
             }
             val existing = scoreRepo.findAllByMatchIdOrderBySetNumberAsc(matchId)
             if (existing.isNotEmpty()) {
-                throw ApiException(
-                    HttpStatus.CONFLICT, "Счёт уже введён. Изменить может только организатор."
-                )
+                // Свой же счёт участник может исправить, пока игра идёт (IN_PROGRESS — проверено выше).
+                // Чужой счёт менять нельзя — только организатор.
+                val existingSubmitter = existing.firstOrNull()?.submittedByUserId
+                if (existingSubmitter == null || existingSubmitter != userId) {
+                    throw ApiException(
+                        HttpStatus.CONFLICT, "Счёт уже введён другим участником. Изменить может только организатор."
+                    )
+                }
             }
         }
 
@@ -1077,7 +1082,7 @@ class EventService(
         matchRepo.save(match)
 
         if (event.status == EventStatus.FINISHED) {
-            recalculateMatchRatings(event, match, setEntities)
+            recomputeFinishedEvent(event)
         }
     }
 
@@ -1247,30 +1252,7 @@ class EventService(
         try {
             val ownerId = event.createdByUserId
             if (ownerId != null) {
-                val ratingChanges = ratingChangeRepo.findAllByEventId(eventId)
-                val totalsByPlayer: Map<UUID, Int> = ratingChanges
-                    .filter { it.playerId != null }
-                    .groupBy { it.playerId!! }
-                    .mapValues { (_, list) -> list.sumOf { it.delta } }
-                val playersById = playerRepo.findAllById(totalsByPlayer.keys).associateBy { it.id!! }
-                val top = totalsByPlayer.entries
-                    .sortedByDescending { it.value }
-                    .take(3)
-                    .mapNotNull { (pid, delta) ->
-                        playersById[pid]?.let { FinishTopDto(name = it.name, delta = delta) }
-                    }
-
-                // Полная таблица лидеров по очкам (как в UI Modal «Таблица лидеров»).
-                val playerIds = regRepo.findAllByEventIdAndStatus(eventId).mapNotNull { it.playerId }
-                val standings = computeTournamentStandings(eventId, playerIds, event.scoringMode)
-                val playersForBoard = playerRepo.findAllById(standings.keys).associateBy { it.id!! }
-                val leaderboard = standings.entries
-                    .sortedWith(compareByDescending<Map.Entry<UUID, Int>> { it.value }
-                        .thenBy { playersForBoard[it.key]?.name?.lowercase() ?: "" })
-                    .mapNotNull { (pid, pts) ->
-                        playersForBoard[pid]?.let { LeaderboardEntry(name = it.name, points = pts) }
-                    }
-
+                val (top, leaderboard) = buildEventResultsPayload(event)
                 val payload = EventFinishedNotify(
                     eventId = eventId,
                     ownerUserId = ownerId,
@@ -1291,6 +1273,39 @@ class EventService(
         } catch (e: Exception) {
             log.warn("Failed to compute Telegram FINISHED payload: {}", e.message)
         }
+    }
+
+    /**
+     * Считает блоки для Telegram-поста результатов эвента (одинаково для finishEvent и
+     * recomputeFinishedEvent): топ-3 по приросту рейтинга (bw-compat) и полную таблицу
+     * лидеров по очкам (как в UI «Таблица лидеров»). Без побочных эффектов.
+     */
+    private fun buildEventResultsPayload(event: Event): Pair<List<FinishTopDto>, List<LeaderboardEntry>> {
+        val eventId = event.id!!
+        val ratingChanges = ratingChangeRepo.findAllByEventId(eventId)
+        val totalsByPlayer: Map<UUID, Int> = ratingChanges
+            .filter { it.playerId != null }
+            .groupBy { it.playerId!! }
+            .mapValues { (_, list) -> list.sumOf { it.delta } }
+        val playersById = playerRepo.findAllById(totalsByPlayer.keys).associateBy { it.id!! }
+        val top = totalsByPlayer.entries
+            .sortedByDescending { it.value }
+            .take(3)
+            .mapNotNull { (pid, delta) ->
+                playersById[pid]?.let { FinishTopDto(name = it.name, delta = delta) }
+            }
+
+        // Полная таблица лидеров по очкам (как в UI Modal «Таблица лидеров»).
+        val playerIds = regRepo.findAllByEventIdAndStatus(eventId).mapNotNull { it.playerId }
+        val standings = computeTournamentStandings(eventId, playerIds, event.scoringMode)
+        val playersForBoard = playerRepo.findAllById(standings.keys).associateBy { it.id!! }
+        val leaderboard = standings.entries
+            .sortedWith(compareByDescending<Map.Entry<UUID, Int>> { it.value }
+                .thenBy { playersForBoard[it.key]?.name?.lowercase() ?: "" })
+            .mapNotNull { (pid, pts) ->
+                playersForBoard[pid]?.let { LeaderboardEntry(name = it.name, points = pts) }
+            }
+        return top to leaderboard
     }
 
     /** Завершает событие без проверки матчей (для обхода старой проверки "Not all matches are finished"). */
@@ -1328,52 +1343,260 @@ class EventService(
         }
     }
 
-    private fun recalculateMatchRatings(event: Event, match: Match, setEntities: List<MatchSetScore>) {
-        val a1 = playerRepo.findById(match.teamAPlayer1Id!!).orElse(null) ?: return
-        val a2 = playerRepo.findById(match.teamAPlayer2Id!!).orElse(null) ?: return
-        val b1 = playerRepo.findById(match.teamBPlayer1Id!!).orElse(null) ?: return
-        val b2 = playerRepo.findById(match.teamBPlayer2Id!!).orElse(null) ?: return
+    /**
+     * Идемпотентный ПОЛНЫЙ пересчёт уже завершённого (FINISHED) эвента.
+     *
+     * Вызывается при правке счёта организатором в завершённом эвенте. В отличие от
+     * старого поматчевого пересчёта прогоняет ВСЕ матчи эвента в порядке
+     * (round, court) от pre-event базы каждого игрока (восстановленной из старых
+     * rating_changes), пересоздаёт rating_changes этого эвента и КОРРЕКТИРУЕТ текущий
+     * рейтинг игрока на дельту (newSum - oldSum), не сбрасывая накопленный за другие
+     * эвенты прогресс.
+     *
+     * Отличия от [finishEvent] (намеренные — иначе пересчёт был бы не идемпотентен):
+     *  - НЕ инкрементит gamesPlayed / lastMatchAt / calibrationMatchesRemaining /
+     *    calibrationEventsRemaining;
+     *  - kFactor берётся от ТЕКУЩЕГО player.gamesPlayed (он уже включает этот эвент);
+     *  - прогон идёт в локальной мапе workRating, player.rating меняется только финальной
+     *    коррекцией.
+     */
+    @Transactional
+    fun recomputeFinishedEvent(event: Event) {
+        if (event.status != EventStatus.FINISHED) return
+        val eventId = event.id!!
 
-        ratingChangeRepo.deleteAllByMatchId(match.id!!)
+        // 1. Старые changes (ДО удаления) — нужны и для oldSum, и для восстановления pre-event базы.
+        val oldChanges = ratingChangeRepo.findAllByEventId(eventId)
+        val oldSumByPlayer: Map<UUID, Int> = oldChanges
+            .filter { it.playerId != null }
+            .groupBy { it.playerId!! }
+            .mapValues { (_, list) -> list.sumOf { it.delta } }
 
-        val teamARating = EloRating.teamRating(a1.rating, a2.rating)
-        val teamBRating = EloRating.teamRating(b1.rating, b2.rating)
-        val kTeam = ((
-            EloRating.kFactor(a1.gamesPlayed) +
-                EloRating.kFactor(a2.gamesPlayed) +
-                EloRating.kFactor(b1.gamesPlayed) +
-                EloRating.kFactor(b2.gamesPlayed)
-            ) / 4.0).toInt()
+        // 2. FINISHED-матчи эвента в порядке (roundNumber, courtNumber).
+        val rounds = roundRepo.findAllByEventIdOrderByRoundNumberAsc(eventId)
+        val roundNumberById: Map<UUID, Int> = rounds.associate { it.id!! to it.roundNumber }
+        val allMatches = matchRepo.findAllByEventId(eventId)
+        val setsByMatch = allMatches.associate { m -> m.id!! to scoreRepo.findAllByMatchIdOrderBySetNumberAsc(m.id!!) }
+        val finishedMatches = allMatches
+            .filter { it.status == MatchStatus.FINISHED && !setsByMatch[it.id!!].isNullOrEmpty() }
+            .sortedWith(
+                compareBy<Match> { roundNumberById[it.roundId] ?: Int.MAX_VALUE }
+                    .thenBy { it.courtNumber }
+            )
 
-        val scoreA = scoreAFromSets(event.scoringMode, setEntities)
+        // Порядковый индекс матча в прогоне — для восстановления pre-event рейтинга
+        // (рейтинг игрока перед ПЕРВЫМ его матчем в этом порядке).
+        val matchOrder: Map<UUID, Int> = finishedMatches.mapIndexed { idx, m -> m.id!! to idx }.toMap()
+
+        val playerIds = finishedMatches.flatMap {
+            listOf(it.teamAPlayer1Id!!, it.teamAPlayer2Id!!, it.teamBPlayer1Id!!, it.teamBPlayer2Id!!)
+        }.toSet()
+        val players = playerRepo.findAllById(playerIds).associateBy { it.id!! }
+        val accounts = userRepo.findAllByPlayerIdIn(playerIds.toList())
+        val calibrationByPlayer = accounts.associate { it.playerId!! to it.calibrationMatchesRemaining }
+
+        // 4. pre-event рейтинг = oldRating ПЕРВОГО (по порядку round,court) матча игрока из старых changes.
+        // Старые changes сматчиваем с порядком матчей; если у игрока их нет — берём текущий player.rating.
+        val workRating: MutableMap<UUID, Int> = HashMap()
+        val changesByPlayer = oldChanges.filter { it.playerId != null }.groupBy { it.playerId!! }
+        playerIds.forEach { pid ->
+            val pChanges = changesByPlayer[pid]
+            val preEvent = pChanges
+                ?.filter { it.matchId != null && matchOrder.containsKey(it.matchId) }
+                ?.minByOrNull { matchOrder[it.matchId]!! }
+                ?.oldRating
+                ?: pChanges?.minByOrNull { it.createdAt ?: java.time.Instant.MAX }?.oldRating
+                ?: players[pid]?.rating
+                ?: 1000
+            workRating[pid] = preEvent
+        }
+
+        // 3+5. normByPlayer — точно как finishEvent.
+        val matchCountByPlayer: Map<UUID, Int> = finishedMatches.flatMap {
+            listOf(it.teamAPlayer1Id!!, it.teamAPlayer2Id!!, it.teamBPlayer1Id!!, it.teamBPlayer2Id!!)
+        }.groupingBy { it }.eachCount()
+        val avgMatches: Double = if (matchCountByPlayer.isEmpty()) 1.0 else matchCountByPlayer.values.average()
+        val normByPlayer: Map<UUID, Double> = matchCountByPlayer.mapValues { (_, count) ->
+            if (count == 0) 1.0 else avgMatches / count.toDouble()
+        }
+
+        // gamesPlayed фиксирован (уже включает этот эвент) — kFactor берём от него один раз.
+        val gamesByPlayer: Map<UUID, Int> = playerIds.associateWith { players[it]?.gamesPlayed ?: 0 }
+
+        val newChanges = mutableListOf<RatingChange>()
+        val newSumByPlayer: MutableMap<UUID, Int> = HashMap()
+        playerIds.forEach { newSumByPlayer[it] = 0 }
+
+        finishedMatches.forEach { m ->
+            val sets = setsByMatch[m.id!!]!!.sortedBy { it.setNumber }
+            val a1 = m.teamAPlayer1Id!!
+            val a2 = m.teamAPlayer2Id!!
+            val b1 = m.teamBPlayer1Id!!
+            val b2 = m.teamBPlayer2Id!!
+
+            val teamARating = EloRating.teamRating(workRating[a1]!!, workRating[a2]!!)
+            val teamBRating = EloRating.teamRating(workRating[b1]!!, workRating[b2]!!)
+            val kTeam = ((
+                EloRating.kFactor(gamesByPlayer[a1] ?: 0) +
+                    EloRating.kFactor(gamesByPlayer[a2] ?: 0) +
+                    EloRating.kFactor(gamesByPlayer[b1] ?: 0) +
+                    EloRating.kFactor(gamesByPlayer[b2] ?: 0)
+                ) / 4.0).toInt()
+
+            val deltaTeamA = computeTeamADelta(event, sets, teamARating, teamBRating, kTeam)
+
+            applyDeltaWork(eventId, m.id!!, a1, a2, deltaTeamA, gamesByPlayer, calibrationByPlayer, normByPlayer, workRating, newChanges, newSumByPlayer)
+            applyDeltaWork(eventId, m.id!!, b1, b2, -deltaTeamA, gamesByPlayer, calibrationByPlayer, normByPlayer, workRating, newChanges, newSumByPlayer)
+        }
+
+        // 6. Заменяем changes этого эвента.
+        ratingChangeRepo.deleteAllByEventId(eventId)
+        ratingChangeRepo.saveAll(newChanges)
+
+        // 7. Коррекция текущего рейтинга: player.rating += (newSum - oldSum). НЕ сбрасываем на pre-event.
+        val playersToSave = mutableListOf<Player>()
+        playerIds.forEach { pid ->
+            val p = players[pid] ?: return@forEach
+            val newSum = newSumByPlayer[pid] ?: 0
+            val oldSum = oldSumByPlayer[pid] ?: 0
+            val corrected = (p.rating + (newSum - oldSum)).coerceAtLeast(0)
+            p.rating = corrected
+            p.ntrp = Ntrp.fromRating(corrected)
+            playersToSave.add(p)
+        }
+        playerRepo.saveAll(playersToSave)
+
+        // 8. Пересоздаём UserRatingNotification по этому эвенту: newRating = текущий рейтинг (после коррекции),
+        // delta = newSum (суммарный прирост за эвент).
+        accounts.forEach { acc ->
+            val pid = acc.playerId ?: return@forEach
+            val p = players[pid] ?: return@forEach
+            val newSum = newSumByPlayer[pid] ?: 0
+            val existing = ratingNotificationRepo.findByUserIdAndEventId(acc.id!!, eventId)
+            val notif = existing ?: com.padelgo.domain.UserRatingNotification(userId = acc.id!!, eventId = eventId)
+            notif.newRating = p.rating
+            notif.delta = newSum
+            notif.seenAt = null
+            ratingNotificationRepo.save(notif)
+        }
+
+        // 9. Telegram: обновляем уже опубликованный пост результатов.
+        val ownerId = event.createdByUserId
+        if (ownerId != null) {
+            try {
+                val (top, leaderboard) = buildEventResultsPayload(event)
+                val payload = EventResultsUpdatedNotify(
+                    eventId = eventId,
+                    ownerUserId = ownerId,
+                    title = event.title,
+                    date = event.date,
+                    startTime = event.startTime,
+                    endTime = event.endTime,
+                    courtsCount = event.courtsCount,
+                    top = top,
+                    leaderboard = leaderboard,
+                    matchCount = finishedMatches.size
+                )
+                runAfterCommit {
+                    try { botClient.notifyEventResultsUpdated(payload) }
+                    catch (e: Exception) { log.warn("Failed to notify bot about RESULTS UPDATED: {}", e.message) }
+                }
+            } catch (e: Exception) {
+                log.warn("Failed to compute Telegram RESULTS UPDATED payload: {}", e.message)
+            }
+        }
+    }
+
+    /**
+     * Чистый расчёт дельты команды A для матча (без побочных эффектов) — общий для
+     * finishEvent-подобной логики и idempotent-пересчёта. Логика идентична блоку в
+     * finishEvent (marginMultiplier × teamDelta, округление).
+     */
+    internal fun computeTeamADelta(
+        event: Event,
+        sets: List<MatchSetScore>,
+        teamARating: Int,
+        teamBRating: Int,
+        kTeam: Int
+    ): Int {
+        val scoreA = scoreAFromSets(event.scoringMode, sets)
         val (teamAPoints, teamBPoints, expectedTotal) = when (event.scoringMode) {
             ScoringMode.POINTS -> {
-                val s1 = setEntities.first()
+                val s1 = sets.first()
                 Triple(s1.teamAGames, s1.teamBGames, event.pointsPerPlayerPerMatch * 4)
             }
             ScoringMode.SETS -> {
-                val totalA = setEntities.sumOf { it.teamAGames }
-                val totalB = setEntities.sumOf { it.teamBGames }
+                val totalA = sets.sumOf { it.teamAGames }
+                val totalB = sets.sumOf { it.teamBGames }
                 val maxGames = (event.gamesPerSet * event.setsPerMatch) * 2
                 Triple(totalA, totalB, maxOf(maxGames, 1))
             }
         }
-
         val marginMult = EloRating.marginMultiplier(teamAPoints, teamBPoints, expectedTotal)
         val baseDelta = EloRating.teamDelta(teamARating, teamBRating, kTeam, scoreA)
-        val deltaTeamA = (baseDelta * marginMult).roundToInt()
+        return (baseDelta * marginMult).roundToInt()
+    }
 
-        val calibrationByPlayer = mapOf(
-            a1.id!! to (userRepo.findByPlayerId(a1.id!!)?.calibrationMatchesRemaining ?: 0),
-            a2.id!! to (userRepo.findByPlayerId(a2.id!!)?.calibrationMatchesRemaining ?: 0),
-            b1.id!! to (userRepo.findByPlayerId(b1.id!!)?.calibrationMatchesRemaining ?: 0),
-            b2.id!! to (userRepo.findByPlayerId(b2.id!!)?.calibrationMatchesRemaining ?: 0)
+    /**
+     * Аналог [applyDelta]/[applyDeltaSingle], но пишущий в локальную мапу workRating и
+     * аккумулирующий новые RatingChange + newSum (не трогая player.rating). Логика дележа
+     * пары и множителей идентична оригиналу: половинки, нечётный остаток в пользу игрока с
+     * меньшим gamesPlayed, множитель калибровки 1.5, нормировка normByPlayer.
+     */
+    private fun applyDeltaWork(
+        eventId: UUID,
+        matchId: UUID,
+        p1: UUID,
+        p2: UUID,
+        deltaTeam: Int,
+        gamesByPlayer: Map<UUID, Int>,
+        calibrationByPlayer: Map<UUID, Int>,
+        normByPlayer: Map<UUID, Double>,
+        workRating: MutableMap<UUID, Int>,
+        newChanges: MutableList<RatingChange>,
+        newSumByPlayer: MutableMap<UUID, Int>
+    ) {
+        val g1 = gamesByPlayer[p1] ?: 0
+        val g2 = gamesByPlayer[p2] ?: 0
+        val firstGetsMore = g1 <= g2
+        val d1 = deltaTeam / 2 + if (deltaTeam % 2 != 0 && firstGetsMore) deltaTeam.sign() else 0
+        val d2 = deltaTeam - d1
+
+        val m1 = if ((calibrationByPlayer[p1] ?: 0) > 0) 1.5 else 1.0
+        val m2 = if ((calibrationByPlayer[p2] ?: 0) > 0) 1.5 else 1.0
+        val n1 = normByPlayer[p1] ?: 1.0
+        val n2 = normByPlayer[p2] ?: 1.0
+        applyDeltaSingleWork(eventId, matchId, p1, (d1 * m1 * n1).roundToInt(), workRating, newChanges, newSumByPlayer)
+        applyDeltaSingleWork(eventId, matchId, p2, (d2 * m2 * n2).roundToInt(), workRating, newChanges, newSumByPlayer)
+    }
+
+    private fun applyDeltaSingleWork(
+        eventId: UUID,
+        matchId: UUID,
+        playerId: UUID,
+        delta: Int,
+        workRating: MutableMap<UUID, Int>,
+        newChanges: MutableList<RatingChange>,
+        newSumByPlayer: MutableMap<UUID, Int>
+    ) {
+        // Зеркалит оригинальный applyDeltaSingle: в RatingChange кладём ЗАПРОШЕННУЮ delta,
+        // workRating двигаем на newRating с coerce у нижней границы 0. На практике расходятся
+        // только когда рейтинг упирается в 0 (delta != newRating-old). newSum считаем по
+        // сумме сохранённых delta — так же, как top/leaderboard в buildEventResultsPayload.
+        val old = workRating[playerId] ?: 0
+        val newRating = (old + delta).coerceAtLeast(0)
+        workRating[playerId] = newRating
+        newSumByPlayer[playerId] = (newSumByPlayer[playerId] ?: 0) + delta
+        newChanges.add(
+            RatingChange(
+                eventId = eventId,
+                matchId = matchId,
+                playerId = playerId,
+                oldRating = old,
+                delta = delta,
+                newRating = newRating
+            )
         )
-
-        applyDelta(event.id!!, match.id!!, a1, a2, deltaTeamA, calibrationByPlayer)
-        applyDelta(event.id!!, match.id!!, b1, b2, -deltaTeamA, calibrationByPlayer)
-
-        playerRepo.saveAll(listOf(a1, a2, b1, b2))
     }
 
     private fun applyDelta(

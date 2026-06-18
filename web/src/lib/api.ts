@@ -85,6 +85,8 @@ export type Match = {
   submittedByUserId?: string | null;
   /** Имя того, кто ввёл счёт. Для UI-метки «Введён: X». */
   submittedByName?: string | null;
+  /** true — итоговый счёт ввёл текущий пользователь (может исправить свой счёт, пока игра идёт). */
+  submittedByMe?: boolean;
   /** Шанс победы команды A (0..1). null — матч уже сыгран. teamB = 1 - expectedA. */
   expectedA?: number | null;
 };

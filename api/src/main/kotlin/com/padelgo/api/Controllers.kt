@@ -449,6 +449,7 @@ class EventController(
                 val courtName = courtNameByNumber[m.courtNumber] ?: "Корт ${m.courtNumber}"
                 val submittedByUserId = scoresByMatch[m.id!!]?.firstOrNull()?.submittedByUserId
                 val submittedByName = submittedByUserId?.let { submitterNameByUserId[it] }
+                val submittedByMe = submittedByUserId != null && submittedByUserId == currentUserId
                 // Шансы выигрыша (фаза 1): статичный Elo expectedScore для команды A.
                 // Считаем только пока матч не сыгран — после финиша скрываем (есть фактический результат).
                 val isFinalScored = m.status.name == "FINISHED" || submittedByUserId != null
@@ -463,7 +464,7 @@ class EventController(
                         com.padelgo.service.EloRating.expectedScore(ra, rb)
                     } else null
                 }
-                MatchResponse.from(m, playerResponses, score, courtName, submittedByUserId, submittedByName, expectedA)
+                MatchResponse.from(m, playerResponses, score, courtName, submittedByUserId, submittedByName, submittedByMe, expectedA)
             }
             RoundResponse.from(r, ms)
         }

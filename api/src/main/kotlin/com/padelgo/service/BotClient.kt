@@ -66,6 +66,25 @@ data class EventFinishedNotify(
     val matchCount: Int
 )
 
+/**
+ * Уведомление об ОБНОВЛЕНИИ результатов уже завершённого (FINISHED) эвента —
+ * шлётся после идемпотентного пересчёта при правке счёта организатором.
+ * Поля точь-в-точь как [EventFinishedNotify]: bot переиспользует ту же отрисовку
+ * поста, но редактирует уже опубликованное сообщение вместо нового.
+ */
+data class EventResultsUpdatedNotify(
+    val eventId: UUID,
+    val ownerUserId: UUID,
+    val title: String,
+    val date: LocalDate,
+    val startTime: LocalTime,
+    val endTime: LocalTime,
+    val courtsCount: Int,
+    val top: List<FinishTopDto>,
+    val leaderboard: List<LeaderboardEntry> = emptyList(),
+    val matchCount: Int
+)
+
 data class RosterChangedNotify(
     val eventId: UUID,
     val ownerUserId: UUID,
@@ -172,6 +191,9 @@ class BotClient(
 
     fun notifyEventFinished(payload: EventFinishedNotify): Int =
         post("/api/internal/telegram/notify/event-finished", payload)
+
+    fun notifyEventResultsUpdated(payload: EventResultsUpdatedNotify): Int =
+        post("/api/internal/telegram/notify/event-results-updated", payload)
 
     fun notifyRosterChanged(payload: RosterChangedNotify): Int =
         post("/api/internal/telegram/notify/roster-changed", payload)

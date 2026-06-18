@@ -132,5 +132,8 @@ interface RatingChangeRepository : JpaRepository<RatingChange, UUID> {
 interface UserRatingNotificationRepository : JpaRepository<com.padelgo.domain.UserRatingNotification, UUID> {
     fun findFirstByUserIdAndSeenAtIsNullOrderByCreatedAtDesc(userId: UUID): com.padelgo.domain.UserRatingNotification?
     fun findAllByUserIdOrderByCreatedAtDesc(userId: UUID, pageable: org.springframework.data.domain.Pageable): List<com.padelgo.domain.UserRatingNotification>
+    /** Нотификации по конкретному эвенту (для идемпотентного пересоздания после пересчёта). */
+    fun findAllByEventId(eventId: UUID): List<com.padelgo.domain.UserRatingNotification>
+    fun findByUserIdAndEventId(userId: UUID, eventId: UUID): com.padelgo.domain.UserRatingNotification?
 }
 

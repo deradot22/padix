@@ -121,6 +121,15 @@ class EventTelegramPost(
     @Column(name = "pinned_message_id")
     var pinnedMessageId: Long? = null,
 
+    /**
+     * Тип поста: 'ANNOUNCE' — CREATED-анонс (редактируется при roster change, пиннится,
+     * снимается при отмене); 'RESULTS' — итоговый пост о завершённой игре
+     * (редактируется через updateEventResults при пересчёте результатов).
+     * Логика анонса/пина/отмены работает ТОЛЬКО с ANNOUNCE-постами.
+     */
+    @Column(name = "post_kind", nullable = false, length = 16)
+    var postKind: String = "ANNOUNCE",
+
     @CreationTimestamp
     @Column(name = "posted_at", nullable = false)
     var postedAt: Instant? = null

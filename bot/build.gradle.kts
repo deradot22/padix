@@ -33,6 +33,8 @@ dependencies {
     implementation("org.jetbrains.kotlin:kotlin-reflect")
 
     testImplementation("org.springframework.boot:spring-boot-starter-test")
+    // Котлин-friendly обёртка над Mockito (whenever/any() без проблем с null-safety).
+    testImplementation("org.mockito.kotlin:mockito-kotlin:5.4.0")
 }
 
 tasks.withType<KotlinCompile> {

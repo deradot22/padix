@@ -1,5 +1,5 @@
 import { Navigate, Outlet, Route, Routes, useLocation, useNavigate } from "react-router-dom";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { api, EventInviteItem, FriendsSnapshot, hasToken, MeResponse, setToken } from "../lib/api";
 import { RatingNotificationModal } from "@/components/rating-notification-modal";
 import { V0HomePage } from "./v0/pages/V0HomePage";
@@ -40,6 +40,10 @@ export function App() {
     delta: number;
     eventId: string;
   } | null>(null);
+  // Держим актуальное значение плашки в ref, чтобы интервал-поллинг мог читать его
+  // без пересоздания самого интервала на каждый show/hide.
+  const ratingNotificationRef = useRef(ratingNotification);
+  ratingNotificationRef.current = ratingNotification;
 
   const authed = !!me;
 
@@ -111,17 +115,45 @@ export function App() {
     refreshNotifications();
   }, [me, location.pathname]);
 
-  // Плашка «У вас новый рейтинг» — только когда успешно залогинены
+  // Плашка «У вас новый рейтинг» — только когда успешно залогинены.
+  // Помимо разового fetch'а на маунт делаем интервальный polling (~10с), чтобы
+  // участник, сидящий на странице эвента, увидел плашку сразу после того как
+  // организатор завершил игру — без перезагрузки страницы.
   useEffect(() => {
     if (!me?.playerId || !meLoaded || !hasToken()) return;
     let cancelled = false;
-    api
-      .getRatingNotification()
-      .then((n) => {
-        if (!cancelled && n) setRatingNotification(n);
-      })
-      .catch(() => {});
-    return () => { cancelled = true; };
+
+    const poll = () => {
+      // Не перетираем уже показываемую плашку — ждём пока её закроют.
+      if (ratingNotificationRef.current) return;
+      api
+        .getRatingNotification()
+        .then((n) => {
+          if (!cancelled && n && !ratingNotificationRef.current) setRatingNotification(n);
+        })
+        .catch(() => {});
+    };
+
+    // Разовый запрос на маунт (сохраняем прежнее поведение).
+    poll();
+
+    const id = window.setInterval(() => {
+      // В фоне (неактивная вкладка) не долбим сеть.
+      if (document.hidden) return;
+      poll();
+    }, 10000);
+
+    // При возврате на вкладку — немедленный запрос, не дожидаясь следующего тика.
+    const onVisibility = () => {
+      if (!document.hidden) poll();
+    };
+    document.addEventListener("visibilitychange", onVisibility);
+
+    return () => {
+      cancelled = true;
+      window.clearInterval(id);
+      document.removeEventListener("visibilitychange", onVisibility);
+    };
   }, [me?.playerId, meLoaded]);
 
   async function resendVerificationEmail() {

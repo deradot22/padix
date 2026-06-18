@@ -630,7 +630,8 @@ class TelegramService(
         val fullEvent = eventRepo.findById(eventId).orElse(null) ?: event
         val capacity = fullEvent.courtsCount * 4
         val registered = regRepo.countByEventIdAndStatus(eventId).toInt().coerceAtMost(capacity)
-        val posts = postRepo.findAllByEventId(eventId)
+        // Только ANNOUNCE-посты: итоговый RESULTS-пост не редактируем при апдейте анонса.
+        val posts = postRepo.findAllByEventIdAndPostKind(eventId, "ANNOUNCE")
         if (posts.isNotEmpty()) {
             val chatById = chatRepo.findAllByUserIdOrderByLinkedAtAsc(ownerUserId).associateBy { it.id!! }
             val ctaCreated = registerCta(eventId)
@@ -658,7 +659,8 @@ class TelegramService(
         if (!isReadyToSend(ownerUserId)) return TelegramCancellationPlan(title, emptyList())
         // Собираем посты ДО удаления — event_telegram_post каскадно удалится с events,
         // и потом мы не сможем узнать какие сообщения были закреплены / какие надо открепить.
-        val posts = postRepo.findAllByEventId(eventId)
+        // Только ANNOUNCE: RESULTS-пост (если он есть) не нужно открепливать/редактировать как анонс.
+        val posts = postRepo.findAllByEventIdAndPostKind(eventId, "ANNOUNCE")
         val chatById = chatRepo.findAllByUserIdOrderByLinkedAtAsc(ownerUserId).associateBy { it.id!! }
         val originalPosts = posts.mapNotNull { p ->
             val chat = chatById[p.telegramChatId] ?: return@mapNotNull null
@@ -722,9 +724,73 @@ class TelegramService(
         val targets = targetChatsForEvent(eventId, ownerUserId) { it.notifyFinished }
         if (targets.isEmpty()) return 0
         val cta = cta(eventId, "📊 Результаты")
-        // Передаём recordForEventId=null — это финал, не CREATED-пост, его не нужно
-        // потом редактировать при roster change.
-        return sendAndRecord(targets, renderEventFinished(event, top, leaderboard, matchCount) + cta.textSuffix, null, cta.replyMarkup)
+        // Сохраняем итоговый пост как RESULTS, чтобы потом редактировать его через
+        // updateEventResults при пересчёте результатов. Логика анонса/пина/отмены
+        // фильтрует посты по postKind='ANNOUNCE', поэтому RESULTS не сломает пины/отмену.
+        return sendAndRecord(
+            targets,
+            renderEventFinished(event, top, leaderboard, matchCount) + cta.textSuffix,
+            eventId,
+            cta.replyMarkup,
+            postKind = "RESULTS"
+        )
+    }
+
+    /**
+     * Пересчёт результатов завершённой игры: редактирует ранее опубликованный итоговый
+     * (RESULTS) пост через editMessageText. Если RESULTS-поста нет (старый эвент, завершён
+     * до появления фичи) — отправляет заново и сохраняет как RESULTS.
+     *
+     * Идемпотентность: editMessageText глотает «message is not modified». При невозможности
+     * отредактировать (например «message can't be edited» / «message to edit not found»)
+     * делаем best-effort fallback: удаляем старое сообщение и шлём новое, обновив messageId.
+     */
+    @Transactional
+    fun updateEventResults(
+        event: BotEvent,
+        ownerUserId: UUID,
+        top: List<FinishTopPlayer>,
+        leaderboard: List<FinishLeaderboardEntry>,
+        matchCount: Int
+    ): Int {
+        val eventId = event.id ?: return 0
+        if (!isReadyToSend(ownerUserId)) return 0
+
+        val cta = cta(eventId, "📊 Результаты")
+        val text = renderEventFinished(event, top, leaderboard, matchCount) + cta.textSuffix
+
+        val resultsPosts = postRepo.findAllByEventIdAndPostKind(eventId, "RESULTS")
+        if (resultsPosts.isEmpty()) {
+            // Игра была завершена до появления RESULTS-постов — публикуем заново.
+            val targets = targetChatsForEvent(eventId, ownerUserId) { it.notifyFinished }
+            if (targets.isEmpty()) return 0
+            return sendAndRecord(targets, text, eventId, cta.replyMarkup, postKind = "RESULTS")
+        }
+
+        val chatById = chatRepo.findAllByUserIdOrderByLinkedAtAsc(ownerUserId).associateBy { it.id!! }
+        var actions = 0
+        for (post in resultsPosts) {
+            val chat = chatById[post.telegramChatId] ?: continue
+            try {
+                client.editMessageText(chat.chatId, post.messageId, text, replyMarkup = cta.replyMarkup)
+                actions++
+            } catch (e: Exception) {
+                // Fallback: сообщение нельзя отредактировать (удалено/слишком старое) —
+                // удаляем (best-effort) и отправляем новое, обновляя messageId записи.
+                log.warn("updateEventResults edit {} in chat {} failed, falling back to re-send: {}", post.messageId, chat.chatId, e.message)
+                try {
+                    runCatching { client.deleteMessage(chat.chatId, post.messageId) }
+                    val sent = client.sendMessage(chat.chatId, text, replyMarkup = cta.replyMarkup)
+                    post.messageId = sent.messageId
+                    post.pinnedMessageId = null
+                    postRepo.save(post)
+                    actions++
+                } catch (e2: Exception) {
+                    log.warn("updateEventResults re-send for event {} chat {} failed: {}", eventId, chat.chatId, e2.message)
+                }
+            }
+        }
+        return actions
     }
 
     /**
@@ -745,8 +811,8 @@ class TelegramService(
 
         var actions = 0
 
-        // 1) editMessageText на каждом исходном CREATED-сообщении
-        val posts = postRepo.findAllByEventId(eventId)
+        // 1) editMessageText на каждом исходном CREATED-сообщении (только ANNOUNCE).
+        val posts = postRepo.findAllByEventIdAndPostKind(eventId, "ANNOUNCE")
         if (posts.isNotEmpty()) {
             val chatById = chatRepo.findAllByUserIdOrderByLinkedAtAsc(ownerUserId).associateBy { it.id!! }
             val ctaData = registerCta(eventId)
@@ -851,7 +917,9 @@ class TelegramService(
         ownerUserId: UUID,
         predicate: (TelegramChat) -> Boolean
     ): List<TelegramChat> {
-        val posts = postRepo.findAllByEventId(eventId)
+        // Целевые чаты определяются по ANNOUNCE-постам (где был анонс игры). RESULTS-пост
+        // живёт в тех же чатах, поэтому это не сужает охват, но защищает от двойного учёта.
+        val posts = postRepo.findAllByEventIdAndPostKind(eventId, "ANNOUNCE")
         if (posts.isEmpty()) return emptyList()
         val chatById = chatRepo.findAllByUserIdOrderByLinkedAtAsc(ownerUserId).associateBy { it.id!! }
         return posts.mapNotNull { chatById[it.telegramChatId] }
@@ -864,7 +932,8 @@ class TelegramService(
         text: String,
         recordForEventId: UUID?,
         replyMarkup: Map<String, Any>? = null,
-        pinAfterSend: Boolean = false
+        pinAfterSend: Boolean = false,
+        postKind: String = "ANNOUNCE"
     ): Int {
         var posted = 0
         for (chat in chats) {
@@ -892,7 +961,8 @@ class TelegramService(
                             eventId = recordForEventId,
                             telegramChatId = chat.id,
                             messageId = sent.messageId,
-                            pinnedMessageId = pinnedMsgId
+                            pinnedMessageId = pinnedMsgId,
+                            postKind = postKind
                         )
                     )
                 }

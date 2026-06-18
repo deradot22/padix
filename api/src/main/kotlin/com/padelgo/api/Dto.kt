@@ -380,6 +380,9 @@ data class MatchResponse(
     @Schema(description = "Имя пользователя, который ввёл итоговый счёт. Для UI-метки «Введён: X».")
     val submittedByName: String? = null,
 
+    @Schema(description = "true — итоговый счёт ввёл текущий пользователь (может исправить свой счёт, пока игра идёт).")
+    val submittedByMe: Boolean = false,
+
     @Schema(
         description = "Шанс победы команды A (0..1) по Elo expectedScore. null, если матч уже сыгран — тогда шансы не показываем. " +
             "Команда B = 1 - expectedA. Считается через EloRating.expectedScore(teamRating(teamA), teamRating(teamB))."
@@ -394,6 +397,7 @@ data class MatchResponse(
             courtName: String? = null,
             submittedByUserId: UUID? = null,
             submittedByName: String? = null,
+            submittedByMe: Boolean = false,
             expectedA: Double? = null
         ) = MatchResponse(
             id = m.id!!,
@@ -405,6 +409,7 @@ data class MatchResponse(
             score = score,
             submittedByUserId = submittedByUserId,
             submittedByName = submittedByName,
+            submittedByMe = submittedByMe,
             expectedA = expectedA
         )
     }

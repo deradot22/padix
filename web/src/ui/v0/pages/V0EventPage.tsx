@@ -8,6 +8,7 @@ import { EventLeaderboard } from "@/components/event-leaderboard";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { ModalScrollArea } from "@/components/ui/modal-scroll-area";
+import { EditGameScoresDialog } from "@/components/edit-game-scores-dialog";
 import { useConfirm } from "@/components/ui/confirm-dialog";
 import { DatePicker, TimePicker } from "@/components/ui/date-picker";
 import { cn, formatEventDate, timeRange } from "../utils";
@@ -658,8 +659,11 @@ export function V0EventPage(props: { me: any; meLoaded?: boolean }) {
     // Финальный счёт = есть submittedByUserId ИЛИ матч уже FINISHED (для исторических данных без submittedBy).
     const hasFinalScore = (m: Match): boolean =>
       m.status === "FINISHED" || !!m.submittedByUserId;
+    // Свой же счёт участник может исправить, пока событие идёт (бэкенд разрешает перезапись своей записи).
     const canSubmitScore = (m: Match): boolean =>
-      isAuthor || (isMyMatch(m) && !hasFinalScore(m));
+      isAuthor ||
+      (isMyMatch(m) &&
+        (!hasFinalScore(m) || (!!m.submittedByMe && e.status === "IN_PROGRESS")));
     // Доступ к модалу «Раунды» для всех зарегистрированных, не только тех, кто уже в текущем матче
     // (резервы тоже могут смотреть и ввести счёт в свой матч, когда их поставят).
     const isParticipantOfEvent =
@@ -1921,7 +1925,10 @@ export function V0EventPage(props: { me: any; meLoaded?: boolean }) {
                                 : !isMyMatch(m)
                                   ? "Этот матч введёт его участник или организатор."
                                   : null
-                              : null;
+                              : // свой финальный счёт во время игры можно исправить — подскажем это
+                                canEdit && !isAuthor && finalScored && !!m.submittedByMe
+                                ? "Счёт введён вами — нажмите, чтобы исправить."
+                                : null;
                             const handleSelectTeam = (team: "A" | "B") => {
                               if (!canEdit) return;
                               // Открываем клавиатуру МГНОВЕННО — без ожидания сети. Раньше тут был
@@ -1939,7 +1946,9 @@ export function V0EventPage(props: { me: any; meLoaded?: boolean }) {
                                   const updatedMatch = refreshed.rounds
                                     .flatMap((r) => r.matches)
                                     .find((mm) => mm.id === m.id);
-                                  if (updatedMatch && hasFinalScore(updatedMatch)) {
+                                  // Закрываем клавиатуру, только если счёт финализирован и его правка нам недоступна
+                                  // (т.е. ввёл кто-то другой). Свой же счёт во время игры править можно.
+                                  if (updatedMatch && hasFinalScore(updatedMatch) && !canSubmitScore(updatedMatch)) {
                                     setScorePadOpen(false);
                                     setInfo("Счёт уже введён другим участником");
                                   }
@@ -2364,187 +2373,6 @@ function WinProbabilityHint({ expectedA }: { expectedA: number }) {
           style={{ width: `${pctB}%` }}
         />
       </div>
-    </div>
-  );
-}
-
-function EditGameScoresDialog(props: {
-  eventId: string;
-  onClose: () => void;
-  onSave: () => void;
-}) {
-  const [eventData, setEventData] = useState<EventDetails | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [scores, setScores] = useState<Record<string, { teamAPoints: number; teamBPoints: number }>>({});
-  const originalScoresRef = useRef<Record<string, { teamAPoints: number; teamBPoints: number }>>({});
-
-  useEffect(() => {
-    const load = async () => {
-      try {
-        const data = await api.getEventDetails(props.eventId);
-        setEventData(data);
-        const initialScores: Record<string, { teamAPoints: number; teamBPoints: number }> = {};
-        data.rounds.flatMap((r: any) => r.matches).forEach((m: any) => {
-          const score = m.score?.points;
-          initialScores[m.id] = {
-            teamAPoints: score?.teamAPoints ?? 0,
-            teamBPoints: score?.teamBPoints ?? 0,
-          };
-        });
-        setScores(initialScores);
-        originalScoresRef.current = initialScores;
-      } catch (e: any) {
-        setError(e?.message ?? "Ошибка загрузки события");
-      } finally {
-        setLoading(false);
-      }
-    };
-    load();
-  }, [props.eventId]);
-
-  const handleSave = async () => {
-    try {
-      setSaving(true);
-      setError(null);
-      const matches = eventData?.rounds.flatMap((r: any) => r.matches) ?? [];
-      for (const match of matches) {
-        const newScore = scores[match.id];
-        const originalScore = originalScoresRef.current[match.id];
-
-        // Only submit if scores changed
-        if (newScore && (newScore.teamAPoints !== originalScore?.teamAPoints || newScore.teamBPoints !== originalScore?.teamBPoints)) {
-          await api.saveDraftScore(match.id, newScore);
-          await api.submitScore(match.id, newScore);
-        }
-      }
-      props.onSave();
-    } catch (e: any) {
-      setError(e?.message ?? "Ошибка сохранения счёта");
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  if (!eventData && !loading) {
-    return (
-      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-6" onClick={props.onClose}>
-        <div className="bg-card border border-border rounded-lg p-6 max-w-md" onClick={(e) => e.stopPropagation()}>
-          <div className="text-red-500">Ошибка загрузки события</div>
-          <button onClick={props.onClose} className="mt-4 px-4 py-2 bg-primary text-primary-foreground rounded w-full">
-            Закрыть
-          </button>
-        </div>
-      </div>
-    );
-  }
-
-  const matches = eventData?.rounds.flatMap((r: any) => r.matches) ?? [];
-
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-6" onClick={props.onClose}>
-      <ModalScrollArea
-        className="w-full max-w-2xl max-h-[90dvh] overflow-y-auto rounded-xl border border-border bg-card p-6"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="flex items-center justify-between mb-6">
-          <div className="text-lg font-semibold">Редактирование счёта</div>
-          <button onClick={props.onClose} className="text-muted-foreground hover:text-foreground">
-            <X className="h-5 w-5" />
-          </button>
-        </div>
-
-        {error && (
-          <div className="mb-4 p-3 rounded-md bg-destructive/10 text-destructive text-sm">{error}</div>
-        )}
-
-        {loading ? (
-          <div className="text-center py-6 text-muted-foreground">Загрузка...</div>
-        ) : (
-          <>
-            <div className="space-y-4">
-              {matches.map((match: any) => (
-                <div key={match.id} className="border border-border rounded-lg p-4 space-y-3">
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <div className="text-sm font-medium mb-1">Команда A</div>
-                      <div className="flex items-center gap-1 text-sm text-muted-foreground">
-                        {match.teamA?.map((p: any) => p.name).join(" + ")}
-                      </div>
-                    </div>
-                    <div>
-                      <div className="text-sm font-medium mb-1">Команда B</div>
-                      <div className="flex items-center gap-1 text-sm text-muted-foreground">
-                        {match.teamB?.map((p: any) => p.name).join(" + ")}
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="flex items-center gap-3">
-                    <div className="flex-1">
-                      <label className="text-xs text-muted-foreground">Счёт Team A</label>
-                      <input
-                        type="number"
-                        min="0"
-                        value={scores[match.id]?.teamAPoints ?? 0}
-                        onChange={(e) =>
-                          setScores({
-                            ...scores,
-                            [match.id]: {
-                              ...scores[match.id],
-                              teamAPoints: parseInt(e.target.value) || 0,
-                            },
-                          })
-                        }
-                        disabled={saving}
-                        className="w-full px-3 py-2 border border-border rounded-md bg-background text-foreground"
-                      />
-                    </div>
-                    <div className="text-xl font-bold mt-5">:</div>
-                    <div className="flex-1">
-                      <label className="text-xs text-muted-foreground">Счёт Team B</label>
-                      <input
-                        type="number"
-                        min="0"
-                        value={scores[match.id]?.teamBPoints ?? 0}
-                        onChange={(e) =>
-                          setScores({
-                            ...scores,
-                            [match.id]: {
-                              ...scores[match.id],
-                              teamBPoints: parseInt(e.target.value) || 0,
-                            },
-                          })
-                        }
-                        disabled={saving}
-                        className="w-full px-3 py-2 border border-border rounded-md bg-background text-foreground"
-                      />
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-
-            <div className="flex gap-2 mt-6">
-              <button
-                onClick={props.onClose}
-                disabled={saving}
-                className="flex-1 px-4 py-2 border border-border rounded-md hover:bg-secondary disabled:opacity-50"
-              >
-                Отмена
-              </button>
-              <button
-                onClick={handleSave}
-                disabled={saving}
-                className="flex-1 px-4 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90 disabled:opacity-50"
-              >
-                {saving ? "Сохранение..." : "Сохранить"}
-              </button>
-            </div>
-          </>
-        )}
-      </ModalScrollArea>
     </div>
   );
 }

@@ -38,7 +38,8 @@ class TelegramReminderService(
                 if (event.reminderSentAt != null) continue
                 if (event.status !in REMINDABLE_STATUSES) continue
                 val ownerId = event.createdByUserId ?: continue
-                if (postRepo.findAllByEventId(eventId).isEmpty()) continue
+                // Напоминание имеет смысл только если игру анонсировали в TG (ANNOUNCE-пост).
+                if (postRepo.findAllByEventIdAndPostKind(eventId, "ANNOUNCE").isEmpty()) continue
 
                 val settings = telegramService.getOrCreateSettings(ownerId)
                 if (!settings.enabled) continue

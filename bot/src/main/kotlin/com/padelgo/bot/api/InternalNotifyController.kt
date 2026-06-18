@@ -104,6 +104,24 @@ data class EventFinishedRequest(
     val matchCount: Int
 )
 
+/**
+ * Зеркало [EventFinishedRequest]: api зовёт этот эндпойнт, когда у уже завершённой игры
+ * пересчитались результаты (отредактировали счёт/добавили матч). Бот редактирует ранее
+ * опубликованный RESULTS-пост вместо нового сообщения.
+ */
+data class EventResultsUpdatedRequest(
+    val eventId: UUID,
+    val ownerUserId: UUID,
+    val title: String,
+    val date: LocalDate,
+    val startTime: LocalTime,
+    val endTime: LocalTime,
+    val courtsCount: Int,
+    val top: List<FinishTopPlayerDto>,
+    val leaderboard: List<LeaderboardEntryDto> = emptyList(),
+    val matchCount: Int
+)
+
 data class RosterChangedRequest(
     val eventId: UUID,
     val ownerUserId: UUID,
@@ -173,6 +191,15 @@ class InternalNotifyController(
         val top = req.top.map { FinishTopPlayer(it.name, it.delta) }
         val leaderboard = req.leaderboard.map { FinishLeaderboardEntry(it.name, it.points) }
         val sent = service.postEventFinished(ev, req.ownerUserId, top, leaderboard, req.matchCount)
+        return NotifyResult(sent)
+    }
+
+    @PostMapping("/notify/event-results-updated")
+    fun eventResultsUpdated(@RequestBody req: EventResultsUpdatedRequest): NotifyResult {
+        val ev = req.toEvent()
+        val top = req.top.map { FinishTopPlayer(it.name, it.delta) }
+        val leaderboard = req.leaderboard.map { FinishLeaderboardEntry(it.name, it.points) }
+        val sent = service.updateEventResults(ev, req.ownerUserId, top, leaderboard, req.matchCount)
         return NotifyResult(sent)
     }
 
@@ -289,6 +316,17 @@ class InternalNotifyController(
     )
 
     private fun EventFinishedRequest.toEvent() = BotEvent(
+        id = eventId,
+        title = title,
+        date = date,
+        startTime = startTime,
+        endTime = endTime,
+        courtsCount = courtsCount,
+        status = EventStatus.FINISHED,
+        createdByUserId = ownerUserId
+    )
+
+    private fun EventResultsUpdatedRequest.toEvent() = BotEvent(
         id = eventId,
         title = title,
         date = date,
