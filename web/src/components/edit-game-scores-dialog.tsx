@@ -5,7 +5,14 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ModalScrollArea } from "@/components/ui/modal-scroll-area";
 
-type ScoreMap = Record<string, { teamAPoints: number; teamBPoints: number }>;
+// Значения держим строками, чтобы поле можно было очистить (пусто), а не залипало на 0,
+// и чтобы не появлялись ведущие нули («055»). В число парсим только при сохранении.
+type ScoreMap = Record<string, { teamAPoints: string; teamBPoints: string }>;
+
+/** Чистим ввод: только цифры, без ведущих нулей (но одиночный «0» и пустую строку разрешаем). */
+function sanitizeScore(raw: string): string {
+  return raw.replace(/\D/g, "").replace(/^0+(?=\d)/, "");
+}
 type FlatMatch = Match & { roundNumber: number };
 
 // Сплющиваем раунды → матчи, протаскивая номер раунда и корт.
@@ -51,8 +58,8 @@ export function EditGameScoresDialog(props: {
         flattenMatches(data).forEach((m) => {
           const score = m.score?.points;
           initialScores[m.id] = {
-            teamAPoints: score?.teamAPoints ?? 0,
-            teamBPoints: score?.teamBPoints ?? 0,
+            teamAPoints: String(score?.teamAPoints ?? 0),
+            teamBPoints: String(score?.teamBPoints ?? 0),
           };
         });
         setScores(initialScores);
@@ -75,11 +82,19 @@ export function EditGameScoresDialog(props: {
       for (const match of matches) {
         const newScore = scores[match.id];
         const originalScore = originalScoresRef.current[match.id];
+        if (!newScore) continue;
+
+        // Пустое поле трактуем как 0. Парсим строки в числа для отправки и сравнения.
+        const a = parseInt(newScore.teamAPoints || "0", 10);
+        const b = parseInt(newScore.teamBPoints || "0", 10);
+        const oa = parseInt(originalScore?.teamAPoints || "0", 10);
+        const ob = parseInt(originalScore?.teamBPoints || "0", 10);
 
         // Отправляем только реально изменённые матчи.
-        if (newScore && (newScore.teamAPoints !== originalScore?.teamAPoints || newScore.teamBPoints !== originalScore?.teamBPoints)) {
-          await api.saveDraftScore(match.id, newScore);
-          await api.submitScore(match.id, newScore);
+        if (a !== oa || b !== ob) {
+          const points = { teamAPoints: a, teamBPoints: b };
+          await api.saveDraftScore(match.id, points);
+          await api.submitScore(match.id, points);
         }
       }
       props.onSave();
@@ -162,15 +177,15 @@ export function EditGameScoresDialog(props: {
                     <div className="flex-1">
                       <label className="text-xs text-muted-foreground">Точки Team A</label>
                       <Input
-                        type="number"
-                        min="0"
-                        value={scores[match.id]?.teamAPoints ?? 0}
+                        type="text"
+                        inputMode="numeric"
+                        value={scores[match.id]?.teamAPoints ?? ""}
                         onChange={(e) =>
                           setScores({
                             ...scores,
                             [match.id]: {
                               ...scores[match.id],
-                              teamAPoints: parseInt(e.target.value) || 0,
+                              teamAPoints: sanitizeScore(e.target.value),
                             },
                           })
                         }
@@ -181,15 +196,15 @@ export function EditGameScoresDialog(props: {
                     <div className="flex-1">
                       <label className="text-xs text-muted-foreground">Точки Team B</label>
                       <Input
-                        type="number"
-                        min="0"
-                        value={scores[match.id]?.teamBPoints ?? 0}
+                        type="text"
+                        inputMode="numeric"
+                        value={scores[match.id]?.teamBPoints ?? ""}
                         onChange={(e) =>
                           setScores({
                             ...scores,
                             [match.id]: {
                               ...scores[match.id],
-                              teamBPoints: parseInt(e.target.value) || 0,
+                              teamBPoints: sanitizeScore(e.target.value),
                             },
                           })
                         }
