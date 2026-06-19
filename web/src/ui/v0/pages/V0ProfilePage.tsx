@@ -62,6 +62,11 @@ function isPastDate(dateStr: string) {
   return dateStr < todayIso;
 }
 
+// Матчи в деталях истории показываем по возрастанию: раунд 1 сверху, внутри раунда — по корту.
+function sortMatchesByRound(matches: EventHistoryMatch[]): EventHistoryMatch[] {
+  return [...matches].sort((a, b) => (a.roundNumber - b.roundNumber) || (a.courtNumber - b.courtNumber));
+}
+
 export function V0ProfilePage(props: { me: any; meLoaded?: boolean; onMeUpdate?: (me: any) => void }) {
   const nav = useNavigate();
   const [meLive, setMeLive] = useState<any | null>(null);
@@ -268,7 +273,7 @@ export function V0ProfilePage(props: { me: any; meLoaded?: boolean; onMeUpdate?:
                 onClick={async () => {
                   try {
                     const res = await api.myHistoryEvent(it.eventId);
-                    setDetails(res);
+                    setDetails(sortMatchesByRound(res));
                     setDetailsEventId(it.eventId);
                     setDetailsStatsOpen(false);
                     setDetailsRounds([]);
@@ -1197,7 +1202,7 @@ export function V0ProfilePage(props: { me: any; meLoaded?: boolean; onMeUpdate?:
                     api.myHistoryEvent(savedEventId),
                   ]);
                   setHistory(updatedList);
-                  setDetails(updatedDetails);
+                  setDetails(sortMatchesByRound(updatedDetails));
                   // Если открыт блок «Статистика»/таблица лидеров — подтянем свежие раунды.
                   if (detailsRounds.length > 0) {
                     try {
