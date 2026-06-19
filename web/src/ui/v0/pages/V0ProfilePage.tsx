@@ -1185,12 +1185,26 @@ export function V0ProfilePage(props: { me: any; meLoaded?: boolean; onMeUpdate?:
               setEditGameEventId(null);
             }}
             onSave={async () => {
+              const savedEventId = editGameEventId;
               setEditGameOpen(false);
               setEditGameEventId(null);
-              if (detailsEventId === editGameEventId) {
+              if (detailsEventId === savedEventId && savedEventId) {
                 try {
-                  const updated = await api.myHistory();
-                  setHistory(updated);
+                  // Обновляем и список истории, и ОТКРЫТУЮ модалку деталей (счёт по матчам),
+                  // иначе после правки в модалке оставался старый счёт.
+                  const [updatedList, updatedDetails] = await Promise.all([
+                    api.myHistory(),
+                    api.myHistoryEvent(savedEventId),
+                  ]);
+                  setHistory(updatedList);
+                  setDetails(updatedDetails);
+                  // Если открыт блок «Статистика»/таблица лидеров — подтянем свежие раунды.
+                  if (detailsRounds.length > 0) {
+                    try {
+                      const d = await api.getEventDetails(savedEventId);
+                      setDetailsRounds(d.rounds ?? []);
+                    } catch {}
+                  }
                 } catch {}
               }
             }}
