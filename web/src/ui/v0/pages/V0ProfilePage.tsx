@@ -1027,7 +1027,7 @@ export function V0ProfilePage(props: { me: any; meLoaded?: boolean; onMeUpdate?:
                   </div>
                 </div>
               </div>
-              <div className="flex-1 overflow-y-auto px-4 py-4 sm:px-6" style={{ scrollbarWidth: "none" }}>
+              <div className="flex-1 overflow-y-auto px-4 pt-4 pb-8 sm:px-6 sm:pb-6" style={{ scrollbarWidth: "none" }}>
               <Button
                 variant="secondary"
                 className="w-full"
