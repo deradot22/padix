@@ -8,7 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Gamepad2, Users, Clock, Calendar, Lightbulb, Users2, MapPin, Zap, Send, MessageCircle, Users as UsersIcon, Lock, Globe, Repeat } from "lucide-react";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
-import { api, EventVisibility, PairingMode, TelegramChat } from "../../../lib/api";
+import { api, EventFormat, EventVisibility, PairingMode, TelegramChat } from "../../../lib/api";
 
 function todayIso(): string {
   const d = new Date();
@@ -41,12 +41,16 @@ export function V0CreateEventPage(props: {
   const [endHour, setEndHour] = useState("21");
   const [endMinute, setEndMinute] = useState("00");
   const [pairingMode, setPairingMode] = useState<PairingMode>("ROUND_ROBIN");
+  const [format, setFormat] = useState<EventFormat>("AMERICANA");
   const [courts, setCourts] = useState(2);
   const [courtNames, setCourtNames] = useState<string[]>(["Корт A", "Корт B"]);
   const [autoRounds, setAutoRounds] = useState(true);
   const [rounds, setRounds] = useState(6);
   const [pointsPerPlayer, setPointsPerPlayer] = useState(6);
   const [visibility, setVisibility] = useState<EventVisibility>("PUBLIC");
+  const [ratingLimitEnabled, setRatingLimitEnabled] = useState(false);
+  const [minRatingStr, setMinRatingStr] = useState("");
+  const [maxRatingStr, setMaxRatingStr] = useState("");
   const [loading, setLoading] = useState(false);
   const [initialLoading, setInitialLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -224,12 +228,35 @@ export function V0CreateEventPage(props: {
       if (Number.isNaN(startDt.getTime()) || date < todayStr) {
         throw new Error("Дата игры не может быть в прошлом");
       }
+      // Ограничение по рейтингу (задача #9): опционально, обе границы необязательны.
+      let minRating: number | undefined;
+      let maxRating: number | undefined;
+      if (ratingLimitEnabled) {
+        const minRaw = minRatingStr.trim();
+        const maxRaw = maxRatingStr.trim();
+        if (minRaw === "" && maxRaw === "") {
+          throw new Error("Укажите минимум и/или максимум рейтинга, либо отключите ограничение");
+        }
+        if (minRaw !== "") {
+          const v = Number(minRaw);
+          if (!Number.isFinite(v) || v < 0) throw new Error("Минимальный рейтинг должен быть числом ≥ 0");
+          minRating = Math.round(v);
+        }
+        if (maxRaw !== "") {
+          const v = Number(maxRaw);
+          if (!Number.isFinite(v) || v < 0) throw new Error("Максимальный рейтинг должен быть числом ≥ 0");
+          maxRating = Math.round(v);
+        }
+        if (minRating != null && maxRating != null && minRating > maxRating) {
+          throw new Error("Минимальный рейтинг не может быть больше максимального");
+        }
+      }
       const created = await api.createEvent({
         title,
         date,
         startTime,
         endTime,
-        format: "AMERICANA",
+        format,
         pairingMode,
         courtsCount: courts,
         courtNames: courtNames.map((name, idx) => (name?.trim() ? name.trim() : `Корт ${idx + 1}`)),
@@ -238,6 +265,8 @@ export function V0CreateEventPage(props: {
         scoringMode: "POINTS",
         pointsPerPlayerPerMatch: pointsPerPlayer,
         visibility,
+        minRating,
+        maxRating,
         telegramChatIds: selectedTgChatIds.size > 0 ? Array.from(selectedTgChatIds) : undefined,
       });
       nav(`/events/${created.id}`);
@@ -680,6 +709,44 @@ export function V0CreateEventPage(props: {
                 Правила игры
               </h2>
 
+              {!recurring && (
+                <div className="space-y-3">
+                  <Label className="font-medium flex items-center gap-2">
+                    <Gamepad2 className="h-4 w-4 text-primary" />
+                    Формат игры
+                  </Label>
+                  <div className="grid gap-3 md:grid-cols-3">
+                    {[
+                      { id: "AMERICANA" as EventFormat, title: "Американка", desc: "Партнёры меняются каждый раунд. Классический микс." },
+                      { id: "MEXICANO" as EventFormat, title: "Мексикано", desc: "Пары каждый раунд по текущей таблице лидеров; раунды добавляются по ходу." },
+                      { id: "FIXED_PAIRS" as EventFormat, title: "Фиксированные пары", desc: "Партнёр не меняется весь матч; пары играют круговую (каждая с каждой)." },
+                    ].map((opt) => {
+                      const active = format === opt.id;
+                      return (
+                        <button
+                          key={opt.id}
+                          type="button"
+                          onClick={() => setFormat(opt.id)}
+                          className={cn(
+                            "relative rounded-lg border-2 p-4 text-left transition-all",
+                            active ? "border-primary bg-primary/5" : "border-border bg-secondary/50 hover:border-border/80",
+                          )}
+                        >
+                          <div className="font-semibold">{opt.title}</div>
+                          <div className="text-sm text-muted-foreground mt-1">{opt.desc}</div>
+                          {active ? (
+                            <div className="absolute top-3 right-3 flex h-5 w-5 items-center justify-center rounded-full bg-primary">
+                              <div className="h-2 w-2 rounded-full bg-primary-foreground" />
+                            </div>
+                          ) : null}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {format === "AMERICANA" && (
               <div className="space-y-3">
                 <Label className="font-medium flex items-center gap-2">
                   <Users2 className="h-4 w-4 text-primary" />
@@ -710,6 +777,7 @@ export function V0CreateEventPage(props: {
                   ))}
                 </div>
               </div>
+              )}
 
               <div className="space-y-3">
                 <Label className="font-medium">Видимость</Label>
@@ -745,6 +813,65 @@ export function V0CreateEventPage(props: {
                   })}
                 </div>
               </div>
+
+              {!recurring && (
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="min-w-0">
+                      <Label className="font-medium">Ограничение по рейтингу</Label>
+                      <p className="text-sm text-muted-foreground mt-1">
+                        Пускать только игроков с рейтингом в заданном диапазоне. Организатор может добавить любого вручную.
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      role="switch"
+                      aria-checked={ratingLimitEnabled}
+                      aria-label="Ограничение по рейтингу"
+                      onClick={() => setRatingLimitEnabled((v) => !v)}
+                      className={cn(
+                        "relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors",
+                        ratingLimitEnabled ? "bg-primary" : "bg-input",
+                      )}
+                    >
+                      <span
+                        className={cn(
+                          "inline-block h-5 w-5 transform rounded-full bg-background shadow transition-transform",
+                          ratingLimitEnabled ? "translate-x-5" : "translate-x-0.5",
+                        )}
+                      />
+                    </button>
+                  </div>
+                  {ratingLimitEnabled && (
+                    <div className="grid gap-3 sm:grid-cols-2">
+                      <div className="space-y-1.5">
+                        <Label htmlFor="minRating" className="text-sm text-muted-foreground">Минимум</Label>
+                        <Input
+                          id="minRating"
+                          type="number"
+                          inputMode="numeric"
+                          min={0}
+                          placeholder="напр. 1000"
+                          value={minRatingStr}
+                          onChange={(e) => setMinRatingStr(e.target.value)}
+                        />
+                      </div>
+                      <div className="space-y-1.5">
+                        <Label htmlFor="maxRating" className="text-sm text-muted-foreground">Максимум</Label>
+                        <Input
+                          id="maxRating"
+                          type="number"
+                          inputMode="numeric"
+                          min={0}
+                          placeholder="напр. 1400"
+                          value={maxRatingStr}
+                          onChange={(e) => setMaxRatingStr(e.target.value)}
+                        />
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
 
               <div className="space-y-3">
                 <Label className="font-medium">Раунды</Label>
@@ -802,9 +929,9 @@ export function V0CreateEventPage(props: {
                   <div className="text-sm text-muted-foreground">{minPlayers}+ игроков</div>
                 </div>
                 <div className="rounded-lg bg-secondary/50 p-4 border border-border/50">
-                  <div className="text-xs text-muted-foreground uppercase tracking-wide mb-1">Режим</div>
-                  <div className="font-semibold text-lg">{gameMode === "balanced" ? "Равный бой" : "Каждый с каждым"}</div>
-                  <div className="text-sm text-muted-foreground">{gameMode === "balanced" ? "Оптимально" : "Классика"}</div>
+                  <div className="text-xs text-muted-foreground uppercase tracking-wide mb-1">{format === "AMERICANA" ? "Режим" : "Формат"}</div>
+                  <div className="font-semibold text-lg">{format === "AMERICANA" ? (gameMode === "balanced" ? "Равный бой" : "Каждый с каждым") : format === "MEXICANO" ? "Мексикано" : "Фиксированные пары"}</div>
+                  <div className="text-sm text-muted-foreground">{format === "AMERICANA" ? (gameMode === "balanced" ? "Оптимально" : "Классика") : format === "MEXICANO" ? "По таблице лидеров" : "Круговая по парам"}</div>
                 </div>
                 <div className="rounded-lg bg-secondary/50 p-4 border border-border/50">
                   <div className="text-xs text-muted-foreground uppercase tracking-wide mb-1">Подачи</div>

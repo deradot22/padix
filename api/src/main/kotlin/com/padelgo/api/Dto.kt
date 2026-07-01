@@ -167,7 +167,15 @@ data class CreateEventRequest(
     val telegramChatIds: List<UUID>? = null,
 
     @Schema(description = "Видимость: PRIVATE (по умолчанию, видна только участникам/приглашённым/автору) или PUBLIC (видна всем в /games)")
-    val visibility: com.padelgo.domain.EventVisibility = com.padelgo.domain.EventVisibility.PRIVATE
+    val visibility: com.padelgo.domain.EventVisibility = com.padelgo.domain.EventVisibility.PRIVATE,
+
+    @field:Min(0)
+    @Schema(description = "Минимальный рейтинг для регистрации (включительно). null — без нижней границы.", example = "1000")
+    val minRating: Int? = null,
+
+    @field:Min(0)
+    @Schema(description = "Максимальный рейтинг для регистрации (включительно). null — без верхней границы.", example = "1400")
+    val maxRating: Int? = null
 )
 
 @Schema(description = "Запрос на обновление игры")
@@ -267,7 +275,13 @@ data class EventResponse(
     val seriesId: UUID? = null,
 
     @Schema(description = "Название серии (подписки), которой принадлежит игра; null если игра разовая")
-    val seriesTitle: String? = null
+    val seriesTitle: String? = null,
+
+    @Schema(description = "Минимальный рейтинг для регистрации (включительно). null — без нижней границы.")
+    val minRating: Int? = null,
+
+    @Schema(description = "Максимальный рейтинг для регистрации (включительно). null — без верхней границы.")
+    val maxRating: Int? = null
 ) {
     companion object {
         fun from(e: Event, registeredCount: Int = 0, seriesTitle: String? = null) = EventResponse(
@@ -290,7 +304,9 @@ data class EventResponse(
             tiebreakEnabled = e.tiebreakEnabled,
             visibility = e.visibility,
             seriesId = e.seriesId,
-            seriesTitle = seriesTitle
+            seriesTitle = seriesTitle,
+            minRating = e.minRating,
+            maxRating = e.maxRating
         )
     }
 }
@@ -300,6 +316,17 @@ data class RegisterRequest(
     @field:NotNull
     @Schema(description = "UUID игрока (из PlayerResponse.id)")
     val playerId: UUID
+)
+
+@Schema(description = "Запрос на регистрацию пары (формат «Фиксированные пары»)")
+data class RegisterPairRequest(
+    @field:NotNull
+    @Schema(description = "UUID первого игрока пары")
+    val player1Id: UUID,
+
+    @field:NotNull
+    @Schema(description = "UUID второго игрока пары")
+    val player2Id: UUID
 )
 
 @Schema(description = "Запрос на смену режима спаривания эвента")

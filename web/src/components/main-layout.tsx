@@ -50,7 +50,7 @@ export function MainLayout(props: {
         onRefreshNotifications={props.onRefreshNotifications}
         onLogout={props.onLogout}
       />
-      <main className="mx-auto max-w-7xl w-full px-4 pt-4 pb-24 sm:px-6 sm:pt-8 md:pb-8 lg:px-8">
+      <main className="mx-auto max-w-7xl w-full px-4 pt-4 pb-[calc(6rem+env(safe-area-inset-bottom))] sm:px-6 sm:pt-8 md:pb-8 lg:px-8">
         <AnimatePresence mode="wait" initial={false}>
           <motion.div key={pathname} {...fade}>
             {props.children}

@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useParams, useLocation } from "react-router-dom";
 import { AlertTriangle, ArrowLeft, Check, ChevronDown, Clock, Globe, Lock, MapPin, Pencil, Repeat, Scale, Share2, Target, Trash2, Trophy, UserPlus, Users, Zap, X } from "lucide-react";
 import { useNavigate } from "react-router-dom";
-import { api, BalancePreview, EventDetails, FriendItem, FriendsSnapshot, Match } from "../../../lib/api";
+import { api, BalancePreview, EventDetails, FriendItem, FriendsSnapshot, Match, Player } from "../../../lib/api";
 import { PlayerTooltip } from "@/components/player-tooltip";
 import { EventLeaderboard } from "@/components/event-leaderboard";
 import { Button } from "@/components/ui/button";
@@ -70,6 +70,18 @@ export function V0EventPage(props: { me: any; meLoaded?: boolean }) {
   const [loading, setLoading] = useState(true);
   const [registering, setRegistering] = useState(false);
   const [canceling, setCanceling] = useState(false);
+  // Fixed pairs: регистрация пары организатором.
+  const [allPlayers, setAllPlayers] = useState<Player[]>([]);
+  const [pairP1, setPairP1] = useState("");
+  const [pairP2, setPairP2] = useState("");
+  const [pairBusy, setPairBusy] = useState(false);
+  // Для формата «Фиксированные пары» организатору нужен список всех игроков, чтобы собирать пары.
+  useEffect(() => {
+    const ev = data?.event;
+    if (ev?.format === "FIXED_PAIRS" && data?.isAuthor && ev.status === "OPEN_FOR_REGISTRATION") {
+      api.getRating().then(setAllPlayers).catch(() => {});
+    }
+  }, [data?.event?.format, data?.isAuthor, data?.event?.status]);
   const [closing, setClosing] = useState(false);
   const [starting, setStarting] = useState(false);
   const [finishing, setFinishing] = useState(false);
@@ -652,6 +664,17 @@ export function V0EventPage(props: { me: any; meLoaded?: boolean }) {
     const isRegistered = !!meId && registered.some((p) => p.id === meId);
     const isAuthor = data.isAuthor;
 
+    // Ограничение по рейтингу (задача #9): применяется только к самозаписи не-автора.
+    const meRating = props.me?.rating;
+    const minR = e.minRating ?? null;
+    const maxR = e.maxRating ?? null;
+    const hasRatingLimit = minR != null || maxR != null;
+    const ratingRangeLabel =
+      minR != null && maxR != null ? `${minR}–${maxR}` : minR != null ? `от ${minR}` : `до ${maxR}`;
+    const ratingOutOfRange =
+      meRating != null && ((minR != null && meRating < minR) || (maxR != null && meRating > maxR));
+    const ratingBlocked = hasRatingLimit && !isAuthor && ratingOutOfRange;
+
     // Совместный ввод счёта: участник матча может ввести счёт своего матча первым.
     // Автор может всё (включая перезапись и редактирование после FINISHED).
     const isMyMatch = (m: Match): boolean =>
@@ -702,6 +725,18 @@ export function V0EventPage(props: { me: any; meLoaded?: boolean }) {
                       Автор: {data.authorName}
                     </span>
                   )}
+                  {e.format === "MEXICANO" && (
+                    <span className="inline-flex items-center gap-1 rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-1 text-sm font-medium text-amber-700 dark:text-amber-300">
+                      <Zap className="h-3.5 w-3.5" />
+                      Мексикано
+                    </span>
+                  )}
+                  {e.format === "FIXED_PAIRS" && (
+                    <span className="inline-flex items-center gap-1 rounded-md border border-violet-500/40 bg-violet-500/10 px-3 py-1 text-sm font-medium text-violet-700 dark:text-violet-300">
+                      <Users className="h-3.5 w-3.5" />
+                      Фиксированные пары
+                    </span>
+                  )}
                   {e.seriesId ? (
                     isAuthor ? (
                       <Link
@@ -734,6 +769,12 @@ export function V0EventPage(props: { me: any; meLoaded?: boolean }) {
                     <MapPin className="h-4 w-4 text-primary" />
                     <span className="font-medium">{e.courtsCount} корта</span>
                   </div>
+                  {hasRatingLimit && (
+                    <div className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-card/80 backdrop-blur-sm border border-border/50">
+                      <Target className="h-4 w-4 text-primary" />
+                      <span className="font-medium">Рейтинг {ratingRangeLabel}</span>
+                    </div>
+                  )}
                 </div>
               </div>
 
@@ -766,30 +807,46 @@ export function V0EventPage(props: { me: any; meLoaded?: boolean }) {
                         {canceling ? "Отмена…" : "Вы записаны (отменить)"}
                       </button>
                     ) : e.status === "OPEN_FOR_REGISTRATION" ? (
-                      <button
-                        type="button"
-                        className="h-11 w-full sm:w-[240px] px-6 rounded-md bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 transition-colors"
-                        disabled={registering}
-                        onClick={async () => {
-                          if (!eventId) return;
-                          if (!meId) return;
-                          setRegistering(true);
-                          setActionError(null);
-                          setInfo(null);
-                          try {
-                            await api.registerForEvent(eventId, meId);
-                            const refreshed = await api.getEventDetails(eventId);
-                            setData(refreshed);
-                            setInfo("Вы записаны");
-                          } catch (err: any) {
-                            setActionError(err?.message ?? "Ошибка регистрации");
-                          } finally {
-                            setRegistering(false);
-                          }
-                        }}
-                      >
-                        {registering ? "Запись…" : "Записаться"}
-                      </button>
+                      ratingBlocked ? (
+                        <div className="w-full sm:w-[240px] space-y-2">
+                          <button
+                            type="button"
+                            disabled
+                            className="h-11 w-full px-6 rounded-md border border-border bg-secondary text-muted-foreground text-sm font-medium cursor-not-allowed inline-flex items-center justify-center gap-2"
+                          >
+                            <Target className="h-4 w-4" />
+                            Рейтинг не подходит
+                          </button>
+                          <p className="text-xs text-muted-foreground">
+                            Твой рейтинг {meRating} вне диапазона {ratingRangeLabel}. Попроси организатора добавить тебя вручную.
+                          </p>
+                        </div>
+                      ) : (
+                        <button
+                          type="button"
+                          className="h-11 w-full sm:w-[240px] px-6 rounded-md bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 transition-colors"
+                          disabled={registering}
+                          onClick={async () => {
+                            if (!eventId) return;
+                            if (!meId) return;
+                            setRegistering(true);
+                            setActionError(null);
+                            setInfo(null);
+                            try {
+                              await api.registerForEvent(eventId, meId);
+                              const refreshed = await api.getEventDetails(eventId);
+                              setData(refreshed);
+                              setInfo("Вы записаны");
+                            } catch (err: any) {
+                              setActionError(err?.message ?? "Ошибка регистрации");
+                            } finally {
+                              setRegistering(false);
+                            }
+                          }}
+                        >
+                          {registering ? "Запись…" : "Записаться"}
+                        </button>
+                      )
                     ) : (
                       <div className="text-sm text-muted-foreground">Регистрация закрыта</div>
                     )}
@@ -1631,6 +1688,68 @@ export function V0EventPage(props: { me: any; meLoaded?: boolean }) {
           </div>
 
           <div className="p-6">
+            {isAuthor && e.status === "OPEN_FOR_REGISTRATION" && e.format === "FIXED_PAIRS" && (
+              <div className="mb-5 rounded-xl border border-violet-500/30 bg-violet-500/5 p-4 space-y-3">
+                <div className="flex items-center gap-2 text-sm font-medium">
+                  <Users className="h-4 w-4 text-violet-500" />
+                  Добавить пару
+                </div>
+                <div className="flex flex-col gap-2 sm:flex-row">
+                  <select
+                    value={pairP1}
+                    onChange={(ev) => setPairP1(ev.target.value)}
+                    className="h-10 flex-1 rounded-md border border-border bg-background px-3 text-sm"
+                  >
+                    <option value="">Игрок 1…</option>
+                    {allPlayers
+                      .filter((p) => !registered.some((r) => r.id === p.id) && p.id !== pairP2)
+                      .map((p) => (
+                        <option key={p.id} value={p.id}>{p.name} ({p.rating})</option>
+                      ))}
+                  </select>
+                  <select
+                    value={pairP2}
+                    onChange={(ev) => setPairP2(ev.target.value)}
+                    className="h-10 flex-1 rounded-md border border-border bg-background px-3 text-sm"
+                  >
+                    <option value="">Игрок 2…</option>
+                    {allPlayers
+                      .filter((p) => !registered.some((r) => r.id === p.id) && p.id !== pairP1)
+                      .map((p) => (
+                        <option key={p.id} value={p.id}>{p.name} ({p.rating})</option>
+                      ))}
+                  </select>
+                  <button
+                    type="button"
+                    disabled={!pairP1 || !pairP2 || pairP1 === pairP2 || pairBusy}
+                    onClick={async () => {
+                      if (!eventId || !pairP1 || !pairP2) return;
+                      setPairBusy(true);
+                      setActionError(null);
+                      setInfo(null);
+                      try {
+                        await api.registerPair(eventId, pairP1, pairP2);
+                        const refreshed = await api.getEventDetails(eventId);
+                        setData(refreshed);
+                        setPairP1("");
+                        setPairP2("");
+                        setInfo("Пара добавлена");
+                      } catch (err: any) {
+                        setActionError(err?.message ?? "Ошибка регистрации пары");
+                      } finally {
+                        setPairBusy(false);
+                      }
+                    }}
+                    className="h-10 px-5 rounded-md bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed shrink-0"
+                  >
+                    {pairBusy ? "…" : "Добавить пару"}
+                  </button>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Пары играют круговую (каждая с каждой). Для {e.courtsCount} кортов нужно {e.courtsCount * 2} пар.
+                </p>
+              </div>
+            )}
             <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-5">
               {registered.map((p, idx) => (
                 <PlayerTooltip
@@ -2128,6 +2247,7 @@ export function V0EventPage(props: { me: any; meLoaded?: boolean }) {
             </ModalScrollArea>
 
             <div className="mt-5 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+              {e.format === "FIXED_PAIRS" ? <div /> : (
               <div className="flex flex-wrap items-center gap-2">
                 <Button
                   variant="secondary"
@@ -2153,8 +2273,9 @@ export function V0EventPage(props: { me: any; meLoaded?: boolean }) {
                     }
                   }}
                 >
-                  + Раунд
+                  {e.format === "MEXICANO" ? "+ Раунд по таблице" : "+ Раунд"}
                 </Button>
+                {e.format === "AMERICANA" && (
                 <Button
                   variant="secondary"
                   disabled={finalRoundLocked}
@@ -2189,7 +2310,9 @@ export function V0EventPage(props: { me: any; meLoaded?: boolean }) {
                 >
                   Финальный раунд
                 </Button>
+                )}
               </div>
+              )}
               <Button
                 variant="destructive"
                 disabled={finishing}

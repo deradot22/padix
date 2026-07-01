@@ -180,6 +180,13 @@ class EventService(
             event.setsPerMatch = 1
         }
         if (event.title.isBlank()) throw ApiException(HttpStatus.BAD_REQUEST, "title is required")
+        val minR = event.minRating
+        val maxR = event.maxRating
+        if (minR != null && minR < 0) throw ApiException(HttpStatus.BAD_REQUEST, "minRating must be >= 0")
+        if (maxR != null && maxR < 0) throw ApiException(HttpStatus.BAD_REQUEST, "maxRating must be >= 0")
+        if (minR != null && maxR != null && minR > maxR) {
+            throw ApiException(HttpStatus.BAD_REQUEST, "minRating must be <= maxRating")
+        }
         event.status = EventStatus.OPEN_FOR_REGISTRATION
         if (event.autoRounds && event.roundsPlanned <= 0) {
             event.roundsPlanned = 1 // placeholder, будет пересчитано на старте
@@ -265,6 +272,16 @@ class EventService(
         requireAuthor(event, userId)
         if (event.status != EventStatus.IN_PROGRESS) throw ApiException(HttpStatus.CONFLICT, "Event is not in progress")
 
+        // Mexicano: следующий раунд формируется по текущей таблице очков (не анти-повтором).
+        if (event.format == com.padelgo.domain.EventFormat.MEXICANO) {
+            planMexicanoNextRound(event)
+            return
+        }
+        // Fixed pairs: round-robin формируется целиком на старте — доп. раунды не добавляются.
+        if (event.format == com.padelgo.domain.EventFormat.FIXED_PAIRS) {
+            throw ApiException(HttpStatus.CONFLICT, "Для фиксированных пар расписание round-robin формируется целиком на старте")
+        }
+
         val regs = regRepo.findAllByEventIdAndStatus(eventId)
         val playerIds = regs.mapNotNull { it.playerId }
         val capacity = event.courtsCount * 4
@@ -334,42 +351,9 @@ class EventService(
         }
 
         val lastRound = roundRepo.findAllByEventIdOrderByRoundNumberAsc(eventId).maxByOrNull { it.roundNumber }
-        val pointsByPlayer = computeTournamentStandings(eventId, playerIds, event.scoringMode, maxRoundNumber = lastRound?.roundNumber)
-
-        val players = playerRepo.findAllById(playerIds).associateBy { it.id!! }
-        val leaderboard = playerIds.sortedWith(
-            compareByDescending<UUID> { pointsByPlayer[it] ?: 0 }
-                .thenByDescending { players[it]?.rating ?: 0 }
-                .thenBy { players[it]?.name?.lowercase() ?: "" }
-        )
-
-        val selected = leaderboard.take(capacity)
-        val groups = selected.chunked(4).filter { it.size == 4 }
-        log.info("[addFinalRound] points={}", selected.map { players[it]?.name to (pointsByPlayer[it] ?: 0) })
-        log.info("[addFinalRound] leaderboard={}", selected.map { players[it]?.name ?: it.toString() })
-        log.info("[addFinalRound] groups={}", groups.map { g -> g.map { players[it]?.name ?: it.toString() } })
-        val round = roundRepo.save(Round(eventId = eventId, roundNumber = (lastRound?.roundNumber ?: 0) + 1))
-        groups.forEachIndexed { idx, quad ->
-            val a = quad[0]
-            val b = quad[1]
-            val c = quad[2]
-            val d = quad[3]
-            // Snake: 1+4 vs 2+3, 5+8 vs 6+7
-            val teamANames = listOf(players[a]?.name, players[d]?.name).joinToString(" + ")
-            val teamBNames = listOf(players[b]?.name, players[c]?.name).joinToString(" + ")
-            log.info("[addFinalRound] Court {}: {} vs {}", idx + 1, teamANames, teamBNames)
-            matchRepo.save(
-                Match(
-                    roundId = round.id!!,
-                    courtNumber = idx + 1,
-                    teamAPlayer1Id = a,
-                    teamAPlayer2Id = d,
-                    teamBPlayer1Id = b,
-                    teamBPlayer2Id = c,
-                    status = MatchStatus.SCHEDULED
-                )
-            )
-        }
+        val leaderboard = standingsLeaderboard(eventId, playerIds, event.scoringMode, lastRound?.roundNumber)
+        log.info("[addFinalRound] leaderboard={}", leaderboard.take(capacity))
+        buildSnakeRound(eventId, leaderboard, event.courtsCount, (lastRound?.roundNumber ?: 0) + 1)
     }
 
     private fun computeTournamentStandings(eventId: UUID, playerIds: List<UUID>, scoringMode: ScoringMode, maxRoundNumber: Int? = null): Map<UUID, Int> {
@@ -407,6 +391,123 @@ class EventService(
         return pointsByPlayer
     }
 
+    /** Игроки, отсортированные по текущей таблице очков (лучший→худший); тай-брейк рейтинг, имя. */
+    private fun standingsLeaderboard(
+        eventId: UUID,
+        playerIds: List<UUID>,
+        scoringMode: ScoringMode,
+        maxRoundNumber: Int?
+    ): List<UUID> {
+        val points = computeTournamentStandings(eventId, playerIds, scoringMode, maxRoundNumber)
+        val players = playerRepo.findAllById(playerIds).associateBy { it.id!! }
+        return playerIds.sortedWith(
+            compareByDescending<UUID> { points[it] ?: 0 }
+                .thenByDescending { players[it]?.rating ?: 0 }
+                .thenBy { players[it]?.name?.lowercase() ?: "" }
+        )
+    }
+
+    /**
+     * Строит один раунд «змейкой» из упорядоченного (лучший→худший) списка игроков:
+     * четвёрка a,b,c,d → команда a+d против b+c (1+4 vs 2+3). Игроки сверх capacity
+     * (courtsCount*4) в этот раунд не попадают. Используется Mexicano и «финальным раундом».
+     */
+    private fun buildSnakeRound(eventId: UUID, orderedPlayers: List<UUID>, courtsCount: Int, roundNumber: Int): Round {
+        val round = roundRepo.save(Round(eventId = eventId, roundNumber = roundNumber))
+        SnakePairing.round(orderedPlayers, courtsCount).forEach { pm ->
+            matchRepo.save(
+                Match(
+                    roundId = round.id!!,
+                    courtNumber = pm.courtNumber,
+                    teamAPlayer1Id = pm.teamA.first,
+                    teamAPlayer2Id = pm.teamA.second,
+                    teamBPlayer1Id = pm.teamB.first,
+                    teamBPlayer2Id = pm.teamB.second,
+                    status = MatchStatus.SCHEDULED
+                )
+            )
+        }
+        return round
+    }
+
+    /** Mexicano: первый раунд формируется змейкой по рейтингу (таблицы очков ещё нет). */
+    private fun planMexicanoInitialRound(event: Event, playerIds: List<UUID>) {
+        val players = playerRepo.findAllById(playerIds).associateBy { it.id!! }
+        val ordered = playerIds.sortedWith(
+            compareByDescending<UUID> { players[it]?.rating ?: 0 }
+                .thenBy { players[it]?.name?.lowercase() ?: "" }
+        )
+        buildSnakeRound(event.id!!, ordered, event.courtsCount, 1)
+    }
+
+    /**
+     * Mexicano: следующий раунд формируется змейкой по ТЕКУЩЕЙ таблице очков. Требует, чтобы
+     * предыдущий раунд был полностью сыгран (иначе пары считались бы по неполным данным).
+     */
+    private fun planMexicanoNextRound(event: Event) {
+        val eventId = event.id!!
+        val regs = regRepo.findAllByEventIdAndStatus(eventId)
+        val playerIds = regs.mapNotNull { it.playerId }
+        val capacity = event.courtsCount * 4
+        if (playerIds.size < capacity) {
+            throw ApiException(HttpStatus.CONFLICT, "Нужно минимум $capacity игроков, сейчас ${playerIds.size}")
+        }
+        val lastRound = roundRepo.findAllByEventIdOrderByRoundNumberAsc(eventId).maxByOrNull { it.roundNumber }
+        if (lastRound != null) {
+            val lastMatches = matchRepo.findAllByRoundIdOrderByCourtNumberAsc(lastRound.id!!)
+            if (lastMatches.isNotEmpty() && lastMatches.any { it.status != MatchStatus.FINISHED }) {
+                throw ApiException(HttpStatus.CONFLICT, "Сначала введите счёт всех матчей текущего раунда")
+            }
+        }
+        val leaderboard = standingsLeaderboard(eventId, playerIds, event.scoringMode, lastRound?.roundNumber)
+        buildSnakeRound(eventId, leaderboard, event.courtsCount, (lastRound?.roundNumber ?: 0) + 1)
+    }
+
+    /** Fixed pairs: собирает зарегистрированные пары (по общему team_id) в список (игрок1, игрок2). */
+    private fun fixedPairsTeams(eventId: UUID): List<Pair<UUID, UUID>> {
+        val regs = regRepo.findAllByEventIdAndStatus(eventId)
+        return regs.filter { it.teamId != null && it.playerId != null }
+            .groupBy { it.teamId!! }
+            .values
+            .mapNotNull { members -> if (members.size == 2) members[0].playerId!! to members[1].playerId!! else null }
+    }
+
+    /**
+     * FIXED_PAIRS-каскад: если отменяемая регистрация [reg] несёт team_id (пара), переводит
+     * в CANCELLED и вторую активную регистрацию с тем же team_id и eventId. Для одиночных
+     * форматов (team_id=null) — no-op. Вызывается ПОСЛЕ сохранения основной отмены.
+     */
+    private fun cancelFixedPairPartner(event: Event, reg: Registration, now: java.time.LocalDateTime) {
+        if (event.format != com.padelgo.domain.EventFormat.FIXED_PAIRS) return
+        val teamId = reg.teamId ?: return
+        val eventId = event.id ?: return
+        val partners = regRepo.findAllByEventIdAndStatus(eventId)
+            .filter { it.teamId == teamId && it.id != reg.id && it.status == RegistrationStatus.REGISTERED }
+        partners.forEach { partner ->
+            partner.status = RegistrationStatus.CANCELLED
+            partner.cancelApproved = true
+            partner.cancelRequested = false
+            partner.cancelRequestedAt = now.toInstant(java.time.ZoneOffset.UTC)
+            regRepo.save(partner)
+        }
+    }
+
+    /**
+     * Safety net для FIXED_PAIRS: все REGISTERED-игроки должны образовывать полные пары —
+     * у каждого есть team_id и каждый team_id встречается ровно дважды. Иначе (осиротевший
+     * игрок после частичной отмены) бросаем CONFLICT, чтобы избежать тихого дропа в fixedPairsTeams.
+     */
+    private fun assertFixedPairsComplete(eventId: UUID) {
+        val regs = regRepo.findAllByEventIdAndStatus(eventId)
+        if (regs.any { it.teamId == null }) {
+            throw ApiException(HttpStatus.CONFLICT, "В паре остался один игрок — отмените или добавьте пару целиком")
+        }
+        val byTeam = regs.groupBy { it.teamId }
+        if (byTeam.any { (_, members) -> members.size != 2 }) {
+            throw ApiException(HttpStatus.CONFLICT, "В паре остался один игрок — отмените или добавьте пару целиком")
+        }
+    }
+
     private fun clearSchedule(eventId: UUID) {
         roundRepo.findAllByEventIdOrderByRoundNumberAsc(eventId).forEach { r ->
             matchRepo.findAllByRoundIdOrderByCourtNumberAsc(r.id!!).forEach { m ->
@@ -418,6 +519,44 @@ class EventService(
     }
 
     private fun planSchedule(event: Event, playerIds: List<UUID>) {
+        // Mexicano — инкрементальный формат: на старте создаём только первый раунд,
+        // остальные организатор добавляет вручную кнопкой «+Раунд» (пары по текущей таблице).
+        if (event.format == com.padelgo.domain.EventFormat.MEXICANO) {
+            if (event.autoRounds) {
+                val ratings = playerRepo.findAllById(playerIds).map { it.rating }
+                event.roundsPlanned = computeAutoRounds(ratings) // мягкая цель, показываем в UI как «Раунд N из M»
+                eventRepo.save(event)
+            }
+            planMexicanoInitialRound(event, playerIds)
+            return
+        }
+        // Fixed pairs — round-robin между зарегистрированными парами; всё расписание на старте.
+        if (event.format == com.padelgo.domain.EventFormat.FIXED_PAIRS) {
+            val teams = fixedPairsTeams(event.id!!)
+            val rounds = FixedPairsPairing.rounds(teams, event.courtsCount)
+            if (rounds.isEmpty()) throw ApiException(HttpStatus.CONFLICT, "Нужно минимум 2 полные пары для старта")
+            if (event.autoRounds) {
+                event.roundsPlanned = rounds.size
+                eventRepo.save(event)
+            }
+            rounds.forEachIndexed { idx, roundMatches ->
+                val round = roundRepo.save(Round(eventId = event.id!!, roundNumber = idx + 1))
+                roundMatches.forEach { pm ->
+                    matchRepo.save(
+                        Match(
+                            roundId = round.id!!,
+                            courtNumber = pm.courtNumber,
+                            teamAPlayer1Id = pm.teamA.first,
+                            teamAPlayer2Id = pm.teamA.second,
+                            teamBPlayer1Id = pm.teamB.first,
+                            teamBPlayer2Id = pm.teamB.second,
+                            status = MatchStatus.SCHEDULED
+                        )
+                    )
+                }
+            }
+            return
+        }
         val players = playerRepo.findAllById(playerIds).associateBy { it.id!! }
         if (event.autoRounds) {
             val ratings = players.values.map { it.rating }
@@ -665,12 +804,34 @@ class EventService(
     fun rosterCount(eventId: UUID): Int = regRepo.countByEventIdAndStatus(eventId).toInt()
 
     @Transactional
-    fun register(eventId: UUID, playerId: UUID): Registration {
+    fun register(eventId: UUID, playerId: UUID, byUserId: UUID? = null, bypassRatingGate: Boolean = false): Registration {
         val event = getEvent(eventId)
+        if (event.format == com.padelgo.domain.EventFormat.FIXED_PAIRS) {
+            throw ApiException(HttpStatus.CONFLICT, "Эта игра — по фиксированным парам. Регистрируйтесь парой.")
+        }
         if (event.status != EventStatus.OPEN_FOR_REGISTRATION) {
             throw ApiException(HttpStatus.CONFLICT, "Registration is closed (status=${event.status})")
         }
-        playerRepo.findById(playerId).orElseThrow { ApiException(HttpStatus.NOT_FOUND, "Player not found") }
+        val player = playerRepo.findById(playerId).orElseThrow { ApiException(HttpStatus.NOT_FOUND, "Player not found") }
+
+        // Ограничение по рейтингу (задача #9). Организатор может добавить игрока
+        // вне диапазона вручную (override), поэтому проверяем только когда регистрирует
+        // не автор эвента и вызов не помечен как доверенный (admin / приглашение / добавление другом).
+        val isOrganizer = byUserId != null && event.createdByUserId == byUserId
+        if (!bypassRatingGate && !isOrganizer) {
+            event.minRating?.let { min ->
+                if (player.rating < min) throw ApiException(
+                    HttpStatus.CONFLICT,
+                    "Рейтинг ${player.rating} ниже минимального ($min) для этой игры"
+                )
+            }
+            event.maxRating?.let { max ->
+                if (player.rating > max) throw ApiException(
+                    HttpStatus.CONFLICT,
+                    "Рейтинг ${player.rating} выше максимального ($max) для этой игры"
+                )
+            }
+        }
 
         val user = userRepo.findByPlayerId(playerId)
         if (user != null) {
@@ -695,6 +856,42 @@ class EventService(
         }
         notifyRosterChanged(event, before)
         return saved
+    }
+
+    /** Fixed pairs: организатор регистрирует пару игроков (общий team_id). */
+    @Transactional
+    fun registerPair(eventId: UUID, userId: UUID, player1Id: UUID, player2Id: UUID) {
+        val event = getEvent(eventId)
+        requireAuthor(event, userId)
+        if (event.format != com.padelgo.domain.EventFormat.FIXED_PAIRS) {
+            throw ApiException(HttpStatus.BAD_REQUEST, "Парная регистрация доступна только для формата «Фиксированные пары»")
+        }
+        if (event.status != EventStatus.OPEN_FOR_REGISTRATION) {
+            throw ApiException(HttpStatus.CONFLICT, "Registration is closed (status=${event.status})")
+        }
+        if (player1Id == player2Id) throw ApiException(HttpStatus.BAD_REQUEST, "Игрок не может быть в паре сам с собой")
+        playerRepo.findById(player1Id).orElseThrow { ApiException(HttpStatus.NOT_FOUND, "Player not found") }
+        playerRepo.findById(player2Id).orElseThrow { ApiException(HttpStatus.NOT_FOUND, "Player not found") }
+
+        val teamId = UUID.randomUUID()
+        val before = regRepo.countByEventIdAndStatus(eventId).toInt()
+        listOf(player1Id, player2Id).forEach { pid ->
+            val existing = regRepo.findByEventIdAndPlayerId(eventId, pid)
+            if (existing != null) {
+                if (existing.status == RegistrationStatus.REGISTERED) {
+                    throw ApiException(HttpStatus.CONFLICT, "Игрок уже зарегистрирован в этой игре")
+                }
+                existing.status = RegistrationStatus.REGISTERED
+                existing.teamId = teamId
+                existing.cancelRequested = false
+                existing.cancelApproved = false
+                existing.cancelRequestedAt = null
+                regRepo.save(existing)
+            } else {
+                regRepo.save(Registration(eventId = eventId, playerId = pid, teamId = teamId))
+            }
+        }
+        notifyRosterChanged(event, before)
     }
 
     @Transactional
@@ -752,6 +949,9 @@ class EventService(
             reg.cancelRequested = false
             reg.cancelRequestedAt = now.toInstant(java.time.ZoneOffset.UTC)
             regRepo.save(reg)
+            // FIXED_PAIRS: обе регистрации пары несут общий team_id — отменяем и партнёра,
+            // иначе он остался бы осиротевшим REGISTERED (в матч не попадёт, но пройдёт capacity-проверку).
+            cancelFixedPairPartner(event, reg, now)
             notifyRosterChanged(event, before)
             com.padelgo.api.CancelRegistrationResponse("CANCELLED", "Cancelled")
         } else {
@@ -777,6 +977,9 @@ class EventService(
         reg.cancelApproved = true
         reg.cancelRequested = false
         regRepo.save(reg)
+        // FIXED_PAIRS: снимаем и партнёра по общему team_id, чтобы не осталось осиротевшего
+        // REGISTERED (он не попал бы в матч, но прошёл бы capacity-проверку старта).
+        cancelFixedPairPartner(event, reg, java.time.LocalDateTime.now())
         notifyRosterChanged(event, before)
 
         if (event.status == EventStatus.IN_PROGRESS) {
@@ -883,6 +1086,12 @@ class EventService(
         val capacity = event.courtsCount * 4
         if (playerIds.size < capacity) {
             throw ApiException(HttpStatus.CONFLICT, "Need at least $capacity players, currently ${playerIds.size}")
+        }
+
+        // FIXED_PAIRS: гарантируем, что все REGISTERED образуют полные пары (нет осиротков после
+        // частичной отмены) — иначе fixedPairsTeams молча отбросил бы неполную пару.
+        if (event.format == com.padelgo.domain.EventFormat.FIXED_PAIRS) {
+            assertFixedPairsComplete(eventId)
         }
 
         // cleanup previous schedule if any (safety)

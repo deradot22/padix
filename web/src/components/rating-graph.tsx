@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { ArrowLeftRight } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -90,6 +90,21 @@ export function RatingGraph(props: { points: Point[] }) {
     }
   }, [mode]);
 
+  // Ширина области плота — для нативного горизонтального скролла (#11).
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const [availW, setAvailW] = useState(600);
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!el || typeof ResizeObserver === "undefined") return;
+    setAvailW(el.clientWidth);
+    const ro = new ResizeObserver((entries) => {
+      const w = entries[0]?.contentRect.width ?? 0;
+      if (w > 0) setAvailW(w);
+    });
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+
   const filtered = useMemo(() => filterByPeriod(props.points, period), [props.points, period]);
 
   // Координаты в нормализованной системе (0..1 по X, реальный рейтинг по Y)
@@ -135,8 +150,9 @@ export function RatingGraph(props: { points: Point[] }) {
     pointR: number;
     labelFs: number;
     gradientId: string;
+    drawYAxis?: boolean;
   }) => {
-    const { width, height, padTop, padBottom, padLeft, padRight, pointR, labelFs, gradientId } = opts;
+    const { width, height, padTop, padBottom, padLeft, padRight, pointR, labelFs, gradientId, drawYAxis = true } = opts;
     const graphW = width - padLeft - padRight;
     const graphH = height - padTop - padBottom;
     const toX = (x: number) => padLeft + x * graphW;
@@ -179,14 +195,16 @@ export function RatingGraph(props: { points: Point[] }) {
                 strokeDasharray="2 3"
                 opacity="0.55"
               />
-              <text
-                x={padLeft - 6}
-                y={gy + labelFs * 0.34}
-                textAnchor="end"
-                style={{ fontSize: labelFs * 0.85, fill: "var(--muted-foreground)", fontFamily: "var(--font-display)" }}
-              >
-                {Math.round(v)}
-              </text>
+              {drawYAxis && (
+                <text
+                  x={padLeft - 6}
+                  y={gy + labelFs * 0.34}
+                  textAnchor="end"
+                  style={{ fontSize: labelFs * 0.85, fill: "var(--muted-foreground)", fontFamily: "var(--font-display)" }}
+                >
+                  {Math.round(v)}
+                </text>
+              )}
             </g>
           );
         })}
@@ -341,60 +359,79 @@ export function RatingGraph(props: { points: Point[] }) {
     );
   }
 
+  // Раскладка: ось Y фиксирована слева, плот скроллится горизонтально когда точек
+  // больше, чем помещается по ширине (#11 — нативный горизонтальный пан).
+  const isNarrow = availW < 560;
+  const H = isNarrow ? 244 : 248;
+  const padTop = 30;
+  const padBottom = 30;
+  const axisW = isNarrow ? 40 : 46;
+  const pointR = isNarrow ? 4 : 4.5;
+  const labelFs = isNarrow ? 12 : 13;
+  const PX_PER_POINT = 22;
+  const plotPadLeft = 10;
+  const plotPadRight = 18;
+  const plotW = Math.max(availW, sampled.length * PX_PER_POINT + plotPadLeft + plotPadRight);
+  const scrollable = plotW > availW + 1;
+  const graphH = H - padTop - padBottom;
+  const yToPix = (r: number) => padTop + graphH - ((r - lo) / (hi - lo)) * graphH;
+  const yGridVals = Array.from({ length: 5 }, (_, k) => lo + ((hi - lo) * k) / 4);
+
   return (
     <div>
       {Controls}
 
-      {/* Мобильная */}
-      <div className="overflow-x-auto md:hidden">
-        <svg viewBox="0 0 408 244" className="w-full min-h-[260px]" preserveAspectRatio="xMidYMid meet" onMouseLeave={() => setHovered(null)}>
-          <g className="text-primary">
-            {renderGraph({
-              width: 408,
-              height: 244,
-              padTop: 32,
-              padBottom: 32,
-              padLeft: 44,
-              padRight: 20,
-              pointR: 4,
-              labelFs: 12,
-              gradientId: "graphGradientMobile",
-            })}
-          </g>
-        </svg>
-        <div className="mt-2 flex justify-between text-xs text-muted-foreground">
-          <span>{firstDate}</span>
-          <span>{lastDate}</span>
-        </div>
-      </div>
+      <div className="rounded-xl border border-border/40 bg-secondary/10 p-3 md:p-4">
+        <div className="flex">
+          {/* Фиксированная ось Y (не скроллится) */}
+          <svg width={axisW} height={H} className="shrink-0 block overflow-visible" aria-hidden="true">
+            {yGridVals.map((v, k) => (
+              <text
+                key={`yl-${k}`}
+                x={axisW - 6}
+                y={yToPix(v) + labelFs * 0.34}
+                textAnchor="end"
+                style={{ fontSize: labelFs * 0.85, fill: "var(--muted-foreground)", fontFamily: "var(--font-display)" }}
+              >
+                {Math.round(v)}
+              </text>
+            ))}
+          </svg>
 
-      {/* Десктоп */}
-      <div className="hidden md:block overflow-x-auto w-full rounded-xl border border-border/40 bg-secondary/10 p-4">
-        <svg
-          viewBox="0 0 520 240"
-          className="w-full block"
-          style={{ aspectRatio: `520/240` }}
-          preserveAspectRatio="xMidYMid meet"
-          onMouseLeave={() => setHovered(null)}
-        >
-          <g className="text-primary">
-            {renderGraph({
-              width: 520,
-              height: 240,
-              padTop: 34,
-              padBottom: 34,
-              padLeft: 48,
-              padRight: 24,
-              pointR: 4.5,
-              labelFs: 13,
-              gradientId: "graphGradientDesktop",
-            })}
-          </g>
-        </svg>
-        <div className="mt-1.5 flex justify-between text-[10px] text-muted-foreground">
-          <span>{firstDate}</span>
-          <span>{lastDate}</span>
+          {/* Скроллируемый плот */}
+          <div ref={scrollRef} className="overflow-x-auto flex-1 min-w-0" onScroll={() => setHovered(null)}>
+            <svg width={plotW} height={H} className="block" onMouseLeave={() => setHovered(null)}>
+              <g className="text-primary">
+                {renderGraph({
+                  width: plotW,
+                  height: H,
+                  padTop,
+                  padBottom,
+                  padLeft: plotPadLeft,
+                  padRight: plotPadRight,
+                  pointR,
+                  labelFs,
+                  gradientId: "graphGradient",
+                  drawYAxis: false,
+                })}
+              </g>
+            </svg>
+          </div>
         </div>
+
+        {scrollable ? (
+          <div className="mt-1.5 text-center text-[10px] text-muted-foreground/70">
+            ← прокрути график, чтобы увидеть весь период →
+          </div>
+        ) : (
+          <div
+            className="mt-1.5 flex justify-between text-[10px] md:text-xs text-muted-foreground"
+            style={{ paddingLeft: axisW }}
+          >
+            <span>{firstDate}</span>
+            <span>{lastDate}</span>
+          </div>
+        )}
       </div>
     </div>
   );

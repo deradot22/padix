@@ -223,7 +223,7 @@ class AdminController(
 
                 for (player in allPlayers.take(neededPlayers)) {
                     try {
-                        eventService.register(eventId, player.id!!)
+                        eventService.register(eventId, player.id!!, bypassRatingGate = true)
                     } catch (e: Exception) {
                         // Player already registered or some other registration issue
                     }

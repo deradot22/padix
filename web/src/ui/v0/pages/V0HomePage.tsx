@@ -90,6 +90,10 @@ function formatLabel(format: Event["format"]) {
   switch (format) {
     case "AMERICANA":
       return "Американка";
+    case "MEXICANO":
+      return "Мексикано";
+    case "FIXED_PAIRS":
+      return "Фиксированные пары";
     default:
       return format;
   }

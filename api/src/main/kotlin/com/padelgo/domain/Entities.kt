@@ -120,7 +120,14 @@ class Event(
     var visibility: EventVisibility = EventVisibility.PUBLIC,
 
     @Column(name = "series_id")
-    var seriesId: UUID? = null
+    var seriesId: UUID? = null,
+
+    // Ограничение по рейтингу для регистрации (включительно). null — граница не задана.
+    @Column(name = "min_rating")
+    var minRating: Int? = null,
+
+    @Column(name = "max_rating")
+    var maxRating: Int? = null
 )
 
 @Entity
@@ -243,6 +250,10 @@ class Registration(
 
     @Column(name = "player_id", nullable = false)
     var playerId: UUID? = null,
+
+    // Fixed pairs: общий id пары (обе регистрации пары несут один team_id). null для одиночных форматов.
+    @Column(name = "team_id")
+    var teamId: UUID? = null,
 
     @Enumerated(EnumType.STRING)
     @Column(name = "status", nullable = false)

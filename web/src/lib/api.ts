@@ -1,6 +1,6 @@
 import { API_BASE_URL } from "./env";
 
-export type EventFormat = "AMERICANA";
+export type EventFormat = "AMERICANA" | "MEXICANO" | "FIXED_PAIRS";
 export type PairingMode = "ROUND_ROBIN" | "BALANCED";
 export type EventStatus = "DRAFT" | "OPEN_FOR_REGISTRATION" | "REGISTRATION_CLOSED" | "IN_PROGRESS" | "FINISHED" | "CANCELLED";
 export type ScoringMode = "SETS" | "POINTS";
@@ -38,6 +38,10 @@ export type Event = {
   visibility: EventVisibility;
   seriesId?: string | null;
   seriesTitle?: string | null;
+  /** Минимальный рейтинг для регистрации (включительно). null — без нижней границы. */
+  minRating?: number | null;
+  /** Максимальный рейтинг для регистрации (включительно). null — без верхней границы. */
+  maxRating?: number | null;
 };
 
 export type EventSeries = {
@@ -446,6 +450,12 @@ export const api = {
       method: "POST",
       body: JSON.stringify({ playerId }),
     }),
+  /** Fixed pairs: организатор регистрирует пару игроков (общий team). */
+  registerPair: (eventId: string, player1Id: string, player2Id: string) =>
+    request(`/api/events/${eventId}/register-pair`, {
+      method: "POST",
+      body: JSON.stringify({ player1Id, player2Id }),
+    }),
   closeRegistration: (eventId: string) =>
     request(`/api/events/${eventId}/close-registration`, { method: "POST" }),
   getBalancePreview: (eventId: string) =>
@@ -505,7 +515,7 @@ export const api = {
     date: string;
     startTime: string;
     endTime: string;
-    format: "AMERICANA";
+    format: EventFormat;
     pairingMode: PairingMode;
     courtsCount: number;
     courtNames?: string[];
@@ -515,6 +525,8 @@ export const api = {
     pointsPerPlayerPerMatch?: number;
     telegramChatIds?: string[];
     visibility?: EventVisibility;
+    minRating?: number | null;
+    maxRating?: number | null;
   }) =>
     request<Event>("/api/events", {
       method: "POST",

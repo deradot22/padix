@@ -116,7 +116,8 @@ class SocialService(
             throw ApiException(HttpStatus.FORBIDDEN, "You can add only friends")
         }
         val playerId = target.playerId ?: throw ApiException(HttpStatus.NOT_FOUND, "Player not found for user")
-        eventService.register(eventId, playerId)
+        // Автор добавляет друга напрямую — ограничение по рейтингу не применяется (override организатора).
+        eventService.register(eventId, playerId, bypassRatingGate = true)
         invites.findByEventIdAndToUserIdAndStatus(eventId, target.id!!, InviteStatus.PENDING)?.let { inv ->
             inv.status = InviteStatus.ACCEPTED
             invites.save(inv)
@@ -150,7 +151,8 @@ class SocialService(
             ?: throw ApiException(HttpStatus.NOT_FOUND, "Invite not found")
         val user = users.findById(userId).orElseThrow { ApiException(HttpStatus.NOT_FOUND, "User not found") }
         val playerId = user.playerId ?: throw ApiException(HttpStatus.NOT_FOUND, "Player not found")
-        eventService.register(eventId, playerId)
+        // Приглашённый организатором игрок проходит регистрацию даже вне диапазона рейтинга.
+        eventService.register(eventId, playerId, bypassRatingGate = true)
         invite.status = InviteStatus.ACCEPTED
         invites.save(invite)
     }

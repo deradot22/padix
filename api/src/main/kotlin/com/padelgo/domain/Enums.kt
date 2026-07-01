@@ -1,7 +1,12 @@
 package com.padelgo.domain
 
 enum class EventFormat {
-    AMERICANA
+    /** Американка — партнёры ротируются каждый раунд, анти-повтор (планировщик PairingPlanner). */
+    AMERICANA,
+    /** Mexicano — пары каждый раунд формируются по текущей таблице очков (1+4 vs 2+3); раунды инкрементальные. */
+    MEXICANO,
+    /** Фиксированные пары — партнёр не меняется весь матч; round-robin между парами (team_id на регистрации). */
+    FIXED_PAIRS
 }
 
 enum class PairingMode {

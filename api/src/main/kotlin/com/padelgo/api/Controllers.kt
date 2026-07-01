@@ -144,7 +144,9 @@ class EventController(
                 setsPerMatch = req.setsPerMatch,
                 gamesPerSet = req.gamesPerSet,
                 tiebreakEnabled = req.tiebreakEnabled,
-                visibility = req.visibility
+                visibility = req.visibility,
+                minRating = req.minRating,
+                maxRating = req.maxRating
             ),
             userId,
             req.courtNames
@@ -218,7 +220,16 @@ class EventController(
     )
     @PostMapping("/{eventId}/register")
     fun register(@PathVariable eventId: UUID, @Valid @RequestBody req: RegisterRequest) =
-        service.register(eventId, req.playerId)
+        service.register(eventId, req.playerId, currentUserIdOrNull())
+
+    @Operation(
+        summary = "Зарегистрировать пару (формат «Фиксированные пары»)",
+        description = "Организатор регистрирует двух игроков как фиксированную пару (общий team_id). Только для FIXED_PAIRS."
+    )
+    @PostMapping("/{eventId}/register-pair")
+    fun registerPair(@PathVariable eventId: UUID, @Valid @RequestBody req: RegisterPairRequest) {
+        service.registerPair(eventId, principalUserId(), req.player1Id, req.player2Id)
+    }
 
     @Operation(
         summary = "Закрыть регистрацию",

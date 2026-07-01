@@ -141,7 +141,7 @@ export function Header(props: {
   }, [pathname]);
 
   return (
-    <header className="sticky top-0 z-50 w-full border-b border-border/40 bg-background/80 backdrop-blur-xl">
+    <header className="sticky top-0 z-50 w-full border-b border-border bg-background/80 backdrop-blur-xl md:border-border/40">
       <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-4 sm:px-6 lg:px-8">
         <Link to="/" className="flex items-center gap-2">
           <span className="text-xl font-bold tracking-tight text-foreground">padix</span>
@@ -514,7 +514,7 @@ export function Header(props: {
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             transition={{ duration: reduceMotion ? 0 : 0.18, ease: "easeOut" }}
-            className="fixed left-0 right-0 top-16 z-[100] rounded-b-2xl border-x border-b border-border bg-background/80 backdrop-blur-2xl shadow-2xl md:hidden"
+            className="fixed left-0 right-0 top-16 z-[100] rounded-b-2xl border-x border-b border-border bg-secondary/95 backdrop-blur-2xl shadow-2xl md:hidden"
           >
             <div className="mx-auto flex max-w-7xl flex-col gap-1 px-4 py-3">
               {/* Основная навигация (Рейтинг/Игры/Создать/Профиль) теперь в нижней панели BottomNav.
@@ -527,9 +527,11 @@ export function Header(props: {
                     className={({ isActive }) =>
                       cn(
                         "rounded-lg px-3 py-2 text-sm font-medium transition-all duration-200 flex items-center gap-2",
+                        // Панель теперь на bg-secondary, поэтому активный пункт — «пилюля» primary
+                        // (консистентно с нижней навигацией), а не bg-secondary (слилось бы с фоном).
                         isActive || pathname === "/settings"
-                          ? "bg-secondary text-foreground"
-                          : "text-muted-foreground hover:bg-secondary/50 hover:text-foreground",
+                          ? "bg-primary/15 font-semibold text-primary"
+                          : "text-muted-foreground hover:bg-foreground/5 hover:text-foreground",
                       )
                     }
                   >
@@ -543,8 +545,8 @@ export function Header(props: {
                       cn(
                         "rounded-lg px-3 py-2 text-sm font-medium transition-all duration-200 flex items-center gap-2",
                         isActive || pathname === "/feedback"
-                          ? "bg-secondary text-foreground"
-                          : "text-muted-foreground hover:bg-secondary/50 hover:text-foreground",
+                          ? "bg-primary/15 font-semibold text-primary"
+                          : "text-muted-foreground hover:bg-foreground/5 hover:text-foreground",
                       )
                     }
                   >
@@ -573,7 +575,7 @@ export function Header(props: {
                         props.onLogout?.();
                       }
                     }}
-                    className="flex items-center gap-2 rounded-lg px-3 py-2 text-left text-sm font-medium text-muted-foreground hover:bg-secondary/50 hover:text-foreground transition-colors"
+                    className="flex items-center gap-2 rounded-lg px-3 py-2 text-left text-sm font-medium text-muted-foreground hover:bg-foreground/5 hover:text-foreground transition-colors"
                   >
                     <LogOut className="h-4 w-4" />
                     Выйти
@@ -582,7 +584,7 @@ export function Header(props: {
                   <button
                     type="button"
                     onClick={() => { setMobileOpen(false); nav("/login"); }}
-                    className="rounded-lg px-3 py-2 text-left text-sm font-medium text-muted-foreground hover:bg-secondary/50 hover:text-foreground transition-colors"
+                    className="rounded-lg px-3 py-2 text-left text-sm font-medium text-muted-foreground hover:bg-foreground/5 hover:text-foreground transition-colors"
                   >
                     Войти
                   </button>
@@ -601,7 +603,9 @@ export function Header(props: {
                   <span
                     className={cn(
                       "relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors",
-                      isDark ? "bg-primary" : "bg-secondary",
+                      // На панели bg-secondary off-состояние трека берём из muted + рамки,
+                      // иначе bg-secondary слился бы с фоном панели.
+                      isDark ? "bg-primary" : "bg-muted border border-border",
                     )}
                   >
                     <span
