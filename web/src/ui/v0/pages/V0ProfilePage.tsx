@@ -93,7 +93,7 @@ export function V0ProfilePage(props: { me: any; meLoaded?: boolean; onMeUpdate?:
   const [partners, setPartners] = useState<TopPartner[] | null>(null);
   const [partnersLoading, setPartnersLoading] = useState(false);
   const [partnersError, setPartnersError] = useState<string | null>(null);
-  const [ratingHistory, setRatingHistory] = useState<{ date: string; rating: number; delta: number | null }[]>([]);
+  const [ratingHistory, setRatingHistory] = useState<{ date: string; rating: number; delta: number | null; kind?: "MATCH" | "DECAY" }[]>([]);
   const [ratingHistoryLoaded, setRatingHistoryLoaded] = useState(false);
   const [invitesDetailsLoaded, setInvitesDetailsLoaded] = useState(false);
   const [editGameOpen, setEditGameOpen] = useState(false);

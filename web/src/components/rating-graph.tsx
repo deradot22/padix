@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { ArrowLeftRight } from "lucide-react";
 import { cn } from "@/lib/utils";
 
-type Point = { date: string; rating: number };
+type Point = { date: string; rating: number; kind?: "MATCH" | "DECAY" };
 type Period = "7d" | "30d" | "3m" | "all";
 type Mode = "matches" | "time";
 
@@ -267,7 +267,8 @@ export function RatingGraph(props: { points: Point[] }) {
           const hx = toX(hp.x);
           const hy = toY(hp.y);
           const delta = hovered > 0 ? hp.y - sampled[hovered - 1].y : null;
-          const tipW = 96;
+          const isDecay = hp.original.kind === "DECAY";
+          const tipW = isDecay ? 108 : 96;
           const tipH = 34;
           const tipX = Math.max(padLeft, Math.min(width - padRight - tipW, hx - tipW / 2));
           const above = hy - tipH - 12 > padTop;
@@ -276,7 +277,7 @@ export function RatingGraph(props: { points: Point[] }) {
           const deltaColor = delta == null ? "var(--muted-foreground)" : delta > 0 ? "var(--primary)" : delta < 0 ? "var(--destructive)" : "var(--muted-foreground)";
           return (
             <g style={{ pointerEvents: "none" }}>
-              <circle cx={hx} cy={hy} r={pointR + 2.5} fill="var(--accent)" stroke="var(--background)" strokeWidth="2" />
+              <circle cx={hx} cy={hy} r={pointR + 2.5} fill={isDecay ? "var(--muted-foreground)" : "var(--accent)"} stroke="var(--background)" strokeWidth="2" />
               <g transform={`translate(${tipX},${tipY})`}>
                 <rect width={tipW} height={tipH} rx="6" fill="var(--popover)" stroke="var(--border)" strokeWidth="1" />
                 <text x={8} y={14} className="tabular-nums" style={{ fontSize: labelFs, fontFamily: "var(--font-display)", fontWeight: 700, fill: "var(--foreground)" }}>
@@ -284,7 +285,7 @@ export function RatingGraph(props: { points: Point[] }) {
                   {deltaStr ? <tspan dx={6} style={{ fontSize: labelFs * 0.85, fill: deltaColor }}>{deltaStr}</tspan> : null}
                 </text>
                 <text x={8} y={tipH - 8} style={{ fontSize: labelFs * 0.8, fill: "var(--muted-foreground)" }}>
-                  {formatShortDate(hp.original.date)}
+                  {isDecay ? "простой (затухание)" : formatShortDate(hp.original.date)}
                 </text>
               </g>
             </g>

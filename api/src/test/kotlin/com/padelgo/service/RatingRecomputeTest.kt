@@ -285,19 +285,19 @@ class RatingRecomputeTest {
         }
         // Новый счёт мельче старого → у победителей рейтинг должен СНИЗИТЬСЯ относительно старого
         // (коррекция = newSum - oldSum < 0).
-        val newDelta = computeExpectedDelta(13, 11) / 2  // на игрока (равный дележ пары)
-        assertTrue(newDelta < oldDelta / 2, "new per-player gain must be smaller than old")
+        val newDelta = computeExpectedDelta(13, 11)  // на игрока (полная командная дельта)
+        assertTrue(newDelta < oldDelta, "new per-player gain must be smaller than old")
     }
 
     /**
      * Повторяет чистую формулу дельты команды A (POINTS-режим). teamRating обеих команд == 1000
-     * (все игроки равны), kFactor от gamesPlayed=12 → 32. Используется и для построения старых
-     * changes, и для проверок.
+     * (все игроки равны), kFactor от gamesPlayed=12 → 32. Каждый игрок пары получает ПОЛНУЮ
+     * командную дельту (без дележа), округление один раз — как в applyDelta*.
      */
     private fun computeExpectedDelta(scoreA: Int, scoreB: Int): Int {
         val teamRating = EloRating.teamRating(1000, 1000)
-        val k = EloRating.kFactor(12)
+        val k = EloRating.kFactor(12).toDouble()
         val sets = listOf(MatchSetScore(matchId = matchId, setNumber = 1, teamAGames = scoreA, teamBGames = scoreB))
-        return service.computeTeamADelta(event(), sets, teamRating, teamRating, k)
+        return kotlin.math.round(service.computeTeamADelta(event(), sets, teamRating, teamRating, k)).toInt()
     }
 }

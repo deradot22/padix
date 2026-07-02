@@ -755,7 +755,7 @@ export const api = {
   myHistoryEvent: (eventId: string) =>
     request<EventHistoryMatch[]>(`/api/me/history/${eventId}`),
   getRatingHistory: () =>
-    request<{ date: string; rating: number; delta: number | null; eventId: string | null }[]>("/api/me/rating-history"),
+    request<{ date: string; rating: number; delta: number | null; eventId: string | null; kind?: "MATCH" | "DECAY" }[]>("/api/me/rating-history"),
   getRatingNotification: () =>
     request<{ id: string; newRating: number; delta: number; eventId: string } | null>("/api/me/rating-notification"),
   markRatingNotificationSeen: (id: string) =>

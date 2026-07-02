@@ -222,6 +222,9 @@ EventVisibility:       PRIVATE, PUBLIC
 - **V35** — `feedback_tickets` (обратная связь, фаза 1 — fire-and-forget, см. §16).
 - **V36** — `users.is_feedback_admin` (флаг «получаю TG-уведомления о новых тикетах», назначается в /admin).
 - **V45** — `event_telegram_post.post_kind` (`ANNOUNCE`/`RESULTS`; отделяет итоговый пост от анонса, чтобы редактировать его при пересчёте результатов, см. §5.5).
+- **V46** — `events.min_rating` / `events.max_rating` (ограничение по рейтингу, см. §5.7).
+- **V47** — `registrations.team_id` (фиксированные пары для формата FIXED_PAIRS).
+- **V48** — `rating_changes.k_factor` / `calib_mult` / `norm_factor` (факторы расчёта на момент матча — recompute воспроизводит их, а не выводит заново; см. §9.1).
 
 ---
 
@@ -496,27 +499,33 @@ API служит прокси к отдельному `bot`-сервису. JWT 
 
 ## 9. Алгоритмы
 
-### 9.1 ELO рейтинг (`service/EloRating.kt`)
+### 9.1 ELO рейтинг (`service/EloRating.kt`) — редизайн 2026-07-02
+
+Полный аудит и мотивация каждого изменения: `docs/RATING_ALGORITHM_AUDIT_2026-07-02.md`.
 
 - **Expected score**: классическая формула `1 / (1 + 10^((B−A)/400))`.
-- **K-factor** по `gamesPlayed`: <10 → 48, <30 → 32, ≥30 → 20.
+- **K-factor** по `gamesPlayed`: <10 → 48, <30 → 32, ≥30 → 20. K матча — **дробное среднее по всем 4 игрокам**, число игр фиксируется **на начало эвента** (одинаково для всех матчей эвента).
 - **Командный рейтинг пары**: weighted 60/40 в пользу **слабого**:
   ```
   teamRating = min × 0.6 + max × 0.4
   ```
   (В падле «бьют по слабому», поэтому пара 1800+1400 на деле слабее 1600+1600.)
+- **Каждый игрок пары получает ПОЛНУЮ командную дельту** (классический team-Elo; старый делёж пополам занижал апсеты вдвое и рождал нули на нечётных дельтах).
 - **Margin multiplier** — квадратичный, до ×1.5:
   ```
   ratio    = min(|teamAPoints − teamBPoints| / expectedTotal, 1)
   mult     = 1 + 0.5 × ratio²
   ```
-  Примеры (expectedTotal=24): 13:11 → 1.003, 16:8 → 1.056, 20:4 → 1.22, 24:0 → 1.5.
-- **Нормализация по матчам**: внутри одного эвента каждый игрок получает одинаковое суммарное «движение» вне зависимости от того, сколько раз сидел на замене (важно при нечётном составе и BALANCED).
-- **Calibration boost ×1.5** пока `calibrationMatchesRemaining > 0`.
-- **Decay** (`service/RatingDecay.kt`, cron `@Scheduled` в 03:00 UTC):
-  - порог — 90 дней без матчей;
-  - 1 очко в день в сторону `1500`;
-  - cap = 30% от `|rating − 1500|`;
+  POINTS: expectedTotal = `pointsPerPlayerPerMatch × 4`. SETS: expectedTotal = `gamesPerSet × setsPerMatch` (максимум геймов ОДНОЙ команды; раньше ×2 глушил множитель до ≤1.125).
+- **Нормализация по матчам** с клампом `[NORM_MIN=0.75 .. NORM_MAX=1.5]`: выравнивает суммарное «движение» игроков с разным числом матчей, но не взрывает дельту запасного (без клампа 1 матч при среднем 5 давал ×5).
+- **Calibration boost ×1.5** (`EloRating.CALIBRATION_MULTIPLIER`) пока `calibrationMatchesRemaining > 0`; счётчик живой — множитель гаснет ровно на матче исчерпания, даже в середине эвента.
+- **Одно округление за конвейер**: дельта считается в Double (`teamDelta × margin × calib × norm`) и округляется один раз `kotlin.math.round` (от нуля при .5 — симметрично для победителей/проигравших). В `rating_changes.delta` пишется **фактически применённая** дельта (у пола 0 может отличаться от запрошенной), плюс факторы `k_factor` / `calib_mult` / `norm_factor` (V48).
+- **Порядок матчей детерминирован**: `findAllByEventId` сортирует по `(roundNumber, courtNumber)` — finishEvent и recompute идут в одном порядке.
+- **recomputeFinishedEvent** воспроизводит сохранённые факторы из `rating_changes` (legacy-записи без факторов — fallback от текущего состояния игрока). Инвариант «finish → recompute без правки счёта = no-op» закреплён тестом.
+- **Decay** (`service/RatingDecay.kt`, cron `@Scheduled` в 03:00 UTC) — переписан:
+  - порог — 90 дней без матчей; 1 очко в день; cap = 30% от `(baseline − target)`;
+  - **только вниз**: target = медиана рейтинга игроков с ≥10 играми (fallback 1500); бездействие не может ПОДНЯТЬ рейтинг (старый drift вверх к 1500 выводил неиграющих в топ);
+  - **идемпотентен**: считается от baseline — рейтинга на момент последнего матча (последний `rating_changes.new_rating`), ежедневные прогоны не компаундятся (старый баг: −1, −2, −3… в день с ускорением до полной сходимости к 1500). Побочный эффект первого прогона: рейтинги, задранные старым багом, автоматически вернутся к базе;
   - калибрующиеся игроки не трогаются.
 
 ### 9.2 Pairing (`service/PairingPlanner.kt`)
@@ -823,7 +832,7 @@ docker run --rm -v "//e/project/padix:/app" -w //app gradle:8.7-jdk21 \
   sh -c 'gradle --no-daemon test'
 ```
 
-Покрытие: `EloRatingTest`, `RatingDecayTest`, `PairingSimulationTest` (8×2 и 12×3, 6 раундов).
+Покрытие: `EloRatingTest`, `RatingDecayTest`, `FinishEventRatingTest` (боевой путь: полная дельта, zero-sum, live-калибровка, finish→recompute no-op), `RatingRecomputeTest`, `PairingSimulationTest` (8×2 и 12×3, 6 раундов).
 
 ---
 

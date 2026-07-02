@@ -46,6 +46,40 @@ class EloRatingTest {
         assertEquals(1540, weighted)
     }
 
+    // ============== teamDelta ==============
+
+    @Test
+    fun `teamDelta - равные команды - половина K за победу`() {
+        // expected = 0.5 → delta = K × 0.5
+        assertEquals(10.0, EloRating.teamDelta(1500, 1500, 20.0, 1.0), 0.001)
+        assertEquals(-10.0, EloRating.teamDelta(1500, 1500, 20.0, 0.0), 0.001)
+        assertEquals(0.0, EloRating.teamDelta(1500, 1500, 20.0, 0.5), 0.001)
+    }
+
+    @Test
+    fun `teamDelta - апсет даёт больше, победа фаворита меньше`() {
+        // Разрыв 400: expected(слабые) ≈ 0.0909
+        val upset = EloRating.teamDelta(1300, 1700, 20.0, 1.0)
+        assertEquals(20.0 * (1 - 1.0 / 11.0), upset, 0.01)
+        val favorite = EloRating.teamDelta(1700, 1300, 20.0, 1.0)
+        assertTrue(favorite < 2.0, "фаворит за победу получает мало: $favorite")
+        assertTrue(upset > 18.0, "апсет даёт почти полный K: $upset")
+    }
+
+    @Test
+    fun `teamDelta - дробная - мелкие дельты не схлопываются в ноль`() {
+        // Разрыв 640: раньше roundToInt внутри давал 0 → margin умножал ноль.
+        val d = EloRating.teamDelta(2140, 1500, 20.0, 1.0)
+        assertTrue(d > 0.0 && d < 1.0, "дробная дельта сохраняется: $d")
+    }
+
+    @Test
+    fun `teamDelta - антисимметричен`() {
+        val dA = EloRating.teamDelta(1600, 1400, 32.0, 1.0)
+        val dB = EloRating.teamDelta(1400, 1600, 32.0, 0.0)
+        assertEquals(dA, -dB, 0.001)
+    }
+
     // ============== marginMultiplier ==============
 
     @Test

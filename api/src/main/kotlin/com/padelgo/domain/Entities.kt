@@ -387,6 +387,9 @@ class MatchDraftScore(
     var updatedAt: Instant? = null
 )
 
+/** Тип записи истории рейтинга: начисление за матч или затухание при неактивности. */
+enum class RatingChangeKind { MATCH, DECAY }
+
 @Entity
 @Table(name = "rating_changes")
 class RatingChange(
@@ -395,11 +398,16 @@ class RatingChange(
     @Column(name = "id", nullable = false)
     var id: UUID? = null,
 
-    @Column(name = "event_id", nullable = false)
+    // nullable: у decay-записей нет эвента (V49).
+    @Column(name = "event_id")
     var eventId: UUID? = null,
 
     @Column(name = "match_id")
     var matchId: UUID? = null,
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "kind", nullable = false)
+    var kind: RatingChangeKind = RatingChangeKind.MATCH,
 
     @Column(name = "player_id", nullable = false)
     var playerId: UUID? = null,
@@ -412,6 +420,18 @@ class RatingChange(
 
     @Column(name = "new_rating", nullable = false)
     var newRating: Int = 0,
+
+    // Факторы расчёта на момент матча (V48). Нужны, чтобы recompute при правке счёта
+    // воспроизводил ровно те же множители, а не выводил их заново от текущего состояния
+    // игрока (gamesPlayed/калибровка со временем меняются). null — записи до V48.
+    @Column(name = "k_factor")
+    var kFactor: Double? = null,
+
+    @Column(name = "calib_mult")
+    var calibMult: Double? = null,
+
+    @Column(name = "norm_factor")
+    var normFactor: Double? = null,
 
     @CreationTimestamp
     @Column(name = "created_at", nullable = false)

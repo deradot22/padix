@@ -6,6 +6,16 @@ import kotlin.math.pow
 import kotlin.math.roundToInt
 
 object EloRating {
+    /**
+     * Кламп нормировки по числу сыгранных матчей (avgMatches / playerMatches).
+     * Без клампа запасной с 1 матчем при среднем 5 получал ×5 к дельте одного матча.
+     */
+    const val NORM_MIN = 0.75
+    const val NORM_MAX = 1.5
+
+    /** Множитель дельты для калибрующегося игрока (calibrationMatchesRemaining > 0). */
+    const val CALIBRATION_MULTIPLIER = 1.5
+
     fun expectedScore(ratingA: Int, ratingB: Int): Double =
         1.0 / (1.0 + 10.0.pow((ratingB - ratingA) / 400.0))
 
@@ -31,11 +41,15 @@ object EloRating {
     /**
      * Возвращает delta для команды A (для команды B будет -delta).
      *
+     * Дробная: округление делается ОДИН раз в самом конце конвейера (после margin,
+     * калибровки и нормировки) — каскад промежуточных округлений схлопывал мелкие
+     * дельты в 0 и ломал zero-sum.
+     *
      * scoreA: 1.0 win, 0.5 draw, 0.0 loss
      */
-    fun teamDelta(teamARating: Int, teamBRating: Int, k: Int, scoreA: Double): Int {
+    fun teamDelta(teamARating: Int, teamBRating: Int, k: Double, scoreA: Double): Double {
         val expected = expectedScore(teamARating, teamBRating)
-        return (k * (scoreA - expected)).roundToInt()
+        return k * (scoreA - expected)
     }
 
     /**

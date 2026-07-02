@@ -8,91 +8,90 @@ import java.time.temporal.ChronoUnit
 
 /**
  * Тесты на алгоритм decay (затухания рейтинга при бездействии).
+ *
+ * Семантика после фикса 2026-07-02:
+ *  - идемпотентность: расчёт от БАЗЫ (рейтинг на момент последнего матча), повторные
+ *    ежедневные прогоны не компаундятся;
+ *  - decay только ВНИЗ к target (бездействие не может поднять рейтинг);
+ *  - cap 30% от (baseline − target);
+ *  - target — медиана рейтингов опытных игроков (fallback 1500).
  */
 class RatingDecayTest {
 
     private val now: Instant = Instant.parse("2026-05-14T12:00:00Z")
+    private val target = 1200
 
     private fun daysAgo(days: Long): Instant = now.minus(days, ChronoUnit.DAYS)
 
     @Test
     fun `decay - null lastMatchAt не меняет рейтинг`() {
-        assertEquals(1750, RatingDecay.decayedRating(1750, null, now))
-    }
-
-    @Test
-    fun `decay - игрок с нейтральным рейтингом 1500 не двигается`() {
-        // У него нет куда сдвигаться
-        assertEquals(1500, RatingDecay.decayedRating(1500, daysAgo(180), now))
+        assertEquals(1750, RatingDecay.decayedRating(1750, target, null, now))
     }
 
     @Test
     fun `decay - не применяется в первые 90 дней`() {
-        assertEquals(1750, RatingDecay.decayedRating(1750, daysAgo(30), now))
-        assertEquals(1750, RatingDecay.decayedRating(1750, daysAgo(89), now))
-        assertEquals(1750, RatingDecay.decayedRating(1750, daysAgo(90), now))
+        assertEquals(1750, RatingDecay.decayedRating(1750, target, daysAgo(30), now))
+        assertEquals(1750, RatingDecay.decayedRating(1750, target, daysAgo(89), now))
+        assertEquals(1750, RatingDecay.decayedRating(1750, target, daysAgo(90), now))
     }
 
     @Test
     fun `decay - после 90 дней сдвигает рейтинг сильного игрока вниз`() {
         // 120 дней: 30 дней сверх лимита × 1 = -30
-        assertEquals(1720, RatingDecay.decayedRating(1750, daysAgo(120), now))
+        assertEquals(1720, RatingDecay.decayedRating(1750, target, daysAgo(120), now))
     }
 
     @Test
-    fun `decay - после 90 дней сдвигает рейтинг слабого игрока вверх`() {
-        // 1200 < 1500: должен расти к нейтральному
-        // gap=300, max decay=300*0.3=90, дней=30 → decay=30 (не достиг cap)
-        assertEquals(1230, RatingDecay.decayedRating(1200, daysAgo(120), now))
+    fun `decay - НЕ поднимает рейтинг слабого игрока`() {
+        // Раньше drift вверх к 1500 выводил неиграющих в топ лидерборда.
+        assertEquals(1100, RatingDecay.decayedRating(1100, target, daysAgo(365), now))
+        assertEquals(target, RatingDecay.decayedRating(target, target, daysAgo(365), now))
     }
 
     @Test
-    fun `decay - ограничен 30 процентами разницы с 1500`() {
-        // 1800 - 1500 = 300, max decay = 90
-        // 500 дней без матчей → попытка decay = 410, но cap 90
-        val result = RatingDecay.decayedRating(1800, daysAgo(500), now)
-        assertEquals(1710, result, "Должен остановиться на 1800-90=1710")
+    fun `decay - ограничен 30 процентами разницы с target`() {
+        // baseline 1800, target 1200: gap = 600, max decay = 180
+        assertEquals(1620, RatingDecay.decayedRating(1800, target, daysAgo(5000), now))
     }
 
     @Test
-    fun `decay - игрок с 1750 не падает ниже 1675`() {
-        // 1750 - 1500 = 250, max decay = 75
-        val result = RatingDecay.decayedRating(1750, daysAgo(365 * 5), now)
-        assertEquals(1675, result)
-    }
+    fun `decay - идемпотентен - повторные прогоны от той же базы не компаундятся`() {
+        // Старый баг: job применял функцию к уже задекеенному рейтингу, день за днём,
+        // и рейтинг квадратично сходился к цели. Теперь база фиксирована — результат
+        // зависит только от (baseline, days), сколько бы раз ни звали.
+        val once = RatingDecay.decayedRating(1750, target, daysAgo(120), now)
+        val again = RatingDecay.decayedRating(1750, target, daysAgo(120), now)
+        assertEquals(once, again)
 
-    @Test
-    fun `decay - последовательные применения каждый день сходятся к 1500`() {
-        // Симуляция: каждый день запускаем decay job (lastMatchAt не меняется).
-        // Каждый раз cap = 30% от ТЕКУЩЕЙ разницы с 1500 → рейтинг сходится к 1500.
-        var rating = 1900
-        var day = 91L
-        val days = mutableListOf<Pair<Long, Int>>()
-        while (day < 5000 && rating > 1505) {
-            rating = RatingDecay.decayedRating(rating, daysAgo(day), now)
-            if (day % 50L == 0L) days.add(day to rating)
-            day++
+        // Симуляция 100 «ежедневных» прогонов: каждый прогон получает ту же базу 1750.
+        var current = 1750
+        for (day in 91L..190L) {
+            current = RatingDecay.decayedRating(1750, target, daysAgo(day), now.plus(0, ChronoUnit.DAYS))
         }
-        // Через несколько сотен дней рейтинг падает к 1500
-        assertTrue(rating <= 1505, "rating=$rating должен дойти до ~1500. Лог: $days")
+        // День 190 → 100 дней сверх порога, cap 30%×550=165 не достигнут → 1750-100.
+        assertEquals(1650, current)
     }
 
     @Test
-    fun `decay - один прогон job ограничен 30 процентами текущей разницы`() {
-        // За один запуск (с любым количеством дней) rating не может сдвинуться
-        // больше чем на 30% от gap = |rating - 1500|.
-        val gap1900 = 1900 - 1500  // 400
-        val maxDecay = (gap1900 * 0.30).toInt()  // 120
-        val result = RatingDecay.decayedRating(1900, daysAgo(100000), now)
-        assertEquals(1900 - maxDecay, result)
-    }
-
-    @Test
-    fun `decay - монотонно уменьшается с ростом дней неактивности`() {
-        val r100 = RatingDecay.decayedRating(1800, daysAgo(100), now)
-        val r150 = RatingDecay.decayedRating(1800, daysAgo(150), now)
-        val r200 = RatingDecay.decayedRating(1800, daysAgo(200), now)
+    fun `decay - монотонно уменьшается с ростом дней неактивности до cap`() {
+        val r100 = RatingDecay.decayedRating(1800, target, daysAgo(100), now)
+        val r150 = RatingDecay.decayedRating(1800, target, daysAgo(150), now)
+        val r200 = RatingDecay.decayedRating(1800, target, daysAgo(200), now)
         assertTrue(r100 > r150, "100д ($r100) > 150д ($r150)")
         assertTrue(r150 > r200, "150д ($r150) > 200д ($r200)")
+    }
+
+    // ============== targetRating ==============
+
+    @Test
+    fun `target - медиана опытных игроков`() {
+        assertEquals(1200, RatingDecay.targetRating(listOf(1100, 1200, 1400)))
+        // Устойчива к выбросу (мусорный аккаунт с 4000).
+        assertEquals(1200, RatingDecay.targetRating(listOf(1100, 1150, 1200, 1300, 4000)))
+    }
+
+    @Test
+    fun `target - fallback 1500 на пустой базе`() {
+        assertEquals(RatingDecay.FALLBACK_TARGET, RatingDecay.targetRating(emptyList()))
     }
 }

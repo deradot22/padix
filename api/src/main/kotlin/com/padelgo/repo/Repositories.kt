@@ -61,6 +61,7 @@ interface MatchRepository : JpaRepository<Match, UUID> {
         select m from Match m
         join Round r on r.id = m.roundId
         where r.eventId = :eventId
+        order by r.roundNumber asc, m.courtNumber asc
         """
     )
     fun findAllByEventId(@Param("eventId") eventId: UUID): List<Match>
@@ -127,6 +128,15 @@ interface RatingChangeRepository : JpaRepository<RatingChange, UUID> {
     fun findAllByPlayerId(playerId: UUID): List<RatingChange>
     fun findAllByPlayerIdAndEventId(playerId: UUID, eventId: UUID): List<RatingChange>
     fun findAllByEventId(eventId: UUID): List<RatingChange>
+
+    /**
+     * Последняя МАТЧЕВАЯ запись игрока — база для идемпотентного decay (decay-записи
+     * с matchId=null исключены, поэтому база стабильна между ежедневными прогонами).
+     */
+    fun findFirstByPlayerIdAndMatchIdIsNotNullOrderByCreatedAtDesc(playerId: UUID): RatingChange?
+
+    /** Самая свежая запись игрока любого типа — чтобы найти «хвостовую» decay-запись. */
+    fun findFirstByPlayerIdOrderByCreatedAtDesc(playerId: UUID): RatingChange?
 }
 
 interface UserRatingNotificationRepository : JpaRepository<com.padelgo.domain.UserRatingNotification, UUID> {
