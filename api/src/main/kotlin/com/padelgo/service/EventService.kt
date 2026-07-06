@@ -290,8 +290,16 @@ class EventService(
         val players = playerRepo.findAllById(playerIds).associateBy { it.id!! }
         val ratings = players.mapValues { it.value.rating }
         val maxDiff = if (event.pairingMode == com.padelgo.domain.PairingMode.BALANCED) BALANCED_TEAM_DIFF_CAP else null
-        val planner = PairingPlanner(ratingByPlayer = ratings, courtsCount = event.courtsCount, pairingMode = event.pairingMode, maxTeamDiff = maxDiff)
         val existingMatches = matchRepo.findAllByEventId(eventId)
+        val seed = plannerSeed(eventId, playerIds, salt = existingMatches.size)
+        log.info("[PAIRING] addRound | eventId={} mode={} players={} seed={}", eventId, event.pairingMode, playerIds.size, seed)
+        val planner = PairingPlanner(
+            ratingByPlayer = ratings,
+            courtsCount = event.courtsCount,
+            pairingMode = event.pairingMode,
+            maxTeamDiff = maxDiff,
+            random = kotlin.random.Random(seed)
+        )
         planner.seedFromMatches(existingMatches)
         val planned = planner.planRounds(playerIds, 1).firstOrNull().orEmpty()
 
@@ -517,6 +525,19 @@ class EventService(
         }
     }
 
+    /**
+     * Детерминированный seed планировщика от (eventId, состав, кол-во уже созданных
+     * матчей). Превью и реальный план при неизменном составе дают ОДИН и тот же план
+     * (раньше это были два независимых Random.Default-прогона: юзер подтверждал в
+     * модалке одно число «хороших» раундов, а при старте получал другое). salt —
+     * число существующих матчей: у каждого добавленного раунда своя перестановка.
+     */
+    private fun plannerSeed(eventId: UUID, playerIds: Collection<UUID>, salt: Int = 0): Int {
+        var h = eventId.hashCode()
+        playerIds.map { it.toString() }.sorted().forEach { h = 31 * h + it.hashCode() }
+        return 31 * h + salt
+    }
+
     private fun planSchedule(event: Event, playerIds: List<UUID>) {
         // Mexicano — инкрементальный формат: на старте создаём только первый раунд,
         // остальные организатор добавляет вручную кнопкой «+Раунд» (пары по текущей таблице).
@@ -569,11 +590,14 @@ class EventService(
         val ratings = players.values.map { it.rating }
         val maxDiff = if (event.pairingMode == com.padelgo.domain.PairingMode.BALANCED) BALANCED_TEAM_DIFF_CAP else null
         val ratingMap = players.mapValues { it.value.rating }
+        val seed = plannerSeed(event.id!!, playerIds)
+        log.info("[PAIRING] planSchedule | eventId={} mode={} players={} seed={}", event.id, event.pairingMode, playerIds.size, seed)
         val planner = PairingPlanner(
             ratingByPlayer = ratingMap,
             courtsCount = event.courtsCount,
             pairingMode = event.pairingMode,
-            maxTeamDiff = maxDiff
+            maxTeamDiff = maxDiff,
+            random = kotlin.random.Random(seed)
         )
 
         // В BALANCED берём только «хорошие» раунды (без повторов партнёрств и в пределах cap).
@@ -1162,11 +1186,14 @@ class EventService(
         val theoreticalMax = (playerIds.size * (playerIds.size - 1)) / (2 * pairsPerRound)
         val simulationRounds = minOf(12, maxOf(theoreticalMax, 1))
 
+        // Тот же seed, что и planSchedule при старте: превью == реальный план,
+        // пока состав не изменился.
         val planner = PairingPlanner(
             ratingByPlayer = ratings,
             courtsCount = effectiveCourts,
             pairingMode = com.padelgo.domain.PairingMode.BALANCED,
-            maxTeamDiff = maxDiff
+            maxTeamDiff = maxDiff,
+            random = kotlin.random.Random(plannerSeed(eventId, playerIds))
         )
         val planned = planner.planRounds(playerIds, simulationRounds)
         val goodRounds = takeGoodRounds(planned, ratings, maxDiff).size

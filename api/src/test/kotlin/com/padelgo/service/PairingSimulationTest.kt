@@ -378,4 +378,53 @@ class PairingSimulationTest {
         val spread = (counts.maxOrNull() ?: 0) - (counts.minOrNull() ?: 0)
         check(spread <= 2) { "Несправедливая ротация замен: spread=$spread матчей" }
     }
+
+    @Test
+    fun `регрессия прод 17-05 - cap=60 не приклеивает пары сильный+слабый`() {
+        // Прод-эвент 2026-05-17: BALANCED cap=60 (ПРОД-значение!), 8 разнородных игроков,
+        // 7 раундов — две пары «сильный+слабый» не разлучались ВСЕ 7 раундов, потому что
+        // balanceViolations доминировал над partnerRepeats. Теперь партнёры первичны.
+        val ratings = listOf(1550, 1500, 1450, 1400, 1150, 1100, 1050, 1000)
+        val players = (0 until 8).map { UUID.randomUUID() }
+        val ratingMap = players.zip(ratings).toMap()
+
+        for (seed in listOf(1L, 42L, 1337L)) {
+            val planner = PairingPlanner(
+                ratingByPlayer = ratingMap,
+                courtsCount = 2,
+                pairingMode = PairingMode.BALANCED,
+                maxTeamDiff = 60,
+                random = Random(seed)
+            )
+            val rounds = planner.planRounds(players, 7)
+            val partnerCounts = mutableMapOf<Set<UUID>, Int>()
+            rounds.forEach { rm ->
+                rm.forEach { m ->
+                    partnerCounts.merge(setOf(m.teamA.first, m.teamA.second), 1, Int::plus)
+                    partnerCounts.merge(setOf(m.teamB.first, m.teamB.second), 1, Int::plus)
+                }
+            }
+            val maxTogether = partnerCounts.values.max()
+            check(maxTogether <= 2) {
+                "seed=$seed: пара сыграла вместе $maxTogether раз из 7 — залипание cap=60 не ушло"
+            }
+        }
+    }
+
+    @Test
+    fun `один seed - один план (превью обязан совпадать с реальным планом)`() {
+        val ratings = listOf(1462, 1296, 1293, 1207, 1121, 988, 965, 961)
+        val players = (0 until 8).map { UUID.randomUUID() }
+        val ratingMap = players.zip(ratings).toMap()
+
+        fun plan(): List<List<PlannedMatch>> = PairingPlanner(
+            ratingByPlayer = ratingMap,
+            courtsCount = 2,
+            pairingMode = PairingMode.BALANCED,
+            maxTeamDiff = 60,
+            random = Random(123)
+        ).planRounds(players, 7)
+
+        check(plan() == plan()) { "одинаковый seed обязан давать идентичный план (превью == план)" }
+    }
 }
