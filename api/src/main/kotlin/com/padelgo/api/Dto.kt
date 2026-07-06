@@ -45,7 +45,10 @@ data class PlayerResponse(
     val publicId: String? = null,
 
     @Schema(description = "URL аватара или null")
-    val avatarUrl: String? = null
+    val avatarUrl: String? = null,
+
+    @Schema(description = "true — игрок не играл больше полугода, рейтинг скрыт из публичных мест (UI показывает «—»)")
+    val ratingHidden: Boolean = false
 ) {
     companion object {
         fun from(p: Player, calibrationEventsRemaining: Int? = null, publicId: String? = null) = PlayerResponse(
@@ -56,7 +59,8 @@ data class PlayerResponse(
             gamesPlayed = p.gamesPlayed,
             calibrationEventsRemaining = calibrationEventsRemaining,
             publicId = publicId,
-            avatarUrl = AvatarLinks.publicUrl(p.id, p.avatarUrl)
+            avatarUrl = AvatarLinks.publicUrl(p.id, p.avatarUrl),
+            ratingHidden = com.padelgo.service.RatingDecay.isRatingHidden(p.lastMatchAt, java.time.Instant.now())
         )
     }
 }

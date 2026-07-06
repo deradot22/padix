@@ -123,6 +123,7 @@ class AuthService(
             surveyLevel = user.surveyLevel,
             calibrationEventsRemaining = user.calibrationEventsRemaining,
             calibrationMatchesRemaining = user.calibrationMatchesRemaining,
+            ratingHidden = com.padelgo.service.RatingDecay.isRatingHidden(player.lastMatchAt, java.time.Instant.now()),
             avatarUrl = player.avatarUrl,
             gender = user.gender,
             showWinProbability = user.showWinProbability,

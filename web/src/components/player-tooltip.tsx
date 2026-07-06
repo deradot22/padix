@@ -10,7 +10,8 @@ export interface PlayerTooltipPlayer {
   id: number | string;
   name: string;
   odid?: string;
-  rating: number;
+  /** null — рейтинг скрыт (игрок не играл больше полугода). */
+  rating: number | null;
   matches?: number;
   ntrp?: string;
   avatarUrl?: string | null;
@@ -173,13 +174,13 @@ export function PlayerTooltip({
                   <Trophy className="h-3.5 w-3.5" />
                   Рейтинг
                 </span>
-                <span className="font-medium text-foreground">{player.rating}</span>
+                <span className="font-medium text-foreground">{player.rating ?? "—"}</span>
               </div>
 
               <div className="flex items-center justify-between">
                 <span className="flex items-center gap-1.5 text-muted-foreground">NTRP</span>
                 <span className="font-medium text-foreground">
-                  {player.ntrp || ntrpLevel(player.rating)}
+                  {player.rating == null ? "—" : player.ntrp || ntrpLevel(player.rating)}
                 </span>
               </div>
 

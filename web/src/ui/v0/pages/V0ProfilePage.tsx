@@ -503,6 +503,12 @@ export function V0ProfilePage(props: { me: any; meLoaded?: boolean; onMeUpdate?:
               </div>
             </div>
 
+            {viewMe.ratingHidden && (
+              <p className="mt-2 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-700 dark:text-amber-400">
+                Рейтинг скрыт с лидерборда — ты не играл больше полугода. Сыграй матч, чтобы вернуть его.
+              </p>
+            )}
+
             {/*
               Restyle B: прогресс до следующего уровня NTRP. Пороги захардкожены в NTRP_BOUNDS
               (зеркало lib/rating.ts). При калибровке рейтинг ещё «—», поэтому прогресс прячем,

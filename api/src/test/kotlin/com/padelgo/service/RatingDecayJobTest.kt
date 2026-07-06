@@ -46,9 +46,14 @@ class RatingDecayJobTest {
         job = RatingDecayJob(playerRepo, ratingChangeRepo, userRepo)
 
         whenever(userRepo.findAll()).doReturn(emptyList())
+        whenever(userRepo.saveAll(any<Iterable<UserAccount>>())).thenAnswer { inv ->
+            @Suppress("UNCHECKED_CAST")
+            (inv.arguments[0] as Iterable<UserAccount>).toList()
+        }
         whenever(ratingChangeRepo.save(any())).doAnswer { inv ->
             val c = inv.arguments[0] as RatingChange
             if (c.id == null) c.id = UUID.randomUUID()
+            if (c.createdAt == null) c.createdAt = now
             changes.add(c)
             c
         }
@@ -91,7 +96,7 @@ class RatingDecayJobTest {
         )
 
         // Прогон 1.
-        job.applyDecay()
+        job.applyDecay(now)
         val ratingAfter1 = a.rating
         val decayRecords1 = changes.count { it.playerId == aId && it.kind == RatingChangeKind.DECAY }
         assertTrue(ratingAfter1 < 1800, "рейтинг должен затухнуть: $ratingAfter1")
@@ -102,7 +107,7 @@ class RatingDecayJobTest {
         changes.filter { it.kind == RatingChangeKind.DECAY }.forEach {
             it.createdAt = now.minus(1, ChronoUnit.HOURS)
         }
-        job.applyDecay()
+        job.applyDecay(now)
         val ratingAfter2 = a.rating
         val decayRecords2 = changes.count { it.playerId == aId && it.kind == RatingChangeKind.DECAY }
 
@@ -110,6 +115,45 @@ class RatingDecayJobTest {
         assertEquals(1, decayRecords2, "по-прежнему одна decay-запись (хвостовая переписана, не добавлена)")
         // База осталась 1800 (decay-запись matchId=null не влияет на baseline).
         assertEquals(1780 + 20, changes.first { it.kind == RatingChangeKind.MATCH }.newRating)
+    }
+
+    @Test
+    fun `неактивный калибрующийся уходит на повторную калибровку И декеится`() {
+        // a1: 120 дней простоя, калибровка недоиграна (осталось 13). По новой политике:
+        // остаток поднимается до 30 заново, а decay применяется НЕСМОТРЯ на калибровку.
+        val acc = UserAccount(id = UUID.randomUUID(), playerId = aId, calibrationMatchesRemaining = 13)
+        whenever(userRepo.findAll()).doReturn(listOf(acc))
+
+        val a = Player(id = aId, name = "A", rating = 1800, gamesPlayed = 17).apply {
+            lastMatchAt = now.minus(120, ChronoUnit.DAYS)
+        }
+        val b = Player(id = UUID.randomUUID(), name = "B", rating = 1100, gamesPlayed = 50).apply {
+            lastMatchAt = now.minus(1, ChronoUnit.DAYS)
+        }
+        val c = Player(id = UUID.randomUUID(), name = "C", rating = 1100, gamesPlayed = 50).apply {
+            lastMatchAt = now.minus(1, ChronoUnit.DAYS)
+        }
+        whenever(playerRepo.findAll()).doReturn(listOf(a, b, c))
+        changes.add(
+            RatingChange(
+                id = UUID.randomUUID(), eventId = UUID.randomUUID(), matchId = UUID.randomUUID(),
+                kind = RatingChangeKind.MATCH, playerId = aId, oldRating = 1780, delta = 20, newRating = 1800,
+                createdAt = now.minus(120, ChronoUnit.DAYS)
+            )
+        )
+
+        job.applyDecay(now)
+
+        assertEquals(30, acc.calibrationMatchesRemaining, "повторная калибровка: остаток поднят до 30 заново")
+        // 30 дней сверх порога → −30 (cap 30%×700=210 не достигнут). Броня калибровки снята.
+        assertEquals(1770, a.rating, "decay применился несмотря на статус калибровки")
+        assertEquals(1, changes.count { it.playerId == aId && it.kind == RatingChangeKind.DECAY })
+
+        // Повторный прогон того же дня — идемпотентен (остаток уже 30, рейтинг не двигается).
+        job.applyDecay(now)
+        assertEquals(30, acc.calibrationMatchesRemaining)
+        assertEquals(1770, a.rating)
+        assertEquals(1, changes.count { it.playerId == aId && it.kind == RatingChangeKind.DECAY })
     }
 
     @Test
@@ -125,7 +169,7 @@ class RatingDecayJobTest {
                 createdAt = now.minus(10, ChronoUnit.DAYS)
             )
         )
-        job.applyDecay()
+        job.applyDecay(now)
         assertEquals(1500, a.rating)
         assertEquals(0, changes.count { it.kind == RatingChangeKind.DECAY })
     }

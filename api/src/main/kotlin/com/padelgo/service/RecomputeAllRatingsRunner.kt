@@ -54,3 +54,28 @@ class RecomputeAllRatingsRunner(
         }
     }
 }
+
+/**
+ * Одноразовый запуск inactivity-джоба (повторная калибровка + decay) вне расписания —
+ * чтобы не ждать ночного крона 03:00 UTC после выкатки новой политики неактивности.
+ *
+ *   -Dapp.maintenance.run-inactivity-job=true -Dapp.maintenance.exit-after=true
+ */
+@Component
+@ConditionalOnProperty(name = ["app.maintenance.run-inactivity-job"], havingValue = "true")
+class InactivityJobRunner(
+    private val ratingDecayJob: RatingDecayJob,
+    private val context: ConfigurableApplicationContext,
+) : ApplicationRunner {
+    private val log = LoggerFactory.getLogger(InactivityJobRunner::class.java)
+
+    override fun run(args: ApplicationArguments) {
+        log.info("[MAINTENANCE] === Inactivity-джоб (перекалибровка + decay): старт ===")
+        ratingDecayJob.applyDecay()
+        log.info("[MAINTENANCE] Inactivity-джоб завершён")
+        if (context.environment.getProperty("app.maintenance.exit-after", Boolean::class.java, false)) {
+            val code = SpringApplication.exit(context, org.springframework.boot.ExitCodeGenerator { 0 })
+            exitProcess(code)
+        }
+    }
+}

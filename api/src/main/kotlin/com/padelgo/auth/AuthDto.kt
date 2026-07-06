@@ -77,6 +77,9 @@ data class MeResponse(
     @Schema(description = "Осталось матчей до конца калибровки. 0 — калибровка завершена. В период калибровки рейтинг меняется быстрее (×1.5)")
     val calibrationMatchesRemaining: Int,
 
+    @Schema(description = "true — не играл больше полугода, рейтинг скрыт из публичных мест до первого матча")
+    val ratingHidden: Boolean = false,
+
     @Schema(description = "URL аватара или null")
     val avatarUrl: String? = null,
 

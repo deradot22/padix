@@ -81,7 +81,10 @@ export function V0RatingPage(props: { authed: boolean; me?: { playerId?: string 
     let list = (data ?? []).filter((p) => !p.name.startsWith("Удалённый пользователь") && (p.rating ?? 0) > 0);
     if (calibrationFilter === "calibrated") list = list.filter((p) => (p.calibrationEventsRemaining ?? 0) === 0);
     else if (calibrationFilter === "in_calibration") list = list.filter((p) => (p.calibrationEventsRemaining ?? 0) > 0);
-    return list.sort((a, b) => (b.rating ?? 0) - (a.rating ?? 0));
+    // Скрытые рейтинги (полгода без игр) — в конец списка, чтобы позиция не выдавала число.
+    return list.sort(
+      (a, b) => Number(a.ratingHidden ?? false) - Number(b.ratingHidden ?? false) || (b.rating ?? 0) - (a.rating ?? 0)
+    );
   }, [data, calibrationFilter]);
 
   const globalRankMap = useMemo(() => {
@@ -208,9 +211,9 @@ export function V0RatingPage(props: { authed: boolean; me?: { playerId?: string 
             player={{
               id: player.id,
               name: player.name,
-              rating: player.rating,
+              rating: player.ratingHidden ? null : player.rating,
               matches: player.gamesPlayed,
-              ntrp: player.ntrp,
+              ntrp: player.ratingHidden ? undefined : player.ntrp,
               odid: player.publicId,
               avatarUrl: player.avatarUrl,
             }}
@@ -234,15 +237,19 @@ export function V0RatingPage(props: { authed: boolean; me?: { playerId?: string 
         </td>
         <td className="py-1.5 sm:py-2 px-2 sm:px-3 align-middle whitespace-nowrap text-center">
           <span className="font-display font-bold tabular-nums text-base sm:text-xl">
-            {isCalibrating(player) && isMe ? "—" : player.rating}
+            {player.ratingHidden || (isCalibrating(player) && isMe) ? "—" : player.rating}
           </span>
-          {isCalibrating(player) && !isMe && (
-            <span className="text-amber-600 dark:text-amber-500/80 ml-0.5" title="В калибровке">?</span>
+          {player.ratingHidden ? (
+            <span className="text-muted-foreground ml-0.5" title="Рейтинг скрыт — не играл больше полугода">?</span>
+          ) : (
+            isCalibrating(player) && !isMe && (
+              <span className="text-amber-600 dark:text-amber-500/80 ml-0.5" title="В калибровке">?</span>
+            )
           )}
         </td>
         <td className="py-1.5 sm:py-2 pl-2 pr-4 sm:pl-3 sm:pr-6 align-middle text-right whitespace-nowrap">
           <span className={cn("tabular-nums text-xs sm:text-sm font-medium", ntrpColor)}>
-            {isCalibrating(player) && isMe ? "—" : ntrp}
+            {player.ratingHidden || (isCalibrating(player) && isMe) ? "—" : ntrp}
           </span>
         </td>
         <td className="py-1.5 sm:py-2 pl-2 pr-3 text-muted-foreground align-middle text-right tabular-nums text-xs sm:text-sm hidden sm:table-cell">
@@ -294,9 +301,9 @@ export function V0RatingPage(props: { authed: boolean; me?: { playerId?: string 
               player={{
                 id: player.id,
                 name: player.name,
-                rating: player.rating,
+                rating: player.ratingHidden ? null : player.rating,
                 matches: player.gamesPlayed,
-                ntrp: player.ntrp,
+                ntrp: player.ratingHidden ? undefined : player.ntrp,
                 odid: player.publicId,
                 avatarUrl: player.avatarUrl,
               }}
@@ -324,11 +331,11 @@ export function V0RatingPage(props: { authed: boolean; me?: { playerId?: string 
               </div>
             </PlayerTooltip>
             <p className={cn("font-display font-bold tabular-nums leading-none", isFirst ? "text-3xl sm:text-5xl" : "text-2xl sm:text-4xl")}>
-              {isCalibrating(player) && player.id === meId ? "—" : player.rating}
+              {player.ratingHidden || (isCalibrating(player) && player.id === meId) ? "—" : player.rating}
             </p>
             <div className="mt-1 sm:mt-2 flex flex-col sm:flex-row items-center gap-0.5 sm:gap-3 text-[10px] sm:text-sm text-muted-foreground">
-              <span className={NTRP_COLORS[ntrpLevel(player.rating)] ?? ""}>
-                NTRP {isCalibrating(player) && player.id === meId ? "—" : ntrpLevel(player.rating)}
+              <span className={player.ratingHidden ? "" : NTRP_COLORS[ntrpLevel(player.rating)] ?? ""}>
+                NTRP {player.ratingHidden || (isCalibrating(player) && player.id === meId) ? "—" : ntrpLevel(player.rating)}
               </span>
               <span className="text-border hidden sm:inline">|</span>
               <span className="flex items-center gap-1">

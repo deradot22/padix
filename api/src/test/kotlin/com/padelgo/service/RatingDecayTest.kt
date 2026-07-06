@@ -81,6 +81,21 @@ class RatingDecayTest {
         assertTrue(r150 > r200, "150д ($r150) > 200д ($r200)")
     }
 
+    // ============== isRatingHidden ==============
+
+    @Test
+    fun `isRatingHidden - скрывается строго после 180 дней простоя`() {
+        org.junit.jupiter.api.Assertions.assertFalse(RatingDecay.isRatingHidden(daysAgo(10), now))
+        org.junit.jupiter.api.Assertions.assertFalse(RatingDecay.isRatingHidden(daysAgo(180), now))
+        assertTrue(RatingDecay.isRatingHidden(daysAgo(181), now))
+        assertTrue(RatingDecay.isRatingHidden(daysAgo(500), now))
+    }
+
+    @Test
+    fun `isRatingHidden - никогда не игравший не считается скрытым`() {
+        org.junit.jupiter.api.Assertions.assertFalse(RatingDecay.isRatingHidden(null, now))
+    }
+
     // ============== targetRating ==============
 
     @Test

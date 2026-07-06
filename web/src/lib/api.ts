@@ -14,6 +14,8 @@ export type Player = {
   calibrationEventsRemaining?: number | null;
   publicId?: string;
   avatarUrl?: string | null;
+  /** true — не играл больше полугода, рейтинг скрыт (показываем «—»). */
+  ratingHidden?: boolean;
 };
 
 export type EventVisibility = "PRIVATE" | "PUBLIC";
@@ -164,6 +166,8 @@ export type MeResponse = {
   surveyLevel: number | null;
   calibrationEventsRemaining: number;
   calibrationMatchesRemaining: number;
+  /** true — не играл больше полугода, рейтинг скрыт из публичных мест до первого матча. */
+  ratingHidden?: boolean;
   avatarUrl?: string | null;
   gender?: string | null;
   /** Показывать шансы выигрыша в модале «Раунды». По умолчанию false. */
