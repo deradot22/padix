@@ -90,8 +90,12 @@ class RatingDecayJob(
      *    в историю (kind=DECAY), хвостовая переписывается каждый прогон. Калибровка от
      *    decay НЕ защищает: неактивные теряют очки независимо от статуса калибровки.
      */
+    // @Scheduled требует метод строго без аргументов (Kotlin-дефолт для Spring — всё
+    // равно параметр, контекст падает на старте) — поэтому no-arg обёртка.
     @Scheduled(cron = "0 0 3 * * *", zone = "UTC")
-    fun applyDecay(now: Instant = Instant.now()) {
+    fun applyDecay() = applyDecay(Instant.now())
+
+    fun applyDecay(now: Instant) {
         val players = playerRepo.findAll()
 
         val target = RatingDecay.targetRating(
