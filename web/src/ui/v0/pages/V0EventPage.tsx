@@ -188,6 +188,12 @@ export function V0EventPage(props: { me: any; meLoaded?: boolean }) {
   /** Auto-save score as draft whenever the user enters/changes points */
   const lastAutoSavedRef = useRef<Record<string, string>>({});
   const prevActiveMatchIdRef = useRef<string | null>(null);
+  // Оптимистично отправленный счёт, ещё не «устаканившийся» на сервере. Пока запись есть,
+  // серверная синхронизация НЕ трогает этот матч — иначе протухший in-flight refresh
+  // (getEventDetails, запущенный при переключении команды до сабмита) на миг возвращает
+  // старую цифру после ввода второй. Снимается через таймаут (стрэглеры уже прилетели)
+  // или при ошибке сабмита.
+  const pendingScoreRef = useRef<Record<string, { a: number; b: number }>>({});
 
   const saveDraftIfNeeded = (matchId: string, a: number, b: number) => {
     const e = data?.event;
@@ -540,6 +546,14 @@ export function V0EventPage(props: { me: any; meLoaded?: boolean }) {
     setScoreByMatch((prev) => {
       const next = { ...prev };
       rounds.flatMap((r) => r.matches).forEach((m) => {
+        // Матч, который юзер прямо сейчас редактирует в паде, НЕ перетираем серверным счётом:
+        // иначе фоновый refresh (polling каждые 5с или getEventDetails при переключении команды)
+        // сбрасывает незасабмиченную правку — баг «меняешь A на 13, переключаешься на B, а A
+        // возвращается к старому значению».
+        if (scorePadOpen && activeMatchId === m.id) return;
+        // Только что оптимистично отправленный счёт держим до устаканивания сервера — иначе
+        // протухший in-flight refresh на миг моргает старой цифрой после ввода второй.
+        if (pendingScoreRef.current[m.id]) return;
         const points = m.score?.points;
         if (points) {
           // Если API вернул итоговый счёт — синхронизируем локальный state, даже если уже была
@@ -558,7 +572,7 @@ export function V0EventPage(props: { me: any; meLoaded?: boolean }) {
       });
       return next;
     });
-  }, [data, expandedRoundId, activeMatchId]);
+  }, [data, expandedRoundId, activeMatchId, scorePadOpen]);
 
   /** Синхронизируем finishedMatchIds с данными API — чтобы «Сыгран» отображался сразу после сохранения */
   useEffect(() => {
@@ -2191,6 +2205,9 @@ export function V0EventPage(props: { me: any; meLoaded?: boolean }) {
                                                 autoSavingRef.current.add(m.id);
                                                 setScoreSavingId(m.id);
                                                 setScoreError(null);
+                                                // Помечаем оптимистичный счёт как «в полёте»: до устаканивания сервера
+                                                // серверная синхронизация этот матч не трогает (защита от флика).
+                                                pendingScoreRef.current[m.id] = { a: nextA, b: nextB };
                                                 api.submitScore(m.id, { teamAPoints: nextA, teamBPoints: nextB })
                                                   .then(async () => {
                                                     setFinishedMatchIds((prev) => new Set([...prev, m.id]));
@@ -2198,8 +2215,14 @@ export function V0EventPage(props: { me: any; meLoaded?: boolean }) {
                                                     setScorePadOpen(false);
                                                     const refreshed = await api.getEventDetails(eventId);
                                                     setData(refreshed);
+                                                    // Снимаем pending с запасом: к этому моменту протухшие in-flight
+                                                    // refresh'и (запущенные до сабмита) уже прилетели и отфильтрованы.
+                                                    setTimeout(() => {
+                                                      delete pendingScoreRef.current[m.id];
+                                                    }, 3000);
                                                   })
                                                   .catch(async (err: any) => {
+                                                    delete pendingScoreRef.current[m.id];
                                                     setScoreError(err?.message ?? "Не удалось сохранить счёт");
                                                     // Возможен 409 «уже введён» — обновим, чтобы UI показал актуальный счёт/автора.
                                                     if (eventId) {
