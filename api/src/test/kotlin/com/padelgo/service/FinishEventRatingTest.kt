@@ -14,6 +14,8 @@ import com.padelgo.api.ApiException
 import com.padelgo.api.PointsScoreRequest
 import com.padelgo.api.SubmitScoreRequest
 import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertNotNull
+import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
@@ -372,5 +374,46 @@ class FinishEventRatingTest {
         }
         assertEquals(HttpStatus.FORBIDDEN, ex.status)
         verify(botClient, never()).notifyEventResultsUpdated(any())
+    }
+
+    // ── Backfill: решение «звать editMessageText или нет» для конкретного события ──
+    // buildResultsUpdatePayload собирает актуальный payload и возвращает null, когда
+    // редактировать нечего. Именно эту функцию гоняет TelegramResultsBackfillRunner.
+    @Test
+    fun `buildResultsUpdatePayload — для FINISHED игры со счётом отдаёт payload`() {
+        val players = mapOf(
+            a1 to Player(id = a1, name = "a1", rating = 1400, gamesPlayed = 50),
+            a2 to Player(id = a2, name = "a2", rating = 1400, gamesPlayed = 50),
+            b1 to Player(id = b1, name = "b1", rating = 1400, gamesPlayed = 50),
+            b2 to Player(id = b2, name = "b2", rating = 1400, gamesPlayed = 50)
+        )
+        val ev = wire(players, listOf(match(match1Id, round1Id)), mapOf(match1Id to (16 to 8)))
+        service.finishEvent(eventId, ownerUserId) // → FINISHED, пишет rating_changes
+        assertEquals(EventStatus.FINISHED, ev.status)
+        whenever(ratingChangeRepo.findAllByEventId(eventId)).doReturn(savedChanges.toList())
+
+        val payload = service.buildResultsUpdatePayload(eventId)
+
+        assertNotNull(payload)
+        assertEquals(eventId, payload!!.eventId)
+        assertEquals(ownerUserId, payload.ownerUserId)
+        assertEquals(1, payload.matchCount)
+    }
+
+    @Test
+    fun `buildResultsUpdatePayload — для не-FINISHED игры отдаёт null (editMessageText не нужен)`() {
+        val players = playerIds.associateWith { Player(id = it, name = "p", rating = 1400, gamesPlayed = 50) }
+        wire(players, listOf(match(match1Id, round1Id)), mapOf(match1Id to (16 to 8)))
+        // wire() отдаёт событие в статусе IN_PROGRESS и finishEvent не зовём.
+
+        assertNull(service.buildResultsUpdatePayload(eventId))
+    }
+
+    @Test
+    fun `buildResultsUpdatePayload — FINISHED без сыгранных матчей отдаёт null`() {
+        whenever(eventRepo.findById(eventId)).doReturn(Optional.of(event(EventStatus.FINISHED)))
+        whenever(matchRepo.findAllByEventId(eventId)).doReturn(emptyList())
+
+        assertNull(service.buildResultsUpdatePayload(eventId))
     }
 }

@@ -63,3 +63,18 @@ tasks.named<BootJar>("bootJar") {
     archiveFileName.set("app.jar")
 }
 
+// Разовый backfill Telegram-постов результатов (см. TelegramResultsBackfillRunner).
+// Приводит уже опубликованные RESULTS-сообщения к актуальному счёту через editMessageText.
+// Запуск:  ./gradlew :api:backfillTelegramResults [-Pdays=30] [-PthrottleMs=120]
+// Требует те же env, что и обычный старт api (БД + APP_BOT_BASE_URL/APP_BOT_INTERNAL_SECRET).
+tasks.register<org.springframework.boot.gradle.tasks.run.BootRun>("backfillTelegramResults") {
+    group = "maintenance"
+    description = "Разово привести Telegram-посты результатов к актуальному счёту (editMessageText)."
+    mainClass.set("com.padelgo.PadelGoApplicationKt")
+    classpath = sourceSets["main"].runtimeClasspath
+    systemProperty("app.maintenance.backfill-telegram-results", "true")
+    systemProperty("app.maintenance.exit-after", "true")
+    systemProperty("app.maintenance.backfill-days", (project.findProperty("days") ?: "30").toString())
+    systemProperty("app.maintenance.backfill-throttle-ms", (project.findProperty("throttleMs") ?: "120").toString())
+}
+

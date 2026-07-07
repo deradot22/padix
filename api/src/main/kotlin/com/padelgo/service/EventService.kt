@@ -1666,6 +1666,45 @@ class EventService(
         return top to leaderboard
     }
 
+    /**
+     * Собирает актуальный payload результатов завершённой игры для разового backfill
+     * Telegram-постов (см. [TelegramResultsBackfillRunner]) и РЕШАЕТ, нужно ли редактировать
+     * сообщение. Возвращает null — «редактировать нечего», editMessageText звать не надо:
+     *  - события нет / оно не FINISHED (счёт ещё не финальный);
+     *  - у события нет владельца (некуда/незачем слать);
+     *  - нет ни одного сыгранного матча со счётом (пустой пост).
+     * Иначе возвращает [EventResultsUpdatedNotify] с текущими top/leaderboard — тем же
+     * payload, что уходит боту при штатной правке счёта (recomputeFinishedEvent).
+     *
+     * Чистое чтение (без @Transactional, без сайд-эффектов) — безопасно гонять пачкой.
+     */
+    fun buildResultsUpdatePayload(eventId: UUID): EventResultsUpdatedNotify? {
+        val event = eventRepo.findById(eventId).orElse(null) ?: return null
+        if (event.status != EventStatus.FINISHED) return null
+        val ownerId = event.createdByUserId ?: return null
+
+        val matches = matchRepo.findAllByEventId(eventId)
+        val setsByMatch = matches.associate { it.id!! to scoreRepo.findAllByMatchIdOrderBySetNumberAsc(it.id!!) }
+        val finishedMatches = matches.filter {
+            it.status == MatchStatus.FINISHED && !setsByMatch[it.id!!].isNullOrEmpty()
+        }
+        if (finishedMatches.isEmpty()) return null
+
+        val (top, leaderboard) = buildEventResultsPayload(event)
+        return EventResultsUpdatedNotify(
+            eventId = eventId,
+            ownerUserId = ownerId,
+            title = event.title,
+            date = event.date,
+            startTime = event.startTime,
+            endTime = event.endTime,
+            courtsCount = event.courtsCount,
+            top = top,
+            leaderboard = leaderboard,
+            matchCount = finishedMatches.size
+        )
+    }
+
     /** Завершает событие без проверки матчей (для обхода старой проверки "Not all matches are finished"). */
     @Transactional
     fun forceFinishEvent(eventId: UUID, userId: UUID) {
