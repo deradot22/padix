@@ -1,5 +1,12 @@
 # Аудит алгоритмов составления игр — 2026-07-03
 
+> **Статус:** находка 3 (BALANCED) **исправлена 2026-07-03** (коммит `6a1add0`): порядок
+> компаратора `partnerRepeats → balanceViolations → opponentRepeats → totalBalance` +
+> детерминированный seed (превью == план, seed логируется). Регрессионные тесты:
+> cap=60 на разнородных не залипает, один seed == один план.
+> Открыты: находки 1 (MEXICANO bench starvation), 2 (FIXED_PAIRS дроп пар),
+> 4 (повторы соперников на длинных эвентах), 5 (addFinalRound) и MINOR-блок.
+
 Двойная проверка: аудит кода (`PairingPlanner`, `SnakePairing`, `FixedPairsPairing`,
 `planSchedule`/`addRound`/`addFinalRound`) + эмпирика по проду (64 эвента, 917 матчей,
 60 игроков; скрипт `pairing_analysis.py` в scratchpad сессии). В проде пока только
