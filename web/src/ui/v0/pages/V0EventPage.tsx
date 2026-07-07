@@ -102,6 +102,31 @@ export function V0EventPage(props: { me: any; meLoaded?: boolean }) {
   const [roundsOpen, setRoundsOpen] = useState(false);
   const [statsOpen, setStatsOpen] = useState(false);
   const [finalRoundLocked, setFinalRoundLocked] = useState(false);
+  // «+ Раунд»: выбор «один или серия» (только AMERICANA).
+  const [addingRounds, setAddingRounds] = useState(false);
+  const doAddRounds = async (count: number) => {
+    if (!eventId) return;
+    setAddingRounds(true);
+    setInfo(null);
+    setActionError(null);
+    try {
+      console.log("[EVENT] addRound", eventId, "count:", count);
+      await api.addRound(eventId, count);
+      const refreshed = await api.getEventDetails(eventId);
+      setData(refreshed);
+      setInfo(count > 1 ? `Серия из ${count} раундов добавлена.` : "Раунд добавлен.");
+      const rounds = refreshed.rounds ?? [];
+      const newRound = rounds[rounds.length - 1];
+      if (newRound?.id) {
+        setExpandedRoundId(newRound.id);
+        setTimeout(() => activeRoundRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" }), 150);
+      }
+    } catch (err: any) {
+      setActionError(err?.message ?? "Ошибка добавления раунда");
+    } finally {
+      setAddingRounds(false);
+    }
+  };
   const [expandedRoundId, setExpandedRoundId] = useState<string | null>(null);
   const [activeMatchId, setActiveMatchId] = useState<string | null>(null);
   const [activeTeam, setActiveTeam] = useState<"A" | "B">("A");
@@ -851,11 +876,13 @@ export function V0EventPage(props: { me: any; meLoaded?: boolean }) {
                       <div className="text-sm text-muted-foreground">Регистрация закрыта</div>
                     )}
 
-                    <div className="flex flex-wrap items-center gap-2">
+                    {/* Кнопки организатора: та же колонка и ширина, что у кнопки записи выше —
+                        всё выровнено по одной вертикали на десктопе и во всю ширину на мобиле. */}
+                    <div className="flex w-full flex-col gap-2 sm:w-[240px]">
                       {isAuthor && e.status === "OPEN_FOR_REGISTRATION" ? (
                         <button
                           type="button"
-                          className="w-full sm:w-[240px] h-11 px-6 rounded-md border border-border bg-secondary text-sm font-medium hover:bg-secondary/80 transition-colors"
+                          className="h-11 w-full px-6 rounded-md border border-primary/40 bg-primary/5 text-primary text-sm font-medium hover:bg-primary/15 transition-colors inline-flex items-center justify-center gap-2"
                           disabled={closing}
                           onClick={async () => {
                             if (!eventId) return;
@@ -896,6 +923,7 @@ export function V0EventPage(props: { me: any; meLoaded?: boolean }) {
                             }
                           }}
                         >
+                          <Lock className="h-4 w-4" />
                           {closing ? "Закрываем…" : "Закрыть регистрацию"}
                         </button>
                       ) : null}
@@ -903,10 +931,11 @@ export function V0EventPage(props: { me: any; meLoaded?: boolean }) {
                       {isAuthor && e.status === "REGISTRATION_CLOSED" ? (
                         <button
                           type="button"
-                          className="w-full sm:w-[240px] h-11 px-6 rounded-md bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 transition-colors inline-flex items-center justify-center"
+                          className="h-11 w-full px-6 rounded-md bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 transition-colors inline-flex items-center justify-center gap-2"
                           disabled={starting}
                           onClick={() => setStartPromptOpen(true)}
                         >
+                          <Zap className="h-4 w-4" />
                           {starting ? "Стартуем…" : "Начать игру"}
                         </button>
                       ) : null}
@@ -2246,34 +2275,36 @@ export function V0EventPage(props: { me: any; meLoaded?: boolean }) {
               })}
             </ModalScrollArea>
 
-            <div className="mt-5 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+            {/* Футер прилипает к низу видимой области модала: на маленьких экранах
+                контент скроллится, а кнопки организатора всегда на виду. */}
+            <div className="sticky bottom-0 z-10 -mx-6 -mb-3 mt-5 border-t border-border bg-background px-6 pb-3 pt-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
               {e.format === "FIXED_PAIRS" ? <div /> : (
               <div className="flex flex-wrap items-center gap-2">
                 <Button
                   variant="secondary"
-                  disabled={finalRoundLocked}
+                  disabled={finalRoundLocked || addingRounds}
                   onClick={async () => {
-                    if (!eventId) return;
-                    setInfo(null);
-                    setActionError(null);
-                    try {
-                      console.log("[EVENT] Нажата кнопка: + Раунд (addRound)", eventId);
-                      await api.addRound(eventId);
-                      const refreshed = await api.getEventDetails(eventId);
-                      setData(refreshed);
-                      setInfo("Раунд добавлен.");
-                      const rounds = refreshed.rounds ?? [];
-                      const newRound = rounds[rounds.length - 1];
-                      if (newRound?.id) {
-                        setExpandedRoundId(newRound.id);
-                        setTimeout(() => activeRoundRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" }), 150);
-                      }
-                    } catch (err: any) {
-                      setActionError(err?.message ?? "Ошибка добавления раунда");
+                    if (e.format === "MEXICANO") {
+                      void doAddRounds(1);
+                      return;
                     }
+                    const seriesLen = e.roundsPlanned ?? 0;
+                    const choice = await confirm({
+                      title: "Добавить раунды",
+                      choices: [
+                        { id: "one", label: "Один раунд", description: "Планировщик продолжит ротацию с учётом сыгранного" },
+                        ...(seriesLen > 1
+                          ? [{ id: "series", label: `Серия из ${seriesLen} раундов`, description: "Ещё один полный цикл, как при старте игры" }]
+                          : []),
+                      ],
+                    });
+                    if (choice === "one") void doAddRounds(1);
+                    else if (choice === "series") void doAddRounds(seriesLen);
                   }}
                 >
-                  {e.format === "MEXICANO" ? "+ Раунд по таблице" : "+ Раунд"}
+                  {addingRounds
+                    ? "Добавляем…"
+                    : e.format === "MEXICANO" ? "+ Раунд по таблице" : "+ Раунд"}
                 </Button>
                 {e.format === "AMERICANA" && (
                 <Button
@@ -2370,6 +2401,7 @@ export function V0EventPage(props: { me: any; meLoaded?: boolean }) {
                 {finishing ? "Завершаем…" : "Завершить игру"}
               </Button>
             </div>
+
           </DialogContent>
         </Dialog>
 
