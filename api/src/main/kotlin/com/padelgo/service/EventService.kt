@@ -265,8 +265,13 @@ class EventService(
     }
 
     @Transactional
-    fun addRound(eventId: UUID, userId: UUID) {
-        log.info("[ACTION] addRound called | eventId={} userId={}", eventId, userId)
+    /**
+     * @param count сколько раундов добавить за раз: 1 — кнопка «+Раунд», N — «серия»
+     *   (повторить полный цикл, как при старте). Только для AMERICANA; Mexicano всегда 1
+     *   (его раунды строятся по текущей таблице, серия не имеет смысла).
+     */
+    fun addRound(eventId: UUID, userId: UUID, count: Int = 1) {
+        log.info("[ACTION] addRound called | eventId={} userId={} count={}", eventId, userId, count)
         val event = getEvent(eventId)
         requireAuthor(event, userId)
         if (event.status != EventStatus.IN_PROGRESS) throw ApiException(HttpStatus.CONFLICT, "Event is not in progress")
@@ -280,6 +285,7 @@ class EventService(
         if (event.format == com.padelgo.domain.EventFormat.FIXED_PAIRS) {
             throw ApiException(HttpStatus.CONFLICT, "Для фиксированных пар расписание round-robin формируется целиком на старте")
         }
+        val roundsToAdd = count.coerceIn(1, 30)
 
         val regs = regRepo.findAllByEventIdAndStatus(eventId)
         val playerIds = regs.mapNotNull { it.playerId }
@@ -289,34 +295,39 @@ class EventService(
         }
         val players = playerRepo.findAllById(playerIds).associateBy { it.id!! }
         val ratings = players.mapValues { it.value.rating }
-        val maxDiff = if (event.pairingMode == com.padelgo.domain.PairingMode.BALANCED) BALANCED_TEAM_DIFF_CAP else null
         val existingMatches = matchRepo.findAllByEventId(eventId)
         val seed = plannerSeed(eventId, playerIds, salt = existingMatches.size)
-        log.info("[PAIRING] addRound | eventId={} mode={} players={} seed={}", eventId, event.pairingMode, playerIds.size, seed)
+        log.info("[PAIRING] addRound | eventId={} mode={} players={} count={} seed={}", eventId, event.pairingMode, playerIds.size, roundsToAdd, seed)
         val planner = PairingPlanner(
             ratingByPlayer = ratings,
             courtsCount = event.courtsCount,
             pairingMode = event.pairingMode,
-            maxTeamDiff = maxDiff,
+            // Cap передаём в ОБОИХ режимах: в ROUND_ROBIN он «мягкий» — balanceViolations
+            // стоит ПОСЛЕ ротации и лишь отсеивает дико перекошенные матчи среди
+            // ротационно-равных вариантов.
+            maxTeamDiff = BALANCED_TEAM_DIFF_CAP,
             random = kotlin.random.Random(seed)
         )
         planner.seedFromMatches(existingMatches)
-        val planned = planner.planRounds(playerIds, 1).firstOrNull().orEmpty()
+        val plannedRounds = planner.planRounds(playerIds, roundsToAdd)
 
-        val lastRound = roundRepo.findAllByEventIdOrderByRoundNumberAsc(eventId).maxByOrNull { it.roundNumber }
-        val round = roundRepo.save(Round(eventId = eventId, roundNumber = (lastRound?.roundNumber ?: 0) + 1))
-        planned.forEach { pm ->
-            matchRepo.save(
-                Match(
-                    roundId = round.id!!,
-                    courtNumber = pm.courtNumber,
-                    teamAPlayer1Id = pm.teamA.first,
-                    teamAPlayer2Id = pm.teamA.second,
-                    teamBPlayer1Id = pm.teamB.first,
-                    teamBPlayer2Id = pm.teamB.second,
-                    status = MatchStatus.SCHEDULED
+        val lastRoundNumber = roundRepo.findAllByEventIdOrderByRoundNumberAsc(eventId)
+            .maxByOrNull { it.roundNumber }?.roundNumber ?: 0
+        plannedRounds.forEachIndexed { idx, planned ->
+            val round = roundRepo.save(Round(eventId = eventId, roundNumber = lastRoundNumber + 1 + idx))
+            planned.forEach { pm ->
+                matchRepo.save(
+                    Match(
+                        roundId = round.id!!,
+                        courtNumber = pm.courtNumber,
+                        teamAPlayer1Id = pm.teamA.first,
+                        teamAPlayer2Id = pm.teamA.second,
+                        teamBPlayer1Id = pm.teamB.first,
+                        teamBPlayer2Id = pm.teamB.second,
+                        status = MatchStatus.SCHEDULED
+                    )
                 )
-            )
+            }
         }
     }
 
@@ -588,7 +599,10 @@ class EventService(
             eventRepo.save(event)
         }
         val ratings = players.values.map { it.rating }
-        val maxDiff = if (event.pairingMode == com.padelgo.domain.PairingMode.BALANCED) BALANCED_TEAM_DIFF_CAP else null
+        // Cap передаём в ОБОИХ режимах: в BALANCED он определяет «хорошие» раунды,
+        // в ROUND_ROBIN — «мягкий» (balanceViolations после ротации): среди
+        // ротационно-равных вариантов планировщик избегает дико перекошенных матчей.
+        val maxDiff = BALANCED_TEAM_DIFF_CAP
         val ratingMap = players.mapValues { it.value.rating }
         val seed = plannerSeed(event.id!!, playerIds)
         log.info("[PAIRING] planSchedule | eventId={} mode={} players={} seed={}", event.id, event.pairingMode, playerIds.size, seed)
@@ -603,7 +617,7 @@ class EventService(
         // В BALANCED берём только «хорошие» раунды (без повторов партнёрств и в пределах cap).
         // Юзер уже подтвердил это в модалке перед закрытием регистрации — если их меньше чем
         // requestedRounds, это и есть строгая семантика варианта B.
-        val plannedRounds = if (event.pairingMode == com.padelgo.domain.PairingMode.BALANCED && maxDiff != null) {
+        val plannedRounds = if (event.pairingMode == com.padelgo.domain.PairingMode.BALANCED) {
             val raw = planner.planRounds(playerIds, event.roundsPlanned)
             val good = takeGoodRounds(raw, ratingMap, maxDiff)
             val actualCount = good.size.coerceAtLeast(1) // хотя бы 1 раунд всё равно делаем

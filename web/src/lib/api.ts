@@ -489,8 +489,9 @@ export const api = {
     }),
   finishEvent: (eventId: string) =>
     request(`/api/events/${eventId}/finish`, { method: "POST" }),
-  addRound: (eventId: string) =>
-    request(`/api/events/${eventId}/rounds/add`, { method: "POST" }),
+  /** count=1 — один раунд; count=N — серия (полный цикл, как при старте). Серия только для AMERICANA. */
+  addRound: (eventId: string, count: number = 1) =>
+    request(`/api/events/${eventId}/rounds/add?count=${count}`, { method: "POST" }),
   addFinalRound: (eventId: string) =>
     request(`/api/events/${eventId}/rounds/final`, { method: "POST" }),
   deleteRound: (eventId: string, roundId: string) =>
