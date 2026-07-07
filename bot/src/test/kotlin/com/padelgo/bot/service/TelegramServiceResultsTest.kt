@@ -155,6 +155,34 @@ class TelegramServiceResultsTest {
     }
 
     @Test
+    fun `postEventFinished сохраняет RESULTS-пост с messageId, вернувшимся из sendMessage`() {
+        // Первичная финализация: RESULTS-поста ещё нет, целевой чат берётся по ANNOUNCE-посту.
+        val announce = EventTelegramPost(
+            id = UUID.randomUUID(),
+            eventId = eventId,
+            telegramChatId = chatInternalId,
+            messageId = 50L,
+            postKind = "ANNOUNCE"
+        )
+        whenever(postRepo.findAllByEventIdAndPostKind(eventId, "ANNOUNCE")).doReturn(listOf(announce))
+        whenever(chatRepo.findAllByUserIdOrderByLinkedAtAsc(ownerUserId)).doReturn(listOf(chat()))
+        whenever(client.sendMessage(eq(tgChatId), anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull()))
+            .doReturn(TgSentMessage(messageId = 777L, chat = TgChat(id = tgChatId, type = "group")))
+
+        val sent = service.postEventFinished(event(), ownerUserId, top, leaderboard, 5)
+
+        assertEquals(1, sent)
+        // messageId из ответа Telegram сохраняется в event_telegram_post c postKind=RESULTS —
+        // именно по нему updateEventResults потом делает editMessageText при правке счёта.
+        val captor = argumentCaptor<EventTelegramPost>()
+        verify(postRepo).save(captor.capture())
+        assertEquals(777L, captor.firstValue.messageId)
+        assertEquals("RESULTS", captor.firstValue.postKind)
+        assertEquals(eventId, captor.firstValue.eventId)
+        assertEquals(chatInternalId, captor.firstValue.telegramChatId)
+    }
+
+    @Test
     fun `sends new RESULTS post when none exists`() {
         whenever(postRepo.findAllByEventIdAndPostKind(eventId, "RESULTS")).doReturn(emptyList())
         // targetChatsForEvent ищет ANNOUNCE-посты, затем маппит на чаты.

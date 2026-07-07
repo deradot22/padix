@@ -10,15 +10,22 @@ import com.padelgo.domain.Player
 import com.padelgo.domain.RatingChange
 import com.padelgo.domain.Round
 import com.padelgo.domain.ScoringMode
+import com.padelgo.api.ApiException
+import com.padelgo.api.PointsScoreRequest
+import com.padelgo.api.SubmitScoreRequest
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
+import org.junit.jupiter.api.assertThrows
 import org.mockito.kotlin.any
 import org.mockito.kotlin.doReturn
 import org.mockito.kotlin.eq
 import org.mockito.kotlin.mock
+import org.mockito.kotlin.never
+import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
+import org.springframework.http.HttpStatus
 import java.util.Optional
 import java.util.UUID
 
@@ -299,5 +306,71 @@ class FinishEventRatingTest {
         val d2 = savedChanges.first { it.playerId == a2 }.delta
         assertEquals(d1, d2, "оба партнёра получают одинаково")
         assertTrue(d1 >= 2, "победа фаворита при разрыве 400 всё ещё даёт очки: $d1")
+    }
+
+    // ── Bug 2 (правка счёта не апдейтит сообщение в Telegram) ─────────────────
+    // Инвариант: правка финального счёта уже завершённой игры организатором обязана
+    // дойти до бота как notifyEventResultsUpdated → бот делает editMessageText по
+    // сохранённому messageId (см. bot TelegramService.updateEventResults). А первичная
+    // финализация обязана вызвать notifyEventFinished — именно на этот вызов бот
+    // публикует RESULTS-пост и сохраняет его messageId (postEventFinished → EventTelegramPost).
+    @Test
+    fun `финализация шлёт notifyEventFinished, а правка счёта после FINISHED — notifyEventResultsUpdated`() {
+        val players = mapOf(
+            a1 to Player(id = a1, name = "a1", rating = 1400, gamesPlayed = 50),
+            a2 to Player(id = a2, name = "a2", rating = 1400, gamesPlayed = 50),
+            b1 to Player(id = b1, name = "b1", rating = 1400, gamesPlayed = 50),
+            b2 to Player(id = b2, name = "b2", rating = 1400, gamesPlayed = 50)
+        )
+        val ev = wire(players, listOf(match(match1Id, round1Id)), mapOf(match1Id to (16 to 8)))
+        // submitScore резолвит матч и раунд через findById — в общем wire их нет.
+        whenever(matchRepo.findById(match1Id)).doReturn(Optional.of(match(match1Id, round1Id)))
+        whenever(roundRepo.findById(round1Id))
+            .doReturn(Optional.of(Round(id = round1Id, eventId = eventId, roundNumber = 1)))
+
+        // 1) Первичная финализация: IN_PROGRESS → FINISHED, боту уходит FINISHED-нотификация.
+        service.finishEvent(eventId, ownerUserId)
+        assertEquals(EventStatus.FINISHED, ev.status)
+        verify(botClient).notifyEventFinished(any())
+
+        // recompute при правке восстанавливает факторы из сохранённых rating_changes.
+        whenever(ratingChangeRepo.findAllByEventId(eventId)).doReturn(savedChanges.toList())
+
+        // 2) Организатор правит счёт завершённой игры (total = 6×4 = 24) →
+        //    recomputeFinishedEvent → notifyEventResultsUpdated (Telegram editMessageText).
+        service.submitScore(
+            match1Id, ownerUserId,
+            SubmitScoreRequest(points = PointsScoreRequest(teamAPoints = 8, teamBPoints = 16))
+        )
+        verify(botClient).notifyEventResultsUpdated(any())
+    }
+
+    // ── Bug 1 (после финализации счёт «не даёт править») — проверка авторизации ──
+    // Бэкенд НЕ блокирует организатора после FINISHED (см. тест выше), но обязан
+    // блокировать постороннего/участника: править счёт завершённой игры может только автор.
+    @Test
+    fun `не-организатор не может править счёт завершённой игры и бот не дёргается`() {
+        val players = mapOf(
+            a1 to Player(id = a1, name = "a1", rating = 1400, gamesPlayed = 50),
+            a2 to Player(id = a2, name = "a2", rating = 1400, gamesPlayed = 50),
+            b1 to Player(id = b1, name = "b1", rating = 1400, gamesPlayed = 50),
+            b2 to Player(id = b2, name = "b2", rating = 1400, gamesPlayed = 50)
+        )
+        wire(players, listOf(match(match1Id, round1Id)), mapOf(match1Id to (16 to 8)))
+        whenever(matchRepo.findById(match1Id)).doReturn(Optional.of(match(match1Id, round1Id)))
+        whenever(roundRepo.findById(round1Id))
+            .doReturn(Optional.of(Round(id = round1Id, eventId = eventId, roundNumber = 1)))
+
+        service.finishEvent(eventId, ownerUserId) // → FINISHED
+
+        val stranger = UUID.randomUUID()
+        val ex = assertThrows<ApiException> {
+            service.submitScore(
+                match1Id, stranger,
+                SubmitScoreRequest(points = PointsScoreRequest(teamAPoints = 12, teamBPoints = 12))
+            )
+        }
+        assertEquals(HttpStatus.FORBIDDEN, ex.status)
+        verify(botClient, never()).notifyEventResultsUpdated(any())
     }
 }
