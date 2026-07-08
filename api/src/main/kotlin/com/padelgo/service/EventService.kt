@@ -478,7 +478,26 @@ class EventService(
             }
         }
         val leaderboard = standingsLeaderboard(eventId, playerIds, event.scoringMode, lastRound?.roundNumber)
-        buildSnakeRound(eventId, leaderboard, event.courtsCount, (lastRound?.roundNumber ?: 0) + 1)
+
+        // Честная ротация скамейки: если игроков больше вместимости, в раунд идут те, кто
+        // сыграл МЕНЬШЕ раундов (при равенстве — выше по таблице). Иначе аутсайдер таблицы
+        // сидел бы вечно: он не играет → не набирает очков → снова последний → снова сидит.
+        val orderedForRound = SnakePairing.selectPlaying(
+            leaderboard = leaderboard,
+            playedRounds = playedRoundsByPlayer(eventId),
+            capacity = event.courtsCount * 4
+        )
+        buildSnakeRound(eventId, orderedForRound, event.courtsCount, (lastRound?.roundNumber ?: 0) + 1)
+    }
+
+    /** Сколько раундов уже сыграл каждый игрок эвента (по всем его матчам). */
+    private fun playedRoundsByPlayer(eventId: UUID): Map<UUID, Int> {
+        val counts = mutableMapOf<UUID, Int>()
+        matchRepo.findAllByEventId(eventId).forEach { m ->
+            listOfNotNull(m.teamAPlayer1Id, m.teamAPlayer2Id, m.teamBPlayer1Id, m.teamBPlayer2Id)
+                .forEach { counts[it] = (counts[it] ?: 0) + 1 }
+        }
+        return counts
     }
 
     /** Fixed pairs: собирает зарегистрированные пары (по общему team_id) в список (игрок1, игрок2). */

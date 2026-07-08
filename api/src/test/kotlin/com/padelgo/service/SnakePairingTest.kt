@@ -46,4 +46,41 @@ class SnakePairingTest {
         val matches = SnakePairing.round(p, courtsCount = 2)
         assertEquals(1, matches.size)
     }
+
+    // ============== selectPlaying — честная скамейка ==============
+
+    @Test
+    fun `selectPlaying — состав в пределах вместимости не режется`() {
+        val p = ids(4)
+        val played = p.associateWith { 0 }
+        assertEquals(p, SnakePairing.selectPlaying(p, played, capacity = 4))
+    }
+
+    @Test
+    fun `selectPlaying — аутсайдер, сыгравший меньше, попадает в раунд`() {
+        // 5 игроков, 1 корт (вместимость 4). p0..p3 сыграли по 1 раунду, p4 (последний
+        // в таблице) сидел — 0 раундов. Он ДОЛЖЕН войти, вытеснив самого слабого из сыгравших.
+        val p = ids(5)
+        val played = mapOf(p[0] to 1, p[1] to 1, p[2] to 1, p[3] to 1, p[4] to 0)
+        val playing = SnakePairing.selectPlaying(p, played, capacity = 4)
+        assertEquals(4, playing.size)
+        assert(p[4] in playing) { "просидевший раунд аутсайдер обязан сыграть в следующем" }
+        // Возвращается в порядке таблицы (для змейки).
+        assertEquals(playing, p.filter { it in playing.toSet() })
+    }
+
+    @Test
+    fun `selectPlaying — никто не застревает на скамейке за 5 раундов`() {
+        // 5 игроков, 1 корт: за несколько раундов каждый должен сыграть примерно поровну.
+        val p = ids(5)
+        val played = p.associateWith { 0 }.toMutableMap()
+        // Имитируем таблицу: порядок фиксирован (по индексу). Прогоняем 5 раундов.
+        repeat(5) {
+            val playing = SnakePairing.selectPlaying(p, played, capacity = 4)
+            playing.forEach { played[it] = (played[it] ?: 0) + 1 }
+        }
+        val counts = p.map { played[it]!! }
+        val spread = counts.max() - counts.min()
+        assert(spread <= 1) { "за 5 раундов разброс сыгранного должен быть ≤1, а он $spread ($counts)" }
+    }
 }

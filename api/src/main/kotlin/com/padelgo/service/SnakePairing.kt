@@ -16,4 +16,26 @@ object SnakePairing {
             PlannedMatch(courtNumber = idx + 1, teamA = a to d, teamB = b to c)
         }
     }
+
+    /**
+     * Честный выбор играющих в следующем раунде Mexicano при переполнении состава.
+     * В раунд идут игроки, сыгравшие МЕНЬШЕ раундов (при равенстве — выше по таблице);
+     * результат возвращается в порядке таблицы [leaderboard] (для змейки 1+4 vs 2+3).
+     *
+     * Без этого аутсайдер таблицы сидел бы весь турнир: не играет → не набирает очков →
+     * снова последний → снова на скамейке.
+     */
+    fun selectPlaying(
+        leaderboard: List<UUID>,
+        playedRounds: Map<UUID, Int>,
+        capacity: Int
+    ): List<UUID> {
+        if (leaderboard.size <= capacity) return leaderboard
+        val rank = leaderboard.withIndex().associate { (i, id) -> id to i }
+        val selected = leaderboard
+            .sortedWith(compareBy<UUID>({ playedRounds[it] ?: 0 }, { rank[it] ?: Int.MAX_VALUE }))
+            .take(capacity)
+            .toSet()
+        return leaderboard.filter { it in selected }
+    }
 }
