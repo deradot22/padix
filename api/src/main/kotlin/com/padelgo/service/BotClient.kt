@@ -50,8 +50,8 @@ data class EventUpdatedNotify(
 
 data class FinishTopDto(val name: String, val delta: Int)
 
-/** Финальная таблица лидеров по очкам, сыгранным в эвенте. */
-data class LeaderboardEntry(val name: String, val points: Int)
+/** Финальная таблица лидеров: очки + число сыгранных матчей (для нормализации по среднему). */
+data class LeaderboardEntry(val name: String, val points: Int, val played: Int = 0)
 
 data class EventFinishedNotify(
     val eventId: UUID,

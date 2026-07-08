@@ -374,7 +374,15 @@ class EventService(
         buildSnakeRound(eventId, leaderboard, event.courtsCount, (lastRound?.roundNumber ?: 0) + 1)
     }
 
-    private fun computeTournamentStandings(eventId: UUID, playerIds: List<UUID>, scoringMode: ScoringMode, maxRoundNumber: Int? = null): Map<UUID, Int> {
+    private fun computeTournamentStandings(eventId: UUID, playerIds: List<UUID>, scoringMode: ScoringMode, maxRoundNumber: Int? = null): Map<UUID, Int> =
+        computeStandingsDetailed(eventId, playerIds, scoringMode, maxRoundNumber).mapValues { it.value.first }
+
+    /**
+     * Как [computeTournamentStandings], но возвращает пару (очки, сыграно_матчей) на игрока.
+     * «Сыграно» нужно, чтобы согласовать таблицу лидеров с приложением: при разной
+     * наигранности места считаются по среднему счёту за матч (нормализация), а не по сумме.
+     */
+    private fun computeStandingsDetailed(eventId: UUID, playerIds: List<UUID>, scoringMode: ScoringMode, maxRoundNumber: Int? = null): Map<UUID, Pair<Int, Int>> {
         val matches = matchRepo.findAllByEventId(eventId)
         val rounds = if (maxRoundNumber != null) {
             roundRepo.findAllByEventIdOrderByRoundNumberAsc(eventId).filter { it.roundNumber <= maxRoundNumber }.map { it.id!! }.toSet()
@@ -382,7 +390,8 @@ class EventService(
         val matchesToUse = if (rounds != null) matches.filter { it.roundId in rounds } else matches
         val scoresByMatch = matchesToUse.associate { m -> m.id!! to scoreRepo.findAllByMatchIdOrderBySetNumberAsc(m.id!!) }
         val pointsByPlayer = mutableMapOf<UUID, Int>()
-        playerIds.forEach { pointsByPlayer[it] = 0 }
+        val playedByPlayer = mutableMapOf<UUID, Int>()
+        playerIds.forEach { pointsByPlayer[it] = 0; playedByPlayer[it] = 0 }
 
         matchesToUse.forEach { m ->
             val scores = scoresByMatch[m.id!!].orEmpty()
@@ -399,14 +408,20 @@ class EventService(
                 scores.sumOf { it.teamAGames } to scores.sumOf { it.teamBGames }
             }
             listOf(m.teamAPlayer1Id, m.teamAPlayer2Id).forEach { pid ->
-                if (pid != null) pointsByPlayer[pid] = (pointsByPlayer[pid] ?: 0) + teamAPoints
+                if (pid != null) {
+                    pointsByPlayer[pid] = (pointsByPlayer[pid] ?: 0) + teamAPoints
+                    playedByPlayer[pid] = (playedByPlayer[pid] ?: 0) + 1
+                }
             }
             listOf(m.teamBPlayer1Id, m.teamBPlayer2Id).forEach { pid ->
-                if (pid != null) pointsByPlayer[pid] = (pointsByPlayer[pid] ?: 0) + teamBPoints
+                if (pid != null) {
+                    pointsByPlayer[pid] = (pointsByPlayer[pid] ?: 0) + teamBPoints
+                    playedByPlayer[pid] = (playedByPlayer[pid] ?: 0) + 1
+                }
             }
         }
 
-        return pointsByPlayer
+        return pointsByPlayer.mapValues { (pid, pts) -> pts to (playedByPlayer[pid] ?: 0) }
     }
 
     /** Игроки, отсортированные по текущей таблице очков (лучший→худший); тай-брейк рейтинг, имя. */
@@ -1686,15 +1701,24 @@ class EventService(
                 playersById[pid]?.let { FinishTopDto(name = it.name, delta = delta) }
             }
 
-        // Полная таблица лидеров по очкам (как в UI Modal «Таблица лидеров»).
+        // Таблица лидеров как в приложении (event-leaderboard.tsx): при разной наигранности
+        // места по среднему счёту за матч — нормализуем очки на число сыгранных матчей
+        // (points × avgMatches/played), сырая сумма едет рядом. Игроки без сыгранных матчей
+        // в таблицу не попадают (как во фронте).
         val playerIds = regRepo.findAllByEventIdAndStatus(eventId).mapNotNull { it.playerId }
-        val standings = computeTournamentStandings(eventId, playerIds, event.scoringMode)
-        val playersForBoard = playerRepo.findAllById(standings.keys).associateBy { it.id!! }
-        val leaderboard = standings.entries
-            .sortedWith(compareByDescending<Map.Entry<UUID, Int>> { it.value }
-                .thenBy { playersForBoard[it.key]?.name?.lowercase() ?: "" })
-            .mapNotNull { (pid, pts) ->
-                playersForBoard[pid]?.let { LeaderboardEntry(name = it.name, points = pts) }
+        val detailed = computeStandingsDetailed(eventId, playerIds, event.scoringMode)
+        val playersForBoard = playerRepo.findAllById(detailed.keys).associateBy { it.id!! }
+        val board = detailed.entries.filter { it.value.second > 0 && playersForBoard.containsKey(it.key) }
+        val avgMatches = if (board.isNotEmpty()) board.sumOf { it.value.second }.toDouble() / board.size else 0.0
+        fun norm(pts: Int, played: Int) = if (played > 0) pts * (avgMatches / played) else pts.toDouble()
+        val leaderboard = board
+            .sortedWith(
+                compareByDescending<Map.Entry<UUID, Pair<Int, Int>>> { norm(it.value.first, it.value.second) }
+                    .thenByDescending { it.value.first }
+                    .thenBy { playersForBoard[it.key]?.name?.lowercase() ?: "" }
+            )
+            .mapNotNull { (pid, pp) ->
+                playersForBoard[pid]?.let { LeaderboardEntry(name = it.name, points = pp.first, played = pp.second) }
             }
         return top to leaderboard
     }

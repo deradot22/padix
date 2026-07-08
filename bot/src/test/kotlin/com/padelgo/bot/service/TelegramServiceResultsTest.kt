@@ -15,6 +15,7 @@ import com.padelgo.bot.repo.TelegramChatRepository
 import com.padelgo.bot.repo.TelegramLinkTokenRepository
 import com.padelgo.bot.repo.TelegramUserSettingsRepository
 import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.mockito.kotlin.anyOrNull
@@ -152,6 +153,34 @@ class TelegramServiceResultsTest {
         verify(postRepo).save(captor.capture())
         assertEquals(200L, captor.firstValue.messageId)
         assertEquals("RESULTS", captor.firstValue.postKind)
+    }
+
+    @Test
+    fun `таблица лидеров — по среднему счёту за матч при разной наигранности`() {
+        val post = EventTelegramPost(
+            id = UUID.randomUUID(),
+            eventId = eventId,
+            telegramChatId = chatInternalId,
+            messageId = 100L,
+            postKind = "RESULTS"
+        )
+        whenever(postRepo.findAllByEventIdAndPostKind(eventId, "RESULTS")).doReturn(listOf(post))
+        whenever(chatRepo.findAllByUserIdOrderByLinkedAtAsc(ownerUserId)).doReturn(listOf(chat()))
+        // Порядок задаёт api (по нормализованному среднему): Алина 92/7=13.1 выше Sergio 99/8=12.4.
+        val lb = listOf(
+            FinishLeaderboardEntry("Алина", 92, 7),
+            FinishLeaderboardEntry("Sergio", 99, 8)
+        )
+
+        service.updateEventResults(event(), ownerUserId, top, lb, 9)
+
+        val textCap = argumentCaptor<String>()
+        verify(client).editMessageText(eq(tgChatId), eq(100L), textCap.capture(), anyOrNull(), anyOrNull(), anyOrNull())
+        val text = textCap.firstValue
+        assertTrue(text.contains("13.1</b>/матч · 92"), "Алина: 13.1/матч + сумма 92; текст: $text")
+        assertTrue(text.contains("12.4</b>/матч · 99"), "Sergio: 12.4/матч + сумма 99")
+        assertTrue(text.contains("среднему счёту за матч"), "приписка про разную наигранность")
+        assertTrue(text.indexOf("Алина") < text.indexOf("Sergio"), "Алина выше Sergio по среднему")
     }
 
     @Test

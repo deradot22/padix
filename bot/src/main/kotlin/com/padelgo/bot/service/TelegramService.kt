@@ -81,7 +81,8 @@ data class FinishTopPlayer(
 
 data class FinishLeaderboardEntry(
     val name: String,
-    val points: Int
+    val points: Int,
+    val played: Int = 0
 )
 
 data class TelegramCancellationPlan(
@@ -1344,12 +1345,23 @@ class TelegramService(
         // Если leaderboard пуст (старая api-версия / нет POINTS-режима) — fallback на топ-3
         // по приросту рейтинга, чтобы сохранить читаемое сообщение.
         if (leaderboard.isNotEmpty()) {
+            // Как в приложении: при разной наигранности места по среднему счёту за матч
+            // (points/played), сырая сумма — рядом. При равной наигранности порядок = по сумме.
+            val unequal = leaderboard.map { it.played }.filter { it > 0 }.distinct().size > 1
             sb.append("\n<b>Таблица лидеров</b>\n")
+            if (unequal) {
+                sb.append("<i>места по среднему счёту за матч (разное число игр)</i>\n")
+            }
             val medals = listOf("🥇", "🥈", "🥉")
             leaderboard.forEachIndexed { idx, p ->
                 val prefix = medals.getOrElse(idx) { "${idx + 1}." }
-                sb.append(prefix).append(" ").append(escapeHtml(p.name))
-                    .append(" — <b>").append(p.points).append("</b>\n")
+                sb.append(prefix).append(" ").append(escapeHtml(p.name)).append(" — ")
+                if (p.played > 0) {
+                    val perMatch = String.format(java.util.Locale.US, "%.1f", p.points.toDouble() / p.played)
+                    sb.append("<b>").append(perMatch).append("</b>/матч · ").append(p.points).append("\n")
+                } else {
+                    sb.append("<b>").append(p.points).append("</b>\n")
+                }
             }
         } else if (top.isNotEmpty()) {
             sb.append("\nТоп по росту рейтинга:\n")

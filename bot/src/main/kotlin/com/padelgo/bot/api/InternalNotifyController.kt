@@ -89,7 +89,7 @@ data class CancellationPlanResponse(
 }
 
 data class FinishTopPlayerDto(val name: String, val delta: Int)
-data class LeaderboardEntryDto(val name: String, val points: Int)
+data class LeaderboardEntryDto(val name: String, val points: Int, val played: Int = 0)
 
 data class EventFinishedRequest(
     val eventId: UUID,
@@ -189,7 +189,7 @@ class InternalNotifyController(
     fun eventFinished(@RequestBody req: EventFinishedRequest): NotifyResult {
         val ev = req.toEvent()
         val top = req.top.map { FinishTopPlayer(it.name, it.delta) }
-        val leaderboard = req.leaderboard.map { FinishLeaderboardEntry(it.name, it.points) }
+        val leaderboard = req.leaderboard.map { FinishLeaderboardEntry(it.name, it.points, it.played) }
         val sent = service.postEventFinished(ev, req.ownerUserId, top, leaderboard, req.matchCount)
         return NotifyResult(sent)
     }
@@ -198,7 +198,7 @@ class InternalNotifyController(
     fun eventResultsUpdated(@RequestBody req: EventResultsUpdatedRequest): NotifyResult {
         val ev = req.toEvent()
         val top = req.top.map { FinishTopPlayer(it.name, it.delta) }
-        val leaderboard = req.leaderboard.map { FinishLeaderboardEntry(it.name, it.points) }
+        val leaderboard = req.leaderboard.map { FinishLeaderboardEntry(it.name, it.points, it.played) }
         val sent = service.updateEventResults(ev, req.ownerUserId, top, leaderboard, req.matchCount)
         return NotifyResult(sent)
     }
