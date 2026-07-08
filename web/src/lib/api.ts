@@ -482,6 +482,12 @@ export const api = {
       method: "POST",
       body: JSON.stringify({ points }),
     }),
+  /** Счёт по сетам (scoringMode=SETS): массив геймов по сетам. */
+  submitSetsScore: (matchId: string, sets: { teamAGames: number; teamBGames: number }[]) =>
+    request(`/api/events/matches/${matchId}/score`, {
+      method: "POST",
+      body: JSON.stringify({ sets }),
+    }),
   saveDraftScore: (matchId: string, points: { teamAPoints: number; teamBPoints: number }) =>
     request(`/api/events/matches/${matchId}/draft-score`, {
       method: "POST",
@@ -528,6 +534,11 @@ export const api = {
     roundsPlanned?: number;
     scoringMode: "POINTS" | "SETS";
     pointsPerPlayerPerMatch?: number;
+    /** Только для SETS: сколько сетов в матче (1 или «до 2 побед из 3» = 3). */
+    setsPerMatch?: number;
+    /** Только для SETS: геймов в сете (по умолчанию 6). */
+    gamesPerSet?: number;
+    tiebreakEnabled?: boolean;
     telegramChatIds?: string[];
     visibility?: EventVisibility;
     minRating?: number | null;

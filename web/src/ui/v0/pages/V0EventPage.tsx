@@ -132,6 +132,8 @@ export function V0EventPage(props: { me: any; meLoaded?: boolean }) {
   const [activeTeam, setActiveTeam] = useState<"A" | "B">("A");
   const [scoreByMatch, setScoreByMatch] = useState<Record<string, { a: number; b: number }>>({});
   const [autoFilledByMatch, setAutoFilledByMatch] = useState<Record<string, boolean>>({});
+  // Черновик счёта по сетам (scoringMode=SETS): matchId → массив геймов по сетам.
+  const [setsByMatch, setSetsByMatch] = useState<Record<string, { a: number; b: number }[]>>({});
   const [scoreSavingId, setScoreSavingId] = useState<string | null>(null);
   const [scoreError, setScoreError] = useState<string | null>(null);
   const [scorePadOpen, setScorePadOpen] = useState(false);
@@ -563,6 +565,13 @@ export function V0EventPage(props: { me: any; meLoaded?: boolean }) {
           const b = points.teamBPoints ?? 0;
           next[m.id] = { a, b };
           lastAutoSavedRef.current[m.id] = `${m.id}:${a},${b}`;
+          return;
+        }
+        const sets = m.score?.sets;
+        if (sets && sets.length) {
+          // Для SETS в кнопках команд показываем геймы ПЕРВОГО сета (для 1-сетовых игр это
+          // и есть итог, напр. 6:4). Полный счёт по сетам редактируется в паде.
+          next[m.id] = { a: sets[0].teamAGames ?? 0, b: sets[0].teamBGames ?? 0 };
           return;
         }
         // API ещё не имеет счёта — НЕ перезаписываем то что юзер мог уже набрать локально.
@@ -1179,37 +1188,6 @@ export function V0EventPage(props: { me: any; meLoaded?: boolean }) {
                         value={editCourts}
                         onChange={(ev) => setEditCourts(ev.target.value === "" ? "" : Number(ev.target.value))}
                       />
-                    </div>
-                  </div>
-                  <div>
-                    <label className="block mb-1 text-muted-foreground">Режим</label>
-                    <div className="grid grid-cols-2 gap-2">
-                      {([
-                        { value: "ROUND_ROBIN" as const, icon: Repeat, title: "Каждый с каждым", desc: "Все партнёры по очереди" },
-                        { value: "BALANCED" as const, icon: Scale, title: "Равный бой", desc: "Подбор по рейтингу" },
-                      ]).map((opt) => {
-                        const Icon = opt.icon;
-                        const active = editPairing === opt.value;
-                        return (
-                          <button
-                            key={opt.value}
-                            type="button"
-                            onClick={() => setEditPairing(opt.value)}
-                            className={cn(
-                              "flex flex-col items-start gap-1 rounded-md border-2 p-3 text-left transition-colors",
-                              active
-                                ? "border-primary bg-primary/10"
-                                : "border-border bg-transparent hover:bg-secondary/30",
-                            )}
-                          >
-                            <div className="flex items-center gap-1.5">
-                              <Icon className="h-4 w-4" />
-                              <span className="text-sm font-medium">{opt.title}</span>
-                            </div>
-                            <span className="text-[11px] text-muted-foreground leading-snug">{opt.desc}</span>
-                          </button>
-                        );
-                      })}
                     </div>
                   </div>
                 </>
@@ -2171,7 +2149,69 @@ export function V0EventPage(props: { me: any; meLoaded?: boolean }) {
                                     {renderTeamScore(m.teamB, scores.b, "right")}
                                   </button>
                                 </div>
-                                {showPadHere && (
+                                {showPadHere && e.scoringMode === "SETS" && (() => {
+                                  const setsCount = e.setsPerMatch ?? 1;
+                                  const maxGames = (e.gamesPerSet ?? 6) + 1; // +1 под тай-брейк (напр. 7)
+                                  const cur = setsByMatch[m.id] ?? Array.from({ length: setsCount }, () => ({ a: 0, b: 0 }));
+                                  const setGame = (i: number, team: "a" | "b", val: number) => {
+                                    const v = Math.max(0, Math.min(maxGames, val));
+                                    setSetsByMatch((prev) => {
+                                      const arr = (prev[m.id] ?? Array.from({ length: setsCount }, () => ({ a: 0, b: 0 }))).map((x) => ({ ...x }));
+                                      arr[i] = { ...arr[i], [team]: v };
+                                      return { ...prev, [m.id]: arr };
+                                    });
+                                  };
+                                  const Stepper = ({ i, team }: { i: number; team: "a" | "b" }) => {
+                                    const val = cur[i]?.[team] ?? 0;
+                                    return (
+                                      <div className="flex items-center gap-2">
+                                        <button type="button" className="h-9 w-9 rounded-lg border border-border bg-secondary/20 text-lg font-semibold hover:bg-secondary" onClick={() => setGame(i, team, val - 1)}>−</button>
+                                        <span className="w-6 text-center text-lg font-bold tabular-nums">{val}</span>
+                                        <button type="button" className="h-9 w-9 rounded-lg border border-border bg-secondary/20 text-lg font-semibold hover:bg-secondary" onClick={() => setGame(i, team, val + 1)}>+</button>
+                                      </div>
+                                    );
+                                  };
+                                  return (
+                                    <div data-pad="1" className="mt-3 pt-3 border-t border-border/40 space-y-3">
+                                      {Array.from({ length: setsCount }).map((_, i) => (
+                                        <div key={i} className="flex items-center justify-center gap-3">
+                                          {setsCount > 1 && <span className="w-12 text-xs text-muted-foreground">Сет {i + 1}</span>}
+                                          <Stepper i={i} team="a" />
+                                          <span className="text-muted-foreground">:</span>
+                                          <Stepper i={i} team="b" />
+                                        </div>
+                                      ))}
+                                      <div className="flex items-center justify-between gap-3">
+                                        <span className="text-xs text-muted-foreground">
+                                          {scoreError && active ? <span className="text-destructive">{scoreError}</span>
+                                            : scoreSavingId === m.id ? "Сохраняем…" : "Геймы слева : справа"}
+                                        </span>
+                                        <Button
+                                          size="sm"
+                                          disabled={scoreSavingId === m.id}
+                                          onClick={() => {
+                                            if (!eventId) return;
+                                            const sets = (setsByMatch[m.id] ?? cur).map((s) => ({ teamAGames: s.a, teamBGames: s.b }));
+                                            setScoreSavingId(m.id);
+                                            setScoreError(null);
+                                            api.submitSetsScore(m.id, sets)
+                                              .then(async () => {
+                                                setFinishedMatchIds((prev) => new Set([...prev, m.id]));
+                                                setInfo("Счёт сохранён");
+                                                setScorePadOpen(false);
+                                                setData(await api.getEventDetails(eventId));
+                                              })
+                                              .catch((err: any) => setScoreError(err?.message ?? "Не удалось сохранить счёт"))
+                                              .finally(() => setScoreSavingId(null));
+                                          }}
+                                        >
+                                          Сохранить счёт
+                                        </Button>
+                                      </div>
+                                    </div>
+                                  );
+                                })()}
+                                {showPadHere && e.scoringMode !== "SETS" && (
                                   <div data-pad="1" className="mt-3 pt-3 border-t border-border/40">
                                       <div className="grid grid-cols-6 gap-2">
                                         {[0, ...Array.from({ length: (e.pointsPerPlayerPerMatch ?? 6) * 4 }, (_, i) => i + 1)].map((n) => (

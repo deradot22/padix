@@ -47,6 +47,10 @@ export function V0CreateEventPage(props: {
   const [autoRounds, setAutoRounds] = useState(true);
   const [rounds, setRounds] = useState(6);
   const [pointsPerPlayer, setPointsPerPlayer] = useState(6);
+  // Система счёта: POINTS (американка, очки) или SETS (сеты/геймы как в теннисе).
+  const [scoringMode, setScoringMode] = useState<"POINTS" | "SETS">("POINTS");
+  const [gamesPerSet, setGamesPerSet] = useState(6);
+  const [setsPerMatch, setSetsPerMatch] = useState(1);
   const [visibility, setVisibility] = useState<EventVisibility>("PUBLIC");
   const [ratingLimitEnabled, setRatingLimitEnabled] = useState(false);
   const [minRatingStr, setMinRatingStr] = useState("");
@@ -55,7 +59,6 @@ export function V0CreateEventPage(props: {
   const [initialLoading, setInitialLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const [gameMode, setGameMode] = useState<"round_robin" | "balanced">("round_robin");
   const [roundsMode, setRoundsMode] = useState<"auto" | "manual">("auto");
   const [step] = useState(1);
   const [telegramChats, setTelegramChats] = useState<TelegramChat[]>([]);
@@ -98,7 +101,6 @@ export function V0CreateEventPage(props: {
           setSeriesPinAnnouncement(series.pinAnnouncement ?? null);
           // Галки чатов = ровно сохранённое (пусто → ничего не выбрано).
           setSelectedTgChatIds(new Set(series.targetChatIds ?? []));
-          setGameMode(series.pairingMode === "BALANCED" ? "balanced" : "round_robin");
         } else {
           // Создание новой игры/серии: по умолчанию выбираем все доступные группы.
           setSelectedTgChatIds(new Set(groupOnly.map((c) => c.id)));
@@ -118,9 +120,6 @@ export function V0CreateEventPage(props: {
     else if (!props.me.surveyCompleted) nav("/survey");
   }, [props.me, props.meLoaded, nav]);
 
-  useEffect(() => {
-    setPairingMode(gameMode === "balanced" ? "BALANCED" : "ROUND_ROBIN");
-  }, [gameMode]);
 
   useEffect(() => {
     setAutoRounds(roundsMode === "auto");
@@ -262,8 +261,11 @@ export function V0CreateEventPage(props: {
         courtNames: courtNames.map((name, idx) => (name?.trim() ? name.trim() : `Корт ${idx + 1}`)),
         autoRounds,
         roundsPlanned: autoRounds ? undefined : rounds,
-        scoringMode: "POINTS",
+        scoringMode,
         pointsPerPlayerPerMatch: pointsPerPlayer,
+        ...(scoringMode === "SETS"
+          ? { setsPerMatch, gamesPerSet, tiebreakEnabled: true }
+          : {}),
         visibility,
         minRating,
         maxRating,
@@ -652,10 +654,11 @@ export function V0CreateEventPage(props: {
                     </SelectContent>
                   </Select>
                 </div>
+                {scoringMode === "POINTS" ? (
                 <div className="space-y-2">
                   <Label htmlFor="serves" className="font-medium flex items-center gap-2">
                     <Zap className="h-4 w-4 text-primary" />
-                    Подач на игрока (POINTS)
+                    Подач на игрока
                   </Label>
                   <Select value={pointsPerPlayer.toString()} onValueChange={(value) => setPointsPerPlayer(Number(value))}>
                     <SelectTrigger id="serves" className="bg-secondary border-border h-10 text-sm font-semibold px-4 w-full">
@@ -673,6 +676,24 @@ export function V0CreateEventPage(props: {
                     </SelectContent>
                   </Select>
                 </div>
+                ) : (
+                <div className="space-y-2">
+                  <Label htmlFor="gamesPerSet" className="font-medium flex items-center gap-2">
+                    <Zap className="h-4 w-4 text-primary" />
+                    Геймов в сете
+                  </Label>
+                  <Select value={gamesPerSet.toString()} onValueChange={(value) => setGamesPerSet(Number(value))}>
+                    <SelectTrigger id="gamesPerSet" className="bg-secondary border-border h-10 text-sm font-semibold px-4 w-full">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent className="text-sm max-h-72 overflow-y-auto">
+                      {[4, 6, 8, 9].map((v) => (
+                        <SelectItem key={v} value={v.toString()}>{v}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                )}
                 <div className="space-y-2 pt-2 md:col-span-2">
                   <div className="text-xs text-muted-foreground">Названия кортов</div>
                   <div className="grid gap-2 md:grid-cols-4">
@@ -746,29 +767,28 @@ export function V0CreateEventPage(props: {
                 </div>
               )}
 
-              {format === "AMERICANA" && (
               <div className="space-y-3">
                 <Label className="font-medium flex items-center gap-2">
-                  <Users2 className="h-4 w-4 text-primary" />
-                  Режим американки
+                  <Zap className="h-4 w-4 text-primary" />
+                  Система счёта
                 </Label>
                 <div className="grid gap-3 md:grid-cols-2">
                   {[
-                    { id: "round_robin" as const, title: "Каждый с каждым", desc: "Все играют со всеми в случайном порядке" },
-                    { id: "balanced" as const, title: "Равный бой", desc: "Система подбирает пары с близким рейтингом" },
+                    { id: "POINTS" as const, title: "Очки (американка)", desc: "Фиксированное число очков на матч, счёт вида 16:8" },
+                    { id: "SETS" as const, title: "Сеты (как в теннисе)", desc: "Счёт по геймам и сетам, вида 6:4" },
                   ].map((mode) => (
                     <button
                       key={mode.id}
                       type="button"
-                      onClick={() => setGameMode(mode.id)}
+                      onClick={() => setScoringMode(mode.id)}
                       className={cn(
                         "relative rounded-lg border-2 p-4 text-left transition-all",
-                        gameMode === mode.id ? "border-primary bg-primary/5" : "border-border bg-secondary/50 hover:border-border/80",
+                        scoringMode === mode.id ? "border-primary bg-primary/5" : "border-border bg-secondary/50 hover:border-border/80",
                       )}
                     >
                       <div className="font-semibold">{mode.title}</div>
                       <div className="text-sm text-muted-foreground mt-1">{mode.desc}</div>
-                      {gameMode === mode.id ? (
+                      {scoringMode === mode.id ? (
                         <div className="absolute top-3 right-3 flex h-5 w-5 items-center justify-center rounded-full bg-primary">
                           <div className="h-2 w-2 rounded-full bg-primary-foreground" />
                         </div>
@@ -776,8 +796,28 @@ export function V0CreateEventPage(props: {
                     </button>
                   ))}
                 </div>
+                {scoringMode === "SETS" && (
+                  <div className="grid gap-3 md:grid-cols-2 pt-1">
+                    {[
+                      { v: 1, title: "1 сет", desc: `До ${gamesPerSet} геймов` },
+                      { v: 3, title: "До 2 побед", desc: "Лучший из 3 сетов" },
+                    ].map((opt) => (
+                      <button
+                        key={opt.v}
+                        type="button"
+                        onClick={() => setSetsPerMatch(opt.v)}
+                        className={cn(
+                          "relative rounded-lg border-2 p-3 text-left transition-all",
+                          setsPerMatch === opt.v ? "border-primary bg-primary/5" : "border-border bg-secondary/50 hover:border-border/80",
+                        )}
+                      >
+                        <div className="font-semibold text-sm">{opt.title}</div>
+                        <div className="text-xs text-muted-foreground mt-0.5">{opt.desc}</div>
+                      </button>
+                    ))}
+                  </div>
+                )}
               </div>
-              )}
 
               <div className="space-y-3">
                 <Label className="font-medium">Видимость</Label>
@@ -929,13 +969,17 @@ export function V0CreateEventPage(props: {
                   <div className="text-sm text-muted-foreground">{minPlayers}+ игроков</div>
                 </div>
                 <div className="rounded-lg bg-secondary/50 p-4 border border-border/50">
-                  <div className="text-xs text-muted-foreground uppercase tracking-wide mb-1">{format === "AMERICANA" ? "Режим" : "Формат"}</div>
-                  <div className="font-semibold text-lg">{format === "AMERICANA" ? (gameMode === "balanced" ? "Равный бой" : "Каждый с каждым") : format === "MEXICANO" ? "Мексикано" : "Фиксированные пары"}</div>
-                  <div className="text-sm text-muted-foreground">{format === "AMERICANA" ? (gameMode === "balanced" ? "Оптимально" : "Классика") : format === "MEXICANO" ? "По таблице лидеров" : "Круговая по парам"}</div>
+                  <div className="text-xs text-muted-foreground uppercase tracking-wide mb-1">Формат</div>
+                  <div className="font-semibold text-lg">{format === "AMERICANA" ? "Американка" : format === "MEXICANO" ? "Мексикано" : "Фиксированные пары"}</div>
+                  <div className="text-sm text-muted-foreground">{format === "AMERICANA" ? "Каждый с каждым" : format === "MEXICANO" ? "По таблице лидеров" : "Круговая по парам"}</div>
                 </div>
                 <div className="rounded-lg bg-secondary/50 p-4 border border-border/50">
-                  <div className="text-xs text-muted-foreground uppercase tracking-wide mb-1">Подачи</div>
-                  <div className="font-semibold text-lg">{pointsPerPlayer} подач на игрока</div>
+                  <div className="text-xs text-muted-foreground uppercase tracking-wide mb-1">Счёт</div>
+                  {scoringMode === "POINTS" ? (
+                    <div className="font-semibold text-lg">{pointsPerPlayer} подач · очки</div>
+                  ) : (
+                    <div className="font-semibold text-lg">{setsPerMatch === 1 ? "1 сет" : "до 2 побед"} · до {gamesPerSet} геймов</div>
+                  )}
                 </div>
               </div>
 

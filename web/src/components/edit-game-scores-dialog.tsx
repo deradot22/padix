@@ -45,25 +45,42 @@ export function EditGameScoresDialog(props: {
   const [error, setError] = useState<string | null>(null);
   const [scores, setScores] = useState<ScoreMap>({});
   const originalScoresRef = useRef<ScoreMap>({});
+  // SETS: matchId → массив геймов по сетам (строки, чтобы поле можно было очистить).
+  const [setsMap, setSetsMap] = useState<Record<string, { a: string; b: string }[]>>({});
+  const originalSetsRef = useRef<Record<string, { a: string; b: string }[]>>({});
 
   const isAuthor = eventData?.isAuthor ?? false;
   const canEdit = isAuthor && !saving;
+  const isSets = eventData?.event?.scoringMode === "SETS";
+  const setsPerMatch = eventData?.event?.setsPerMatch ?? 1;
 
   useEffect(() => {
     const load = async () => {
       try {
         const data = await api.getEventDetails(props.eventId);
         setEventData(data);
+        const sets = data.event?.scoringMode === "SETS";
+        const perMatch = data.event?.setsPerMatch ?? 1;
         const initialScores: ScoreMap = {};
+        const initialSets: Record<string, { a: string; b: string }[]> = {};
         flattenMatches(data).forEach((m) => {
           const score = m.score?.points;
           initialScores[m.id] = {
             teamAPoints: String(score?.teamAPoints ?? 0),
             teamBPoints: String(score?.teamBPoints ?? 0),
           };
+          if (sets) {
+            const existing = m.score?.sets ?? [];
+            initialSets[m.id] = Array.from({ length: perMatch }, (_, i) => ({
+              a: String(existing[i]?.teamAGames ?? 0),
+              b: String(existing[i]?.teamBGames ?? 0),
+            }));
+          }
         });
         setScores(initialScores);
         originalScoresRef.current = initialScores;
+        setSetsMap(initialSets);
+        originalSetsRef.current = JSON.parse(JSON.stringify(initialSets));
       } catch (e: any) {
         setError(e?.message ?? "Ошибка загрузки события");
       } finally {
@@ -80,6 +97,17 @@ export function EditGameScoresDialog(props: {
       setError(null);
       const matches = flattenMatches(eventData);
       for (const match of matches) {
+        if (isSets) {
+          const cur = setsMap[match.id];
+          if (!cur) continue;
+          const orig = originalSetsRef.current[match.id];
+          const changed = !orig || cur.some((s, i) => s.a !== orig[i]?.a || s.b !== orig[i]?.b);
+          if (changed) {
+            const payload = cur.map((s) => ({ teamAGames: parseInt(s.a || "0", 10), teamBGames: parseInt(s.b || "0", 10) }));
+            await api.submitSetsScore(match.id, payload);
+          }
+          continue;
+        }
         const newScore = scores[match.id];
         const originalScore = originalScoresRef.current[match.id];
         if (!newScore) continue;
@@ -173,6 +201,48 @@ export function EditGameScoresDialog(props: {
                     </div>
                   </div>
 
+                  {isSets ? (
+                    <div className="space-y-2">
+                      {Array.from({ length: setsPerMatch }).map((_, i) => (
+                        <div key={i} className="flex items-center gap-3">
+                          {setsPerMatch > 1 && <span className="w-12 text-xs text-muted-foreground">Сет {i + 1}</span>}
+                          <div className="flex-1">
+                            {i === 0 && <label className="text-xs text-muted-foreground">Геймы A</label>}
+                            <Input
+                              type="text"
+                              inputMode="numeric"
+                              value={setsMap[match.id]?.[i]?.a ?? ""}
+                              onChange={(e) =>
+                                setSetsMap((prev) => {
+                                  const arr = (prev[match.id] ?? Array.from({ length: setsPerMatch }, () => ({ a: "0", b: "0" }))).map((x) => ({ ...x }));
+                                  arr[i] = { ...arr[i], a: sanitizeScore(e.target.value) };
+                                  return { ...prev, [match.id]: arr };
+                                })
+                              }
+                              disabled={!canEdit}
+                            />
+                          </div>
+                          <div className="text-xl font-bold mt-5">:</div>
+                          <div className="flex-1">
+                            {i === 0 && <label className="text-xs text-muted-foreground">Геймы B</label>}
+                            <Input
+                              type="text"
+                              inputMode="numeric"
+                              value={setsMap[match.id]?.[i]?.b ?? ""}
+                              onChange={(e) =>
+                                setSetsMap((prev) => {
+                                  const arr = (prev[match.id] ?? Array.from({ length: setsPerMatch }, () => ({ a: "0", b: "0" }))).map((x) => ({ ...x }));
+                                  arr[i] = { ...arr[i], b: sanitizeScore(e.target.value) };
+                                  return { ...prev, [match.id]: arr };
+                                })
+                              }
+                              disabled={!canEdit}
+                            />
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
                   <div className="flex items-center gap-3">
                     <div className="flex-1">
                       <label className="text-xs text-muted-foreground">Точки Team A</label>
@@ -212,6 +282,7 @@ export function EditGameScoresDialog(props: {
                       />
                     </div>
                   </div>
+                  )}
                 </div>
               ))}
             </div>
