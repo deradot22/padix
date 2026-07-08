@@ -28,7 +28,10 @@ export function BottomNav() {
       // env(safe-area-inset-bottom) поднимает панель над home-indicator / нижней
       // панелью Safari. На устройствах без выреза env()=0 → mb-3 панели остаётся
       // единственным отступом, поведение не меняется. Десктоп: env()=0 + md:hidden.
-      className="fixed inset-x-0 bottom-0 z-50 md:hidden [padding-bottom:env(safe-area-inset-bottom)]"
+      // z-40: ниже слоя модалок (z-50), но выше контента страницы (z-0/z-10). Иначе фикс.
+      // навбар перекрывал низ inline-модалок (кнопки «Отмена/Сохранить» в диалоге счёта
+      // уезжали под меню). Модалки inset-0 z-50 теперь корректно накрывают навбар.
+      className="fixed inset-x-0 bottom-0 z-40 md:hidden [padding-bottom:env(safe-area-inset-bottom)]"
       aria-label="Основная навигация"
     >
       {/* Плавающая панель: отступы от краёв + скругление + контрастный surface
