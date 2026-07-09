@@ -25,6 +25,9 @@ const LEVEL_TO_ELO: Record<string, number> = {
   "2.0": 900, "2.5": 1050, "3.0": 1150, "3.5": 1250, "4.0": 1350, "4.5": 1500,
   "5.0": 1650, "5.5": 1800, "6.0": 1950, "6.5": 2100, "7.0": 2250,
 };
+const FORMAT_TITLE: Record<string, string> = {
+  AMERICANA: "Американка", MEXICANO: "Мексикано", FIXED_PAIRS: "Фиксированные пары",
+};
 
 function todayIso(): string {
   const d = new Date();
@@ -51,6 +54,7 @@ export function V0CreateEventPageV2(props: {
   const [seriesReminderHours, setSeriesReminderHours] = useState<number | null>(null);
   const [seriesPinAnnouncement, setSeriesPinAnnouncement] = useState<boolean | null>(null);
   const [title, setTitle] = useState("Американка");
+  const [titleEdited, setTitleEdited] = useState(false);
   const [date, setDate] = useState(todayIso());
   const [startHour, setStartHour] = useState("19");
   const [startMinute, setStartMinute] = useState("00");
@@ -179,6 +183,13 @@ export function V0CreateEventPageV2(props: {
   // Сеты имеют смысл только в фиксированных парах; иначе — очки.
   useEffect(() => {
     if (format !== "FIXED_PAIRS") setScoringMode("POINTS");
+  }, [format]);
+  // Название подставляем по формату, пока пользователь не переименовал вручную.
+  useEffect(() => {
+    if (isEditing || titleEdited) return;
+    const t = FORMAT_TITLE[format];
+    if (t) setTitle(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [format]);
 
   const minPlayers = useMemo(() => Math.max(1, courts) * 4, [courts]);
@@ -459,7 +470,7 @@ export function V0CreateEventPageV2(props: {
             <Input
               id="name"
               value={title}
-              onChange={(e) => setTitle(e.target.value)}
+              onChange={(e) => { setTitle(e.target.value); setTitleEdited(true); }}
               className="bg-secondary border-border h-11"
               placeholder="Название игры"
             />
@@ -599,37 +610,40 @@ export function V0CreateEventPageV2(props: {
           </div>
 
           <div className="space-y-2">
-            <div className="flex items-center gap-2">
-              <Label className="text-sm text-muted-foreground">Названия кортов</Label>
-              <button
-                type="button"
-                onClick={() => setEditCourtNames((v) => !v)}
-                className={cn(
-                  "flex h-6 w-6 items-center justify-center rounded-md border transition-colors",
-                  editCourtNames ? "border-primary/50 text-primary" : "border-border text-muted-foreground hover:text-foreground",
-                )}
-                aria-label="Переименовать корты"
-              >
-                <Pencil className="h-3 w-3" />
-              </button>
-            </div>
+            <Label className="text-sm text-muted-foreground">Названия кортов</Label>
             <div className="grid grid-cols-2 gap-2">
-              {courtNames.map((name, idx) =>
-                editCourtNames ? (
-                  <Input
-                    key={`court-${idx}`}
-                    value={name}
-                    onChange={(e) => { const next = [...courtNames]; next[idx] = e.target.value; setCourtNames(next); }}
-                    className="bg-secondary border-border h-10"
-                    placeholder={`Корт ${String.fromCharCode(65 + idx)}`}
-                  />
-                ) : (
-                  <div key={`court-${idx}`} className="flex items-center rounded-md border border-border bg-secondary px-3 h-10 text-sm font-medium">
-                    {name || `Корт ${String.fromCharCode(65 + idx)}`}
-                  </div>
-                ),
-              )}
+              {courtNames.map((name, idx) => (
+                <Input
+                  key={`court-${idx}`}
+                  value={name}
+                  onChange={(e) => { const next = [...courtNames]; next[idx] = e.target.value; setCourtNames(next); }}
+                  className="bg-secondary border-border h-10"
+                  placeholder={`Корт ${String.fromCharCode(65 + idx)}`}
+                />
+              ))}
             </div>
+          </div>
+
+          <div className="space-y-2">
+            <Label className="text-sm text-muted-foreground">Раунды</Label>
+            <div className="grid grid-cols-2 gap-2">
+              {[{ id: "auto" as const, t: "Авто" }, { id: "manual" as const, t: "Вручную" }].map((m) => (
+                <button
+                  key={m.id}
+                  type="button"
+                  onClick={() => setRoundsMode(m.id)}
+                  className={cn(
+                    "h-11 rounded-lg border-2 text-sm font-semibold transition-all",
+                    roundsMode === m.id ? "border-primary bg-primary/10 text-primary" : "border-border bg-secondary/50 text-muted-foreground",
+                  )}
+                >
+                  {m.t}
+                </button>
+              ))}
+            </div>
+            {roundsMode === "manual" && (
+              <Input type="number" min={1} value={rounds} onChange={(e) => setRounds(Number(e.target.value))} className="bg-secondary border-border h-11" />
+            )}
           </div>
         </section>
 
@@ -710,57 +724,36 @@ export function V0CreateEventPageV2(props: {
           )}
         </section>
 
-        {/* 5. Раунды + анонс */}
-        <section className="rounded-xl border border-border bg-card p-4 space-y-4">
-          <span className="text-xs font-bold uppercase tracking-wider text-primary">Раунды и анонс</span>
-          <div className="grid grid-cols-2 gap-2">
-            {[{ id: "auto" as const, t: "Авто" }, { id: "manual" as const, t: "Вручную" }].map((m) => (
-              <button
-                key={m.id}
-                type="button"
-                onClick={() => setRoundsMode(m.id)}
-                className={cn(
-                  "h-11 rounded-lg border-2 text-sm font-semibold transition-all",
-                  roundsMode === m.id ? "border-primary bg-primary/10 text-primary" : "border-border bg-secondary/50 text-muted-foreground",
-                )}
-              >
-                {m.t}
-              </button>
-            ))}
-          </div>
-          {roundsMode === "manual" && (
-            <Input type="number" min={1} value={rounds} onChange={(e) => setRounds(Number(e.target.value))} className="bg-secondary border-border h-11" />
-          )}
-          {telegramChats.length > 0 && (
-            <div className="space-y-2 pt-1">
-              <div className="flex items-center gap-2">
-                <Send className="h-4 w-4 text-primary" />
-                <span className="text-sm font-medium">Анонс в Telegram</span>
-              </div>
-              {telegramChats.map((chat) => {
-                const checked = selectedTgChatIds.has(chat.id);
-                return (
-                  <label key={chat.id} className="flex items-center gap-3 rounded-md bg-secondary/50 hover:bg-secondary px-3 py-2.5 cursor-pointer transition-colors">
-                    <input
-                      type="checkbox"
-                      className="h-4 w-4 accent-primary"
-                      checked={checked}
-                      onChange={(e) =>
-                        setSelectedTgChatIds((prev) => {
-                          const next = new Set(prev);
-                          if (e.target.checked) next.add(chat.id); else next.delete(chat.id);
-                          return next;
-                        })
-                      }
-                    />
-                    <UsersIcon className="h-4 w-4 text-muted-foreground" />
-                    <span className="text-sm flex-1 truncate">{chat.title}</span>
-                  </label>
-                );
-              })}
+        {/* 5. Анонс */}
+        {telegramChats.length > 0 && (
+          <section className="rounded-xl border border-border bg-card p-4 space-y-3">
+            <div className="flex items-center gap-2">
+              <Send className="h-4 w-4 text-primary" />
+              <span className="text-xs font-bold uppercase tracking-wider text-primary">Анонс в Telegram</span>
             </div>
-          )}
-        </section>
+            {telegramChats.map((chat) => {
+              const checked = selectedTgChatIds.has(chat.id);
+              return (
+                <label key={chat.id} className="flex items-center gap-3 rounded-md bg-secondary/50 hover:bg-secondary px-3 py-2.5 cursor-pointer transition-colors">
+                  <input
+                    type="checkbox"
+                    className="h-4 w-4 accent-primary"
+                    checked={checked}
+                    onChange={(e) =>
+                      setSelectedTgChatIds((prev) => {
+                        const next = new Set(prev);
+                        if (e.target.checked) next.add(chat.id); else next.delete(chat.id);
+                        return next;
+                      })
+                    }
+                  />
+                  <UsersIcon className="h-4 w-4 text-muted-foreground" />
+                  <span className="text-sm flex-1 truncate">{chat.title}</span>
+                </label>
+              );
+            })}
+          </section>
+        )}
 
         {error ? (
           <div className="rounded-lg border border-destructive/30 bg-destructive/10 p-3 text-sm">{error}</div>
