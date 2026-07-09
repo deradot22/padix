@@ -59,6 +59,9 @@ export function V0EventPage(props: { me: any; meLoaded?: boolean }) {
   const [editCourts, setEditCourts] = useState<number | "">("");
   const [editPairing, setEditPairing] = useState<"ROUND_ROBIN" | "BALANCED">("ROUND_ROBIN");
   const [editVisibility, setEditVisibility] = useState<"PRIVATE" | "PUBLIC">("PUBLIC");
+  const [editScoringMode, setEditScoringMode] = useState<"POINTS" | "SETS">("POINTS");
+  const [editSets, setEditSets] = useState<number | "">("");
+  const [editGames, setEditGames] = useState<number | "">("");
   const [editSaving, setEditSaving] = useState(false);
   const [editError, setEditError] = useState<string | null>(null);
   const [infoExpanded, setInfoExpanded] = useState(false);
@@ -1076,6 +1079,9 @@ export function V0EventPage(props: { me: any; meLoaded?: boolean }) {
                         setEditCourts(typeof e.courtsCount === "number" ? e.courtsCount : "");
                         setEditPairing(e.pairingMode === "BALANCED" ? "BALANCED" : "ROUND_ROBIN");
                         setEditVisibility(e.visibility === "PUBLIC" ? "PUBLIC" : "PRIVATE");
+                        setEditScoringMode(e.scoringMode === "SETS" ? "SETS" : "POINTS");
+                        setEditSets(typeof e.setsPerMatch === "number" ? e.setsPerMatch : 1);
+                        setEditGames(typeof e.gamesPerSet === "number" ? e.gamesPerSet : 6);
                         setEditError(null);
                         setEditOpen(true);
                       }}
@@ -1168,17 +1174,48 @@ export function V0EventPage(props: { me: any; meLoaded?: boolean }) {
               </div>
               {e.status === "OPEN_FOR_REGISTRATION" ? (
                 <>
-                  <div className="grid grid-cols-2 gap-3">
-                    <div>
-                      <label className="block mb-1 text-muted-foreground">Очков на игрока</label>
-                      <input
-                        type="number"
-                        min={1}
-                        className="w-full rounded-md border border-border bg-transparent px-3 py-2"
-                        value={editPoints}
-                        onChange={(ev) => setEditPoints(ev.target.value === "" ? "" : Number(ev.target.value))}
-                      />
+                  <div>
+                    <label className="block mb-1 text-muted-foreground">Система счёта</label>
+                    <div className="grid grid-cols-2 gap-2">
+                      {([{ v: "POINTS" as const, t: "Очки" }, { v: "SETS" as const, t: "Сеты" }]).map((o) => (
+                        <button
+                          key={o.v}
+                          type="button"
+                          onClick={() => setEditScoringMode(o.v)}
+                          className={cn(
+                            "rounded-md border-2 py-2 text-sm font-medium transition-colors",
+                            editScoringMode === o.v ? "border-primary bg-primary/10 text-primary" : "border-border bg-transparent text-muted-foreground hover:bg-secondary/30",
+                          )}
+                        >
+                          {o.t}
+                        </button>
+                      ))}
                     </div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    {editScoringMode === "POINTS" ? (
+                      <div>
+                        <label className="block mb-1 text-muted-foreground">Очков на игрока</label>
+                        <input
+                          type="number"
+                          min={1}
+                          className="w-full rounded-md border border-border bg-transparent px-3 py-2"
+                          value={editPoints}
+                          onChange={(ev) => setEditPoints(ev.target.value === "" ? "" : Number(ev.target.value))}
+                        />
+                      </div>
+                    ) : (
+                      <div>
+                        <label className="block mb-1 text-muted-foreground">Геймов в сете</label>
+                        <input
+                          type="number"
+                          min={1}
+                          className="w-full rounded-md border border-border bg-transparent px-3 py-2"
+                          value={editGames}
+                          onChange={(ev) => setEditGames(ev.target.value === "" ? "" : Number(ev.target.value))}
+                        />
+                      </div>
+                    )}
                     <div>
                       <label className="block mb-1 text-muted-foreground">Кортов</label>
                       <input
@@ -1189,6 +1226,18 @@ export function V0EventPage(props: { me: any; meLoaded?: boolean }) {
                         onChange={(ev) => setEditCourts(ev.target.value === "" ? "" : Number(ev.target.value))}
                       />
                     </div>
+                    {editScoringMode === "SETS" && (
+                      <div>
+                        <label className="block mb-1 text-muted-foreground">Сетов в матче</label>
+                        <input
+                          type="number"
+                          min={1}
+                          className="w-full rounded-md border border-border bg-transparent px-3 py-2"
+                          value={editSets}
+                          onChange={(ev) => setEditSets(ev.target.value === "" ? "" : Number(ev.target.value))}
+                        />
+                      </div>
+                    )}
                   </div>
                 </>
               ) : (
@@ -1247,9 +1296,15 @@ export function V0EventPage(props: { me: any; meLoaded?: boolean }) {
                       endTime: editEndTime.length === 5 ? `${editEndTime}:00` : editEndTime,
                     };
                     if (e.status === "OPEN_FOR_REGISTRATION") {
-                      if (editPoints !== "") payload.pointsPerPlayerPerMatch = editPoints;
                       if (editCourts !== "") payload.courtsCount = editCourts;
                       payload.pairingMode = editPairing;
+                      payload.scoringMode = editScoringMode;
+                      if (editScoringMode === "POINTS") {
+                        if (editPoints !== "") payload.pointsPerPlayerPerMatch = editPoints;
+                      } else {
+                        if (editSets !== "") payload.setsPerMatch = editSets;
+                        if (editGames !== "") payload.gamesPerSet = editGames;
+                      }
                     }
                     // Видимость можно менять на любой стадии (кроме FINISHED, и туда мы edit-dialog не пускаем).
                     payload.visibility = editVisibility;

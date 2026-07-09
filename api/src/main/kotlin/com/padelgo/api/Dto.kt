@@ -208,7 +208,18 @@ data class UpdateEventRequest(
     val pairingMode: com.padelgo.domain.PairingMode? = null,
 
     @Schema(description = "Новая видимость (PRIVATE / PUBLIC). Можно менять на любой стадии кроме FINISHED.")
-    val visibility: com.padelgo.domain.EventVisibility? = null
+    val visibility: com.padelgo.domain.EventVisibility? = null,
+
+    @Schema(description = "Новый режим счёта (POINTS / SETS). Только до старта.")
+    val scoringMode: com.padelgo.domain.ScoringMode? = null,
+
+    @field:Min(1)
+    @Schema(description = "Сетов в матче (для SETS). Только до старта.")
+    val setsPerMatch: Int? = null,
+
+    @field:Min(1)
+    @Schema(description = "Геймов в сете (для SETS). Только до старта.")
+    val gamesPerSet: Int? = null
 )
 
 @Schema(description = "Игра (краткая информация)")

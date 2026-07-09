@@ -752,6 +752,7 @@ class EventService(
         val oldCourts = event.courtsCount
         val oldPairing = event.pairingMode
         val oldVisibility = event.visibility
+        val oldScoring = event.scoringMode
 
         // Поля доступные на любой стадии (кроме FINISHED): название, дата, время, видимость.
         req.title?.let { t ->
@@ -768,11 +769,12 @@ class EventService(
         }
 
         // Поля доступные только до старта.
-        if (req.pointsPerPlayerPerMatch != null || req.courtsCount != null || req.pairingMode != null) {
+        if (req.pointsPerPlayerPerMatch != null || req.courtsCount != null || req.pairingMode != null ||
+            req.scoringMode != null || req.setsPerMatch != null || req.gamesPerSet != null) {
             if (!isBeforeStart) {
                 throw ApiException(
                     HttpStatus.CONFLICT,
-                    "pointsPerPlayerPerMatch / courtsCount / pairingMode can be changed only before start"
+                    "pointsPerPlayerPerMatch / courtsCount / pairingMode / scoringMode can be changed only before start"
                 )
             }
             req.pointsPerPlayerPerMatch?.let { p ->
@@ -784,6 +786,15 @@ class EventService(
                 event.courtsCount = c
             }
             req.pairingMode?.let { event.pairingMode = it }
+            req.scoringMode?.let { event.scoringMode = it }
+            req.setsPerMatch?.let { s ->
+                if (s <= 0) throw ApiException(HttpStatus.BAD_REQUEST, "setsPerMatch must be > 0")
+                event.setsPerMatch = s
+            }
+            req.gamesPerSet?.let { g ->
+                if (g <= 0) throw ApiException(HttpStatus.BAD_REQUEST, "gamesPerSet must be > 0")
+                event.gamesPerSet = g
+            }
         }
 
         // Любое изменение даты/времени делает старое напоминание неактуальным — сбрасываем
@@ -803,6 +814,7 @@ class EventService(
             if (oldPoints != saved.pointsPerPlayerPerMatch) add("Подач на игрока: $oldPoints → ${saved.pointsPerPlayerPerMatch}")
             if (oldCourts != saved.courtsCount) add("Кортов: $oldCourts → ${saved.courtsCount}")
             if (oldPairing != saved.pairingMode) add("Режим: ${humanPairing(oldPairing)} → ${humanPairing(saved.pairingMode)}")
+            if (oldScoring != saved.scoringMode) add("Счёт: ${if (oldScoring == ScoringMode.SETS) "сеты" else "очки"} → ${if (saved.scoringMode == ScoringMode.SETS) "сеты" else "очки"}")
             if (oldVisibility != saved.visibility) add("Видимость: ${humanVisibility(oldVisibility)} → ${humanVisibility(saved.visibility)}")
         }
         if (changes.isNotEmpty()) {
