@@ -13,6 +13,7 @@ import com.padelgo.domain.ScoringMode
 import com.padelgo.api.ApiException
 import com.padelgo.api.PointsScoreRequest
 import com.padelgo.api.SubmitScoreRequest
+import org.junit.jupiter.api.Assertions.assertDoesNotThrow
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNotNull
 import org.junit.jupiter.api.Assertions.assertNull
@@ -407,6 +408,40 @@ class FinishEventRatingTest {
         // wire() отдаёт событие в статусе IN_PROGRESS и finishEvent не зовём.
 
         assertNull(service.buildResultsUpdatePayload(eventId))
+    }
+
+    // Игра со счётом по сетам (scoringMode=SETS) проходит финализацию без падений:
+    // победитель — по выигранным сетам, рейтинг начисляется, сумма дельт нулевая.
+    @Test
+    fun `finishEvent для SETS-игры не падает и начисляет рейтинг`() {
+        val players = mapOf(
+            a1 to Player(id = a1, name = "a1", rating = 1400, gamesPlayed = 50),
+            a2 to Player(id = a2, name = "a2", rating = 1400, gamesPlayed = 50),
+            b1 to Player(id = b1, name = "b1", rating = 1400, gamesPlayed = 50),
+            b2 to Player(id = b2, name = "b2", rating = 1400, gamesPlayed = 50)
+        )
+        // 6:4 — в SETS это геймы одного сета; команда A берёт сет.
+        wire(players, listOf(match(match1Id, round1Id)), mapOf(match1Id to (6 to 4)))
+        val setsEvent = Event(
+            id = eventId,
+            title = "Test SETS",
+            status = EventStatus.IN_PROGRESS,
+            scoringMode = ScoringMode.SETS,
+            setsPerMatch = 1,
+            gamesPerSet = 6,
+            pointsPerPlayerPerMatch = 6,
+            courtsCount = 1,
+            createdByUserId = ownerUserId
+        )
+        whenever(eventRepo.findById(eventId)).doReturn(Optional.of(setsEvent))
+
+        assertDoesNotThrow { service.finishEvent(eventId, ownerUserId) }
+
+        assertEquals(EventStatus.FINISHED, setsEvent.status)
+        assertEquals(4, savedChanges.size, "по одному rating_change на игрока")
+        assertEquals(0, savedChanges.sumOf { it.delta }, "zero-sum")
+        assertTrue(savedChanges.first { it.playerId == a1 }.delta > 0, "команда A выиграла сет 6:4")
+        assertTrue(savedChanges.first { it.playerId == b1 }.delta < 0, "команда B проиграла")
     }
 
     @Test
