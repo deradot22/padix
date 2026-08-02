@@ -11,6 +11,13 @@ data class PlannedMatch(
     val teamB: Pair<UUID, UUID>
 )
 
+/**
+ * Бюджет узлов DFS для поиска раунда без повторов партнёрств (4+ кортов).
+ * Ограничение «обе пары матча ещё не играли вместе» само по себе режет дерево
+ * на порядки; бюджет — страховка от патологических случаев на больших составах.
+ */
+private const val NO_REPEAT_NODE_BUDGET = 300_000
+
 private data class PairKey(val a: UUID, val b: UUID) {
     companion object {
         fun of(x: UUID, y: UUID): PairKey = if (x < y) PairKey(x, y) else PairKey(y, x)
@@ -86,7 +93,9 @@ private data class RoundCost(
  * - для каждой четвёрки выбирает наилучший split на команды и корт,
  * - lexicographic приоритеты: сначала ротация (партнёры → соперники), потом баланс.
  *
- * Для 2-3 кортов перебор быстрый (≪200K вариантов). На 4+ кортов добавлен жадный fallback.
+ * Для 2-3 кортов перебор быстрый (≪200K вариантов). На 4+ кортов полный перебор неподъёмен,
+ * поэтому там сначала пробуем жадный план, а если он повторяет партнёрства — ищем раунд
+ * с жёстким запретом повторов (см. planRoundWithoutPartnerRepeats).
  */
 class PairingPlanner(
     private val ratingByPlayer: Map<UUID, Int>,
@@ -164,7 +173,13 @@ class PairingPlanner(
         val greedyCost = totalRoundCost(greedyMatches)
 
         if (expectedCourts >= 4) {
-            return greedyMatches
+            // Полный перебор здесь неподъёмен (16 игроков — ~2.6 млн разбиений), но требование
+            // «никто не играет в паре с кем-то дважды» жёсткое, а жадность его регулярно нарушала:
+            // на 4 кортах и 16 игроках получалось 4-6 повторных партнёрств за эвент и столько же
+            // пар, которые не сыграли вместе ни разу. Поэтому если жадный план уже без повторов —
+            // берём его (быстрый путь), иначе ищем раунд с жёстким запретом повторов.
+            if (greedyCost.partnerRepeats == 0) return greedyMatches
+            return planRoundWithoutPartnerRepeats(sorted, expectedCourts) ?: greedyMatches
         }
 
         // Полный перебор разбиений на четвёрки. Фиксируем первого свободного игрока в текущей четвёрке,
@@ -221,6 +236,85 @@ class PairingPlanner(
 
         search(RoundCost.ZERO)
         return bestMatches
+    }
+
+    /**
+     * Раунд БЕЗ повторов партнёрств: DFS по разбиениям, где обе пары каждого матча ещё ни разу
+     * не играли вместе. Жёсткое ограничение отсекает подавляющую часть дерева, поэтому при 4+
+     * кортах это на порядки дешевле полного перебора. Среди допустимых вариантов выбираем
+     * лучший по той же lexicographic cost, что и везде, и выходим сразу, как только нашли
+     * идеальный по ротации раунд (не повторили ни партнёров, ни соперников).
+     *
+     * null — такого раунда не нашлось: либо партнёрская сетка исчерпана (все возможные пары
+     * уже сыграны), либо кончился бюджет узлов. Вызывающий код в этом случае берёт жадный план.
+     */
+    private fun planRoundWithoutPartnerRepeats(
+        sorted: List<UUID>,
+        expectedCourts: Int
+    ): List<PlannedMatch>? {
+        val n = sorted.size
+        val taken = BooleanArray(n)
+        val acc = mutableListOf<PlannedMatch>()
+        var best: List<PlannedMatch>? = null
+        var bestCost: RoundCost? = null
+        var budget = NO_REPEAT_NODE_BUDGET
+        var stop = false
+
+        fun neverPartnered(x: UUID, y: UUID): Boolean = (partnerCounts[PairKey.of(x, y)] ?: 0) == 0
+
+        fun search(running: RoundCost) {
+            if (stop) return
+            if (budget-- <= 0) {
+                stop = true
+                return
+            }
+            if (acc.size == expectedCourts) {
+                val withCourts = assignCourts(acc.toList())
+                val finalCost = totalRoundCost(withCourts)
+                val prev = bestCost
+                if (prev == null || costComparator.compare(finalCost, prev) < 0) {
+                    bestCost = finalCost
+                    best = withCourts
+                    if (finalCost.partnerRepeats == 0 && finalCost.opponentRepeats == 0) stop = true
+                }
+                return
+            }
+            val boundBefore = bestCost
+            if (boundBefore != null && costComparator.compare(running, boundBefore) > 0) return
+
+            val firstFree = (0 until n).firstOrNull { !taken[it] } ?: return
+            for (i in (firstFree + 1) until n) {
+                if (taken[i]) continue
+                for (j in (i + 1) until n) {
+                    if (taken[j]) continue
+                    for (k in (j + 1) until n) {
+                        if (taken[k]) continue
+                        val q = listOf(sorted[firstFree], sorted[i], sorted[j], sorted[k])
+                        val splits = listOf(
+                            PlannedMatch(1, teamA = q[0] to q[1], teamB = q[2] to q[3]),
+                            PlannedMatch(1, teamA = q[0] to q[2], teamB = q[1] to q[3]),
+                            PlannedMatch(1, teamA = q[0] to q[3], teamB = q[1] to q[2])
+                        )
+                        for (split in splits) {
+                            if (!neverPartnered(split.teamA.first, split.teamA.second)) continue
+                            if (!neverPartnered(split.teamB.first, split.teamB.second)) continue
+                            val newRunning = running + matchCostBeforeCourt(split)
+                            val bound = bestCost
+                            if (bound != null && costComparator.compare(newRunning, bound) > 0) continue
+                            taken[firstFree] = true; taken[i] = true; taken[j] = true; taken[k] = true
+                            acc.add(split)
+                            search(newRunning)
+                            acc.removeAt(acc.size - 1)
+                            taken[firstFree] = false; taken[i] = false; taken[j] = false; taken[k] = false
+                            if (stop) return
+                        }
+                    }
+                }
+            }
+        }
+
+        search(RoundCost.ZERO)
+        return best
     }
 
     /** Жадный fallback: тот же anchor-first что и раньше, но через ту же lexicographic cost. */

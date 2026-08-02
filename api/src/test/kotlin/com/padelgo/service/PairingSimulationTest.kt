@@ -154,6 +154,37 @@ class PairingSimulationTest {
         }
     }
 
+    /**
+     * Регрессия: при 4+ кортах планировщик раньше сразу отдавал жадный план
+     * (`if (expectedCourts >= 4) return greedyMatches`), и на 16 игроках это давало
+     * 4-6 пар, сыгравших вместе дважды, при том что столько же пар не играли вместе ни разу.
+     * За 15 раундов каждая из C(16,2)=120 пар обязана сыграть вместе ровно один раз.
+     */
+    @Test
+    fun `16 игроков на 4 кортах - каждый играет в паре с каждым ровно один раз`() {
+        val ratings = (0 until 16).map { 1200 + it * 40 }
+        val (_, stats) = simulate(16, 4, 15, ratings, PairingMode.ROUND_ROBIN)
+        printStats("16×4×15 ROUND_ROBIN — полный круг партнёрств", stats)
+
+        check(stats.maxPartnerCount == 1) {
+            "Кто-то сыграл в паре с кем-то дважды: max=${stats.maxPartnerCount}, " +
+                "повторов=${stats.totalPartnerRepeats}"
+        }
+        check(stats.totalPartnerRepeats == 0) {
+            "Есть повторы партнёрств: ${stats.totalPartnerRepeats}"
+        }
+        // 15 раундов × 4 корта × 2 команды = 120 партнёрств = ровно C(16,2). Значит
+        // отсутствие повторов автоматически означает, что покрыты ВСЕ пары.
+        check(stats.partnerHistogram[1] == 120) {
+            "Покрыты не все пары: с ровно одним совместным матчем — ${stats.partnerHistogram[1]} из 120"
+        }
+        // Скамейки нет: 16 игроков на 4 корта — каждый играет каждый раунд.
+        val perPlayer = stats.matchesPerPlayer.values
+        check(perPlayer.minOrNull() == 15 && perPlayer.maxOrNull() == 15) {
+            "Матчи распределены неравномерно: min=${perPlayer.minOrNull()}, max=${perPlayer.maxOrNull()}"
+        }
+    }
+
     @Test
     fun `симуляция 8 игроков, 2 корта, 7 раундов, ROUND_ROBIN`() {
         val ratings = listOf(1300, 1400, 1500, 1500, 1550, 1600, 1700, 1800)
