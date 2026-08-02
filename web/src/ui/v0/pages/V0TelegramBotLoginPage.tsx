@@ -6,6 +6,70 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { api, MeResponse, setToken } from "@/lib/api";
+import { Dict, useI18n } from "@/lib/i18n";
+
+const TR = {
+  "tgLogin.errNoToken": {
+    ru: "Отсутствует токен — открой страницу через кнопку «Войти через Telegram».",
+    en: "No token — open this page from the “Sign in with Telegram” button.",
+  },
+  "tgLogin.errStatus": { ru: "Не удалось получить статус", en: "Couldn't get the status" },
+  "tgLogin.errComplete": { ru: "Не удалось завершить вход", en: "Couldn't finish signing in" },
+  "tgLogin.errLink": { ru: "Не удалось привязать Telegram", en: "Couldn't link Telegram" },
+  "tgLogin.errNameRequired": { ru: "Введите имя", en: "Enter your name" },
+  "tgLogin.errSignup": { ru: "Не удалось завершить регистрацию", en: "Couldn't finish signing up" },
+  "tgLogin.openAgain": { ru: "Открыть Telegram ещё раз", en: "Open Telegram again" },
+  "tgLogin.checkEmail": { ru: "Проверь почту", en: "Check your email" },
+  "tgLogin.emailTaken": {
+    ru: "Этот email уже зарегистрирован в Padix. Чтобы убедиться, что это твой аккаунт, мы отправили подтверждение на",
+    en: "This email is already registered with Padix. To make sure the account is yours, we sent a confirmation to",
+  },
+  "tgLogin.emailTakenHint": {
+    ru: "Открой почту и нажми «Привязать Telegram» в письме — потом вернись сюда залогиненным.",
+    en: "Open the email and hit “Link Telegram” — then come back here signed in.",
+  },
+  "tgLogin.emailTakenSpam": {
+    ru: "Не нашёл письмо? Проверь спам или попробуй с другим email.",
+    en: "No email? Check your spam folder, or try a different address.",
+  },
+  "tgLogin.changeEmail": { ru: "Изменить email", en: "Change email" },
+  "tgLogin.failedTitle": { ru: "Не получилось", en: "Something went wrong" },
+  "tgLogin.toLogin": { ru: "На страницу входа", en: "Back to sign-in" },
+  "tgLogin.preparing": { ru: "Готовим вход…", en: "Getting things ready…" },
+  "tgLogin.pendingTitle": { ru: "Открой Telegram и нажми «Start»", en: "Open Telegram and hit “Start”" },
+  "tgLogin.pendingHint": {
+    ru: "Если Telegram не открылся автоматически — жми кнопку ниже.",
+    en: "If Telegram didn't open on its own, use the button below.",
+  },
+  "tgLogin.userFallback": { ru: "Пользователь", en: "User" },
+  "tgLogin.awaitingTitle": {
+    ru: "Бот спрашивает у тебя подтверждение в Telegram",
+    en: "The bot is asking you to confirm in Telegram",
+  },
+  "tgLogin.awaitingHint": { ru: "Тапни «✅ Войти» в чате с ботом", en: "Tap “✅ Sign in” in the chat with the bot" },
+  "tgLogin.linking": { ru: "Привязываем Telegram…", en: "Linking Telegram…" },
+  "tgLogin.signingIn": { ru: "Готово, заходим…", en: "All set, signing you in…" },
+  "tgLogin.approvedTitle": { ru: "Telegram подтвердил вход", en: "Telegram confirmed it's you" },
+  "tgLogin.approvedHint": {
+    ru: "Заверши регистрацию — дальше пройдёшь короткий опрос.",
+    en: "Finish signing up — a short survey comes next.",
+  },
+  "tgLogin.nameLabel": { ru: "Имя в Padix", en: "Name in Padix" },
+  "tgLogin.nameHint": { ru: "Подгружено из Telegram, можно поменять.", en: "Pulled from Telegram, feel free to change it." },
+  "tgLogin.emailLabel": { ru: "Email (опц.)", en: "Email (optional)" },
+  "tgLogin.emailPlaceholder": { ru: "можно потом в настройках", en: "you can add it later in settings" },
+  "tgLogin.genderLabel": { ru: "Пол", en: "Gender" },
+  "tgLogin.genderUnset": { ru: "Не указан", en: "Not set" },
+  "tgLogin.genderM": { ru: "М", en: "M" },
+  "tgLogin.genderF": { ru: "Ж", en: "F" },
+  "tgLogin.creating": { ru: "Создаём аккаунт…", en: "Creating account…" },
+  "tgLogin.create": { ru: "Создать аккаунт", en: "Create account" },
+  "tgLogin.rejectedTitle": { ru: "Вход отменён", en: "Sign-in cancelled" },
+  "tgLogin.rejectedHint": { ru: "Ты нажал «Отмена» в боте.", en: "You tapped “Cancel” in the bot." },
+  "tgLogin.expiredTitle": { ru: "Ссылка истекла", en: "Link expired" },
+  "tgLogin.expiredHint": { ru: "Токен живёт 5 минут.", en: "A token is only good for 5 minutes." },
+  "tgLogin.restart": { ru: "Начать заново", en: "Start over" },
+} satisfies Dict;
 
 type StatusResp = {
   status: "PENDING" | "AWAITING_APPROVAL" | "APPROVED" | "REJECTED" | "EXPIRED";
@@ -26,6 +90,7 @@ type StatusResp = {
  *  7. REJECTED / EXPIRED → ошибка с кнопкой «Попробовать снова»
  */
 export function V0TelegramBotLoginPage(props: { onAuth: (me: MeResponse) => void }) {
+  const { t } = useI18n(TR);
   const nav = useNavigate();
   const [params] = useSearchParams();
   const token = params.get("token") ?? "";
@@ -49,7 +114,7 @@ export function V0TelegramBotLoginPage(props: { onAuth: (me: MeResponse) => void
   // Поллинг.
   useEffect(() => {
     if (!token) {
-      setError("Отсутствует токен — открой страницу через кнопку «Войти через Telegram».");
+      setError(t("tgLogin.errNoToken"));
       return;
     }
     let cancelled = false;
@@ -65,7 +130,7 @@ export function V0TelegramBotLoginPage(props: { onAuth: (me: MeResponse) => void
         scheduleNext();
       } catch (e: any) {
         if (cancelled) return;
-        setError(e?.message ?? "Не удалось получить статус");
+        setError(e?.message ?? t("tgLogin.errStatus"));
       }
     };
     const scheduleNext = () => {
@@ -77,6 +142,8 @@ export function V0TelegramBotLoginPage(props: { onAuth: (me: MeResponse) => void
     return () => {
       cancelled = true;
     };
+    // t намеренно вне зависимостей: смена языка не должна перезапускать поллинг.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [token]);
 
   // Когда APPROVED — для существующего юзера сразу complete + redirect.
@@ -110,7 +177,7 @@ export function V0TelegramBotLoginPage(props: { onAuth: (me: MeResponse) => void
         nav(me.surveyCompleted ? "/" : "/survey", { replace: true });
       }
     } catch (e: any) {
-      setError(e?.message ?? "Не удалось завершить вход");
+      setError(e?.message ?? t("tgLogin.errComplete"));
       setCompleting(false);
       completedRef.current = false;
     }
@@ -125,7 +192,7 @@ export function V0TelegramBotLoginPage(props: { onAuth: (me: MeResponse) => void
       props.onAuth(updatedMe);
       nav("/settings", { replace: true });
     } catch (e: any) {
-      setError(e?.message ?? "Не удалось привязать Telegram");
+      setError(e?.message ?? t("tgLogin.errLink"));
       setCompleting(false);
       completedRef.current = false;
     }
@@ -134,7 +201,7 @@ export function V0TelegramBotLoginPage(props: { onAuth: (me: MeResponse) => void
   async function submitForm(e: FormEvent) {
     e.preventDefault();
     if (!name.trim()) {
-      setError("Введите имя");
+      setError(t("tgLogin.errNameRequired"));
       return;
     }
     setCompleting(true);
@@ -165,7 +232,7 @@ export function V0TelegramBotLoginPage(props: { onAuth: (me: MeResponse) => void
         nav(me.surveyCompleted ? "/" : "/survey", { replace: true });
       }
     } catch (e: any) {
-      setError(e?.message ?? "Не удалось завершить регистрацию");
+      setError(e?.message ?? t("tgLogin.errSignup"));
       setCompleting(false);
     }
   }
@@ -179,7 +246,7 @@ export function V0TelegramBotLoginPage(props: { onAuth: (me: MeResponse) => void
         <Button asChild variant="outline" size="sm">
           <a href={deepLink} target="_blank" rel="noreferrer">
             <ExternalLink className="mr-2 h-4 w-4" />
-            Открыть Telegram ещё раз
+            {t("tgLogin.openAgain")}
           </a>
         </Button>
       ) : null}
@@ -193,35 +260,31 @@ export function V0TelegramBotLoginPage(props: { onAuth: (me: MeResponse) => void
           {emailConfirmSent ? (
             <div className="flex flex-col items-center gap-4 text-center">
               <Mail className="h-12 w-12 text-primary" />
-              <div className="text-lg font-semibold">Проверь почту</div>
+              <div className="text-lg font-semibold">{t("tgLogin.checkEmail")}</div>
               <div className="text-sm text-muted-foreground">
-                Этот email уже зарегистрирован в Padix. Чтобы убедиться что это твой аккаунт,
-                мы отправили подтверждение на <span className="font-mono">{emailConfirmSent}</span>.
+                {t("tgLogin.emailTaken")} <span className="font-mono">{emailConfirmSent}</span>.
               </div>
               <div className="text-sm text-muted-foreground">
-                Открой почту и нажми «Привязать Telegram» в письме — потом вернись сюда залогиненным.
+                {t("tgLogin.emailTakenHint")}
               </div>
               <div className="text-xs text-muted-foreground">
-                Не нашёл письмо? Проверь спам или попробуй с другим email.
+                {t("tgLogin.emailTakenSpam")}
               </div>
               <Button variant="outline" onClick={() => setEmailConfirmSent(null)}>
-                Изменить email
+                {t("tgLogin.changeEmail")}
               </Button>
             </div>
           ) : error ? (
             <div className="flex flex-col items-center gap-4 text-center">
               <XCircle className="h-12 w-12 text-rose-500" />
-              <div className="text-lg font-semibold">Не получилось</div>
+              <div className="text-lg font-semibold">{t("tgLogin.failedTitle")}</div>
               <div className="text-sm text-muted-foreground">{error}</div>
-              <Button onClick={() => nav("/login", { replace: true })}>На страницу входа</Button>
+              <Button onClick={() => nav("/login", { replace: true })}>{t("tgLogin.toLogin")}</Button>
             </div>
           ) : status === null ? (
-            renderWaiting("Готовим вход…")
+            renderWaiting(t("tgLogin.preparing"))
           ) : status.status === "PENDING" ? (
-            renderWaiting(
-              "Открой Telegram и нажми «Start»",
-              "Если Telegram не открылся автоматически — жми кнопку ниже.",
-            )
+            renderWaiting(t("tgLogin.pendingTitle"), t("tgLogin.pendingHint"))
           ) : status.status === "AWAITING_APPROVAL" ? (
             <div className="flex flex-col items-center gap-4 text-center">
               <div className="flex items-center gap-3">
@@ -233,79 +296,79 @@ export function V0TelegramBotLoginPage(props: { onAuth: (me: MeResponse) => void
                   </div>
                 )}
                 <div className="text-left">
-                  <div className="font-semibold">{status.telegramName ?? "Пользователь"}</div>
+                  <div className="font-semibold">{status.telegramName ?? t("tgLogin.userFallback")}</div>
                   {status.telegramUsername ? (
                     <div className="text-xs text-muted-foreground">@{status.telegramUsername}</div>
                   ) : null}
                 </div>
               </div>
               <Loader2 className="h-8 w-8 animate-spin text-primary" />
-              <div className="text-sm">Бот спрашивает у тебя подтверждение в Telegram</div>
-              <div className="text-xs text-muted-foreground">Тапни «✅ Войти» в чате с ботом</div>
+              <div className="text-sm">{t("tgLogin.awaitingTitle")}</div>
+              <div className="text-xs text-muted-foreground">{t("tgLogin.awaitingHint")}</div>
             </div>
           ) : status.status === "APPROVED" && linkMode ? (
             // Link-mode: бэк сейчас линкует TG к текущему юзеру, форма регистрации не нужна.
             // ВАЖНО: эта ветка должна идти ПЕРЕД проверкой existingUser, иначе у юзера
             // с новым (ещё не привязанным) TG на долю секунды промелькнёт «регистрация».
-            renderWaiting("Привязываем Telegram…")
+            renderWaiting(t("tgLogin.linking"))
           ) : status.status === "APPROVED" && status.existingUser === true ? (
-            renderWaiting("Готово, заходим…")
+            renderWaiting(t("tgLogin.signingIn"))
           ) : status.status === "APPROVED" ? (
             // Новый юзер — completion-форма с предзаполненным именем из Telegram.
             <form onSubmit={submitForm} className="space-y-4">
               <div className="flex flex-col items-center gap-3 text-center">
                 <CheckCircle2 className="h-12 w-12 text-emerald-500" />
-                <div className="text-lg font-semibold">Telegram подтвердил вход</div>
+                <div className="text-lg font-semibold">{t("tgLogin.approvedTitle")}</div>
                 <div className="text-sm text-muted-foreground">
-                  Заверши регистрацию — дальше пройдёшь короткий опрос.
+                  {t("tgLogin.approvedHint")}
                 </div>
               </div>
               <div className="space-y-1.5">
-                <label className="text-sm font-medium">Имя в Padix</label>
+                <label className="text-sm font-medium">{t("tgLogin.nameLabel")}</label>
                 <Input value={name} onChange={(e) => setName(e.target.value)} required />
-                <div className="text-xs text-muted-foreground">Подгружено из Telegram, можно поменять.</div>
+                <div className="text-xs text-muted-foreground">{t("tgLogin.nameHint")}</div>
               </div>
               <div className="space-y-1.5">
-                <label className="text-sm font-medium">Email (опц.)</label>
+                <label className="text-sm font-medium">{t("tgLogin.emailLabel")}</label>
                 <Input
                   type="email"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  placeholder="можно потом в настройках"
+                  placeholder={t("tgLogin.emailPlaceholder")}
                   autoComplete="email"
                 />
               </div>
               <div className="space-y-1.5">
-                <label className="text-sm font-medium">Пол</label>
+                <label className="text-sm font-medium">{t("tgLogin.genderLabel")}</label>
                 <Select value={gender || "_unset"} onValueChange={(v) => setGender(v === "_unset" ? "" : v)}>
                   <SelectTrigger className="h-10">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="_unset">Не указан</SelectItem>
-                    <SelectItem value="M">М</SelectItem>
-                    <SelectItem value="F">Ж</SelectItem>
+                    <SelectItem value="_unset">{t("tgLogin.genderUnset")}</SelectItem>
+                    <SelectItem value="M">{t("tgLogin.genderM")}</SelectItem>
+                    <SelectItem value="F">{t("tgLogin.genderF")}</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
               <Button type="submit" disabled={completing} className="w-full">
-                {completing ? "Создаём аккаунт…" : "Создать аккаунт"}
+                {completing ? t("tgLogin.creating") : t("tgLogin.create")}
               </Button>
             </form>
           ) : status.status === "REJECTED" ? (
             <div className="flex flex-col items-center gap-4 text-center">
               <XCircle className="h-12 w-12 text-rose-500" />
-              <div className="text-lg font-semibold">Вход отменён</div>
-              <div className="text-sm text-muted-foreground">Ты нажал «Отмена» в боте.</div>
-              <Button onClick={() => nav("/login", { replace: true })}>На страницу входа</Button>
+              <div className="text-lg font-semibold">{t("tgLogin.rejectedTitle")}</div>
+              <div className="text-sm text-muted-foreground">{t("tgLogin.rejectedHint")}</div>
+              <Button onClick={() => nav("/login", { replace: true })}>{t("tgLogin.toLogin")}</Button>
             </div>
           ) : (
             // EXPIRED
             <div className="flex flex-col items-center gap-4 text-center">
               <XCircle className="h-12 w-12 text-amber-500" />
-              <div className="text-lg font-semibold">Ссылка истекла</div>
-              <div className="text-sm text-muted-foreground">Токен живёт 5 минут.</div>
-              <Button onClick={() => nav("/login", { replace: true })}>Начать заново</Button>
+              <div className="text-lg font-semibold">{t("tgLogin.expiredTitle")}</div>
+              <div className="text-sm text-muted-foreground">{t("tgLogin.expiredHint")}</div>
+              <Button onClick={() => nav("/login", { replace: true })}>{t("tgLogin.restart")}</Button>
             </div>
           )}
         </CardContent>

@@ -1,4 +1,11 @@
 import { useEffect, useRef, useState } from "react";
+import { Dict, useI18n } from "@/lib/i18n";
+
+const TR = {
+  "google.signup": { ru: "Зарегистрироваться через Google", en: "Sign up with Google" },
+  "google.continue": { ru: "Продолжить с Google", en: "Continue with Google" },
+  "google.signin": { ru: "Войти через Google", en: "Sign in with Google" },
+} satisfies Dict;
 
 declare global {
   interface Window {
@@ -48,6 +55,7 @@ export function GoogleLoginButton(props: {
   text?: GoogleButtonOptions["text"];
   size?: GoogleButtonOptions["size"];
 }) {
+  const { t } = useI18n(TR);
   const overlayRef = useRef<HTMLDivElement>(null);
   const onAuthRef = useRef(props.onAuth);
   const [ready, setReady] = useState(false);
@@ -105,10 +113,10 @@ export function GoogleLoginButton(props: {
 
   const ariaLabel =
     props.text === "signup_with"
-      ? "Зарегистрироваться через Google"
+      ? t("google.signup")
       : props.text === "continue_with"
-        ? "Продолжить с Google"
-        : "Войти через Google";
+        ? t("google.continue")
+        : t("google.signin");
 
   return (
     <div className="relative inline-block" title={ariaLabel}>

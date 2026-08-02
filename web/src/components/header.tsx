@@ -383,7 +383,7 @@ export function Header(props: {
                                         await loadNotifications();
                                         await props.onRefreshNotifications();
                                       } catch (e: any) {
-                                        setNotificationsError(e?.message ?? "Ошибка");
+                                        setNotificationsError(e?.message ?? t("action.error"));
                                       } finally {
                                         setActionKey(null);
                                       }
@@ -404,7 +404,7 @@ export function Header(props: {
                                         await loadNotifications();
                                         await props.onRefreshNotifications();
                                       } catch (e: any) {
-                                        setNotificationsError(e?.message ?? "Ошибка");
+                                        setNotificationsError(e?.message ?? t("action.error"));
                                       } finally {
                                         setActionKey(null);
                                       }

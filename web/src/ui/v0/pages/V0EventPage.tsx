@@ -340,6 +340,14 @@ function roundWord(n: number, lang: Lang): string {
   return plural(lang, n, ["равный раунд", "равных раунда", "равных раундов"], ["balanced round", "balanced rounds"]);
 }
 
+function courtsWord(n: number, lang: Lang): string {
+  return plural(lang, n, ["корт", "корта", "кортов"], ["court", "courts"]);
+}
+
+function matchWord(n: number, lang: Lang): string {
+  return plural(lang, n, ["матч", "матча", "матчей"], ["match", "matches"]);
+}
+
 function pairingLabel(mode: string | undefined, t: TFn): string {
   if (mode === "BALANCED") return t("pairing.balanced");
   return t("pairing.roundRobin");
@@ -428,7 +436,7 @@ export function V0EventPage(props: { me: any; meLoaded?: boolean }) {
       await api.addRound(eventId, count);
       const refreshed = await api.getEventDetails(eventId);
       setData(refreshed);
-      setInfo(count > 1 ? `Серия из ${count} раундов добавлена.` : "Раунд добавлен.");
+      setInfo(count > 1 ? t("rounds.seriesAdded", { n: count }) : t("rounds.roundAdded"));
       const rounds = refreshed.rounds ?? [];
       const newRound = rounds[rounds.length - 1];
       if (newRound?.id) {
@@ -436,7 +444,7 @@ export function V0EventPage(props: { me: any; meLoaded?: boolean }) {
         setTimeout(() => activeRoundRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" }), 150);
       }
     } catch (err: any) {
-      setActionError(err?.message ?? "Ошибка добавления раунда");
+      setActionError(err?.message ?? t("rounds.addError"));
     } finally {
       setAddingRounds(false);
     }
@@ -646,8 +654,8 @@ export function V0EventPage(props: { me: any; meLoaded?: boolean }) {
     const currentRoundIdx = data.rounds.findIndex((r) => r.matches.some((m) => m.id === activeMatchId));
     if (currentRoundIdx < 0) return null;
     const isLastRound = currentRoundIdx === data.rounds.length - 1;
-    return isLastRound ? null : "Следующий раунд";
-  }, [data, activeMatchId]);
+    return isLastRound ? null : t("rounds.nextRound");
+  }, [data, activeMatchId, t]);
 
   const renderTeamScore = (team: Match["teamA"], score: number, side: "left" | "right") => {
     const first = team[0];
@@ -735,7 +743,7 @@ export function V0EventPage(props: { me: any; meLoaded?: boolean }) {
     api
       .getFriends()
       .then(setFriends)
-      .catch((e: any) => setFriendsError(e?.message ?? "Ошибка загрузки друзей"));
+      .catch((e: any) => setFriendsError(e?.message ?? t("friends.loadError")));
   }, [props.me, friends]);
 
   useEffect(() => {
@@ -746,7 +754,7 @@ export function V0EventPage(props: { me: any; meLoaded?: boolean }) {
     api
       .getFriends()
       .then(setFriends)
-      .catch((e: any) => setFriendsError(e?.message ?? "Ошибка загрузки друзей"));
+      .catch((e: any) => setFriendsError(e?.message ?? t("friends.loadError")));
   }, [inviteOpen, props.me, friends]);
 
 
@@ -764,7 +772,7 @@ export function V0EventPage(props: { me: any; meLoaded?: boolean }) {
       })
       .catch((e: unknown) => {
         if (cancelled) return;
-        setLoadError(e instanceof Error ? e.message : "Ошибка загрузки");
+        setLoadError(e instanceof Error ? e.message : t("common.loadError"));
       })
       .finally(() => {
         if (cancelled) return;
@@ -914,14 +922,14 @@ export function V0EventPage(props: { me: any; meLoaded?: boolean }) {
 
   const content = useMemo(() => {
     if (!props.me) {
-      if (loading) return <div className="text-sm text-muted-foreground">Загрузка…</div>;
+      if (loading) return <div className="text-sm text-muted-foreground">{t("common.loading")}</div>;
       if (loadError)
         return (
           <div className="rounded-lg border border-destructive/30 bg-destructive/10 p-4 text-sm">
-            Не удалось загрузить: {loadError}
+            {t("common.loadFailed")}: {loadError}
           </div>
         );
-      if (!data) return <div className="text-sm text-muted-foreground">Событие не найдено.</div>;
+      if (!data) return <div className="text-sm text-muted-foreground">{t("common.notFound")}</div>;
       const e = data.event;
       return (
         <div className="space-y-6 pb-8">
@@ -931,7 +939,7 @@ export function V0EventPage(props: { me: any; meLoaded?: boolean }) {
             className="inline-flex items-center gap-2 text-muted-foreground hover:text-foreground transition-colors group"
           >
             <ArrowLeft className="h-4 w-4 group-hover:-translate-x-1 transition-transform" />
-            <span>Назад к играм</span>
+            <span>{t("common.backToGames")}</span>
           </Link>
 
           <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-primary/20 via-primary/10 to-transparent border border-border/50">
@@ -956,13 +964,13 @@ export function V0EventPage(props: { me: any; meLoaded?: boolean }) {
                     </div>
                     <div className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-card/80 backdrop-blur-sm border border-border/50">
                       <MapPin className="h-4 w-4 text-primary" />
-                      <span className="font-medium">{e.courtsCount} корта</span>
+                      <span className="font-medium">{e.courtsCount} {courtsWord(e.courtsCount, lang)}</span>
                     </div>
                   </div>
                 </div>
 
                 <div className="text-sm text-muted-foreground">
-                  Войдите, чтобы участвовать и вводить счёт.
+                  {t("common.loginToParticipate")}
                 </div>
               </div>
             </div>
@@ -970,14 +978,14 @@ export function V0EventPage(props: { me: any; meLoaded?: boolean }) {
         </div>
       );
     }
-    if (loading) return <div className="text-sm text-muted-foreground">Загрузка…</div>;
+    if (loading) return <div className="text-sm text-muted-foreground">{t("common.loading")}</div>;
     if (loadError)
       return (
         <div className="rounded-lg border border-destructive/30 bg-destructive/10 p-4 text-sm">
-          Не удалось загрузить: {loadError}
+          {t("common.loadFailed")}: {loadError}
         </div>
       );
-    if (!data) return <div className="text-sm text-muted-foreground">Событие не найдено.</div>;
+    if (!data) return <div className="text-sm text-muted-foreground">{t("common.notFound")}</div>;
 
     // PRIVATE-игра, к которой у юзера нет доступа: показываем заглушку без раундов/игроков.
     if (data.accessRestricted) {
@@ -990,28 +998,27 @@ export function V0EventPage(props: { me: any; meLoaded?: boolean }) {
             className="inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors group"
           >
             <ArrowLeft className="h-4 w-4 group-hover:-translate-x-1 transition-transform" />
-            К списку игр
+            {t("common.toGamesList")}
           </Link>
           <div className="rounded-xl border border-border/60 bg-card p-6 space-y-4">
             <div className="flex items-center gap-2 text-2xl">
               <Lock className="h-6 w-6 text-muted-foreground" />
-              <span className="font-semibold">Приватная игра</span>
+              <span className="font-semibold">{t("private.title")}</span>
             </div>
             <div className="space-y-1.5">
-              <div className="text-lg font-medium">{ev.title || "Игра"}</div>
+              <div className="text-lg font-medium">{ev.title || t("common.game")}</div>
               <div className="text-sm text-muted-foreground">
-                {ev.date} · {ev.startTime}–{ev.endTime} · Кортов: {ev.courtsCount}
+                {ev.date} · {ev.startTime}–{ev.endTime} · {t("edit.courts")}: {ev.courtsCount}
               </div>
               <div className="text-sm text-muted-foreground">
-                Организатор: <span className="text-foreground font-medium">{data.authorName}</span>
+                {t("private.organizer")}: <span className="text-foreground font-medium">{data.authorName}</span>
               </div>
               <div className="text-sm text-muted-foreground">
-                Записано: <span className="text-foreground font-medium tabular-nums">{ev.registeredCount}/{ev.courtsCount * 4}</span>
+                {t("private.registered")}: <span className="text-foreground font-medium tabular-nums">{ev.registeredCount}/{ev.courtsCount * 4}</span>
               </div>
             </div>
             <div className="rounded-lg border border-amber-500/40 dark:border-amber-500/30 bg-amber-500/10 dark:bg-amber-500/5 p-3 text-sm text-amber-900 dark:text-amber-100">
-              Состав, раунды и счёт доступны только участникам игры и приглашённым.
-              Попроси организатора пригласить тебя — приглашение придёт в раздел уведомлений.
+              {t("private.accessNote")}
             </div>
           </div>
         </div>
@@ -1034,7 +1041,11 @@ export function V0EventPage(props: { me: any; meLoaded?: boolean }) {
     const maxR = e.maxRating ?? null;
     const hasRatingLimit = minR != null || maxR != null;
     const ratingRangeLabel =
-      minR != null && maxR != null ? `${minR}–${maxR}` : minR != null ? `от ${minR}` : `до ${maxR}`;
+      minR != null && maxR != null
+        ? `${minR}–${maxR}`
+        : minR != null
+          ? t("rating.from", { n: minR })
+          : t("rating.to", { n: maxR! });
     const ratingOutOfRange =
       meRating != null && ((minR != null && meRating < minR) || (maxR != null && meRating > maxR));
     const ratingBlocked = hasRatingLimit && !isAuthor && ratingOutOfRange;
@@ -1069,7 +1080,7 @@ export function V0EventPage(props: { me: any; meLoaded?: boolean }) {
           className="inline-flex items-center gap-2 text-muted-foreground hover:text-foreground transition-colors group"
         >
           <ArrowLeft className="h-4 w-4 group-hover:-translate-x-1 transition-transform" />
-          <span>Назад к играм</span>
+          <span>{t("common.backToGames")}</span>
         </Link>
 
         <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-primary/20 via-primary/10 to-transparent border border-border/50">
@@ -1082,29 +1093,29 @@ export function V0EventPage(props: { me: any; meLoaded?: boolean }) {
                   </span>
                   {isAuthor ? (
                     <span className="inline-flex items-center rounded-md border border-primary/50 bg-primary/10 px-3 py-1 text-sm font-medium text-primary">
-                      Вы автор
+                      {t("header.youAreAuthor")}
                     </span>
                   ) : (
                     <span className="inline-flex items-center rounded-md bg-secondary px-3 py-1 text-sm font-medium text-secondary-foreground">
-                      Автор: {data.authorName}
+                      {t("header.author")}: {data.authorName}
                     </span>
                   )}
                   {e.kind === "TOURNAMENT" && (
                     <span className="inline-flex items-center gap-1 rounded-md border border-emerald-500/40 bg-emerald-500/10 px-3 py-1 text-sm font-medium text-emerald-700 dark:text-emerald-300">
                       <Trophy className="h-3.5 w-3.5" />
-                      Турнир — вне рейтинга
+                      {t("header.tournamentUnrated")}
                     </span>
                   )}
                   {e.format === "MEXICANO" && (
                     <span className="inline-flex items-center gap-1 rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-1 text-sm font-medium text-amber-700 dark:text-amber-300">
                       <Zap className="h-3.5 w-3.5" />
-                      Мексикано
+                      {t("header.mexicano")}
                     </span>
                   )}
                   {e.format === "FIXED_PAIRS" && (
                     <span className="inline-flex items-center gap-1 rounded-md border border-violet-500/40 bg-violet-500/10 px-3 py-1 text-sm font-medium text-violet-700 dark:text-violet-300">
                       <Users className="h-3.5 w-3.5" />
-                      Фиксированные пары
+                      {t("header.fixedPairs")}
                     </span>
                   )}
                   {e.seriesId ? (
@@ -1114,12 +1125,12 @@ export function V0EventPage(props: { me: any; meLoaded?: boolean }) {
                         className="inline-flex items-center gap-1 rounded-md border border-sky-500/40 bg-sky-500/10 px-3 py-1 text-sm font-medium text-sky-700 dark:text-sky-300 hover:bg-sky-500/20 transition-colors"
                       >
                         <Repeat className="h-3.5 w-3.5" />
-                        По подписке{e.seriesTitle ? `: ${e.seriesTitle}` : ""}
+                        {t("header.bySubscription")}{e.seriesTitle ? `: ${e.seriesTitle}` : ""}
                       </Link>
                     ) : (
                       <span className="inline-flex items-center gap-1 rounded-md border border-sky-500/40 dark:border-sky-500/30 bg-sky-500/10 dark:bg-sky-500/5 px-3 py-1 text-sm font-medium text-sky-700/90 dark:text-sky-300/80">
                         <Repeat className="h-3.5 w-3.5" />
-                        Регулярная{e.seriesTitle ? `: ${e.seriesTitle}` : ""}
+                        {t("header.recurring")}{e.seriesTitle ? `: ${e.seriesTitle}` : ""}
                       </span>
                     )
                   ) : null}
@@ -1137,12 +1148,12 @@ export function V0EventPage(props: { me: any; meLoaded?: boolean }) {
                   </div>
                   <div className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-card/80 backdrop-blur-sm border border-border/50">
                     <MapPin className="h-4 w-4 text-primary" />
-                    <span className="font-medium">{e.courtsCount} корта</span>
+                    <span className="font-medium">{e.courtsCount} {courtsWord(e.courtsCount, lang)}</span>
                   </div>
                   {hasRatingLimit && (
                     <div className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-card/80 backdrop-blur-sm border border-border/50">
                       <Target className="h-4 w-4 text-primary" />
-                      <span className="font-medium">Рейтинг {ratingRangeLabel}</span>
+                      <span className="font-medium">{t("common.rating")} {ratingRangeLabel}</span>
                     </div>
                   )}
                 </div>
@@ -1165,16 +1176,16 @@ export function V0EventPage(props: { me: any; meLoaded?: boolean }) {
                             await api.cancelRegistration(eventId);
                             const refreshed = await api.getEventDetails(eventId);
                             setData(refreshed);
-                            setInfo("Регистрация отменена");
+                            setInfo(t("join.cancelled"));
                           } catch (err: any) {
-                            setActionError(err?.message ?? "Ошибка отмены");
+                            setActionError(err?.message ?? t("join.cancelError"));
                           } finally {
                             setCanceling(false);
                           }
                         }}
                       >
                         <Check className="h-5 w-5 mr-2" />
-                        {canceling ? "Отмена…" : "Вы записаны (отменить)"}
+                        {canceling ? t("join.cancelling") : t("join.youAreIn")}
                       </button>
                     ) : e.status === "OPEN_FOR_REGISTRATION" ? (
                       ratingBlocked ? (
@@ -1185,10 +1196,10 @@ export function V0EventPage(props: { me: any; meLoaded?: boolean }) {
                             className="h-11 w-full px-6 rounded-md border border-border bg-secondary text-muted-foreground text-sm font-medium cursor-not-allowed inline-flex items-center justify-center gap-2"
                           >
                             <Target className="h-4 w-4" />
-                            Рейтинг не подходит
+                            {t("join.ratingMismatch")}
                           </button>
                           <p className="text-xs text-muted-foreground">
-                            Твой рейтинг {meRating} вне диапазона {ratingRangeLabel}. Попроси организатора добавить тебя вручную.
+                            {t("join.ratingOutOfRange", { rating: meRating ?? "", range: ratingRangeLabel })}
                           </p>
                         </div>
                       ) : (
@@ -1206,19 +1217,19 @@ export function V0EventPage(props: { me: any; meLoaded?: boolean }) {
                               await api.registerForEvent(eventId, meId);
                               const refreshed = await api.getEventDetails(eventId);
                               setData(refreshed);
-                              setInfo("Вы записаны");
+                              setInfo(t("join.registered"));
                             } catch (err: any) {
-                              setActionError(err?.message ?? "Ошибка регистрации");
+                              setActionError(err?.message ?? t("join.registerError"));
                             } finally {
                               setRegistering(false);
                             }
                           }}
                         >
-                          {registering ? "Запись…" : "Записаться"}
+                          {registering ? t("join.joining") : t("join.join")}
                         </button>
                       )
                     ) : (
-                      <div className="text-sm text-muted-foreground">Регистрация закрыта</div>
+                      <div className="text-sm text-muted-foreground">{t("status.registrationClosed")}</div>
                     )}
 
                     {/* Кнопки организатора: та же колонка и ширина, что у кнопки записи выше —
@@ -1247,9 +1258,9 @@ export function V0EventPage(props: { me: any; meLoaded?: boolean }) {
                               console.error("balance preview failed", err);
                             }
                             const ok = await confirm({
-                              title: "Закрыть регистрацию?",
-                              description: "Новые игроки не смогут присоединиться к игре. После закрытия можно будет начать игру.",
-                              confirmLabel: "Закрыть",
+                              title: t("close.confirmTitle"),
+                              description: t("close.confirmDesc"),
+                              confirmLabel: t("close.confirmLabel"),
                             });
                             if (!ok) {
                               setClosing(false);
@@ -1259,17 +1270,17 @@ export function V0EventPage(props: { me: any; meLoaded?: boolean }) {
                               await api.closeRegistration(eventId);
                               const refreshed = await api.getEventDetails(eventId);
                               setData(refreshed);
-                              setInfo("Регистрация закрыта");
+                              setInfo(t("status.registrationClosed"));
                               setStartPromptOpen(true);
                             } catch (err: any) {
-                              setActionError(err?.message ?? "Ошибка закрытия");
+                              setActionError(err?.message ?? t("close.error"));
                             } finally {
                               setClosing(false);
                             }
                           }}
                         >
                           <Lock className="h-4 w-4" />
-                          {closing ? "Закрываем…" : "Закрыть регистрацию"}
+                          {closing ? t("close.closing") : t("close.closeRegistration")}
                         </button>
                       ) : null}
 
@@ -1281,7 +1292,7 @@ export function V0EventPage(props: { me: any; meLoaded?: boolean }) {
                           onClick={() => setStartPromptOpen(true)}
                         >
                           <Zap className="h-4 w-4" />
-                          {starting ? "Стартуем…" : "Начать игру"}
+                          {starting ? t("start.starting") : t("start.startGame")}
                         </button>
                       ) : null}
 
@@ -1328,26 +1339,26 @@ export function V0EventPage(props: { me: any; meLoaded?: boolean }) {
                             setRoundsOpen(true);
                           }}
                         >
-                          Ввести счёт
+                          {t("actions.enterScore")}
                         </button>
                       ) : (
-                        <div className="text-sm text-muted-foreground">Игра идёт</div>
+                        <div className="text-sm text-muted-foreground">{t("status.gameInProgress")}</div>
                       )}
                       <button
                         type="button"
                         className="h-11 w-full sm:w-auto px-6 rounded-md border border-border bg-secondary text-sm font-medium hover:bg-secondary/80 transition-colors"
                         onClick={() => setStatsOpen(true)}
                       >
-                        Таблица лидеров
+                        {t("actions.leaderboard")}
                       </button>
                       <button
                         type="button"
                         className="h-11 w-full sm:w-auto px-6 rounded-md border border-border bg-secondary text-sm font-medium hover:bg-secondary/80 transition-colors inline-flex items-center justify-center gap-2"
-                        title="Открыть табло для телевизора в новой вкладке"
+                        title={t("actions.tvTitle")}
                         onClick={() => window.open(`/events/${eventId}/board`, "_blank")}
                       >
                         <Tv className="h-4 w-4" />
-                        На ТВ
+                        {t("actions.onTv")}
                       </button>
                     </div>
 
@@ -1360,14 +1371,14 @@ export function V0EventPage(props: { me: any; meLoaded?: boolean }) {
                   </>
                 ) : e.status === "FINISHED" ? (
                   <div className="flex flex-wrap items-center gap-2">
-                    <div className="text-sm text-muted-foreground">Игра завершена</div>
+                    <div className="text-sm text-muted-foreground">{t("status.gameFinished")}</div>
                     {isAuthor && (
                       <button
                         type="button"
                         className="h-11 w-full sm:w-auto px-6 rounded-md bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 transition-colors"
                         onClick={() => setEditScoresOpen(true)}
                       >
-                        Редактировать счет
+                        {t("actions.editScores")}
                       </button>
                     )}
                     <button
@@ -1375,28 +1386,28 @@ export function V0EventPage(props: { me: any; meLoaded?: boolean }) {
                       className="h-11 w-full sm:w-auto px-6 rounded-md border border-border bg-secondary text-sm font-medium hover:bg-secondary/80 transition-colors"
                       onClick={() => setStatsOpen(true)}
                     >
-                      Таблица лидеров
+                      {t("actions.leaderboard")}
                     </button>
                     <button
                       type="button"
                       className="h-11 w-full sm:w-auto px-6 rounded-md border border-border bg-secondary text-sm font-medium hover:bg-secondary/80 transition-colors inline-flex items-center justify-center gap-2"
-                      title="Открыть табло для телевизора в новой вкладке"
+                      title={t("actions.tvTitle")}
                       onClick={() => window.open(`/events/${eventId}/board`, "_blank")}
                     >
                       <Tv className="h-4 w-4" />
-                      На ТВ
+                      {t("actions.onTv")}
                     </button>
                   </div>
                 ) : (
-                  <div className="text-sm text-muted-foreground">Статус: {statusLabel(e.status, t)}</div>
+                  <div className="text-sm text-muted-foreground">{t("status.label")}: {statusLabel(e.status, t)}</div>
                 )}
 
                 <div className="flex items-center gap-2 self-start sm:self-end justify-start sm:justify-end flex-wrap">
                   <button
                     type="button"
                     className="h-10 w-10 rounded-md border border-border bg-transparent hover:bg-secondary transition-colors inline-flex items-center justify-center"
-                    title="Пригласить"
-                    aria-label="Пригласить"
+                    title={t("actions.invite")}
+                    aria-label={t("actions.invite")}
                     onClick={() => setInviteOpen(true)}
                   >
                     <UserPlus className="h-4 w-4" />
@@ -1405,8 +1416,8 @@ export function V0EventPage(props: { me: any; meLoaded?: boolean }) {
                     <button
                       type="button"
                       className="h-10 w-10 rounded-md border border-border bg-transparent hover:bg-secondary transition-colors inline-flex items-center justify-center"
-                      title="Редактировать игру"
-                      aria-label="Редактировать игру"
+                      title={t("actions.editGame")}
+                      aria-label={t("actions.editGame")}
                       onClick={() => {
                         setEditTitle(e.title ?? "");
                         setEditDate(typeof e.date === "string" ? e.date : "");
@@ -1430,19 +1441,19 @@ export function V0EventPage(props: { me: any; meLoaded?: boolean }) {
                     <button
                       type="button"
                       className="h-10 w-10 rounded-md border border-border bg-transparent hover:bg-destructive/10 hover:border-destructive hover:text-destructive transition-colors inline-flex items-center justify-center"
-                      title="Удалить игру"
-                      aria-label="Удалить игру"
+                      title={t("actions.deleteGame")}
+                      aria-label={t("actions.deleteGame")}
                       onClick={async () => {
                         if (!eventId) return;
                         const ok = await confirm({
-                          title: "Удалить игру?",
+                          title: t("delete.confirmTitle"),
                           description: (
                             <>
-                              Игра <b>{e.title}</b> будет удалена со всеми регистрациями.
+                              {t("delete.gamePrefix")} <b>{e.title}</b> {t("delete.gameSuffix")}
                             </>
                           ),
-                          warning: "Действие нельзя отменить.",
-                          confirmLabel: "Удалить",
+                          warning: t("common.cannotUndo"),
+                          confirmLabel: t("common.delete"),
                           confirmVariant: "destructive",
                         });
                         if (!ok) return;
@@ -1451,7 +1462,7 @@ export function V0EventPage(props: { me: any; meLoaded?: boolean }) {
                           await api.deleteEvent(eventId);
                           navigate("/games");
                         } catch (err: any) {
-                          setActionError(err?.message ?? "Не удалось удалить игру");
+                          setActionError(err?.message ?? t("delete.error"));
                         }
                       }}
                     >
@@ -1461,12 +1472,12 @@ export function V0EventPage(props: { me: any; meLoaded?: boolean }) {
                   <button
                     type="button"
                     className="h-10 w-10 rounded-md border border-border bg-transparent hover:bg-secondary transition-colors inline-flex items-center justify-center"
-                    title="Поделиться"
-                    aria-label="Поделиться"
+                    title={t("actions.share")}
+                    aria-label={t("actions.share")}
                     onClick={async () => {
                       try {
                         await navigator.clipboard.writeText(window.location.href);
-                        setInfo("Ссылка скопирована");
+                        setInfo(t("share.copied"));
                       } catch {
                         setInfo(window.location.href);
                       }
@@ -1483,11 +1494,11 @@ export function V0EventPage(props: { me: any; meLoaded?: boolean }) {
         <Dialog open={editOpen} onOpenChange={(o) => { if (!editSaving) setEditOpen(o); }}>
           <DialogContent className="sm:max-w-md">
             <DialogHeader>
-              <DialogTitle>Редактировать игру</DialogTitle>
+              <DialogTitle>{t("actions.editGame")}</DialogTitle>
             </DialogHeader>
             <div className="space-y-3 text-sm">
               <div>
-                <label className="block mb-1 text-muted-foreground">Название</label>
+                <label className="block mb-1 text-muted-foreground">{t("edit.name")}</label>
                 <input
                   type="text"
                   className="w-full rounded-md border border-border bg-transparent px-3 py-2"
@@ -1496,25 +1507,25 @@ export function V0EventPage(props: { me: any; meLoaded?: boolean }) {
                 />
               </div>
               <div>
-                <label className="block mb-1 text-muted-foreground">Дата</label>
+                <label className="block mb-1 text-muted-foreground">{t("edit.date")}</label>
                 <DatePicker value={editDate} onChange={setEditDate} />
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block mb-1 text-muted-foreground">Начало</label>
+                  <label className="block mb-1 text-muted-foreground">{t("edit.start")}</label>
                   <TimePicker value={editStartTime} onChange={setEditStartTime} />
                 </div>
                 <div>
-                  <label className="block mb-1 text-muted-foreground">Окончание</label>
+                  <label className="block mb-1 text-muted-foreground">{t("edit.end")}</label>
                   <TimePicker value={editEndTime} onChange={setEditEndTime} />
                 </div>
               </div>
               {e.status === "OPEN_FOR_REGISTRATION" ? (
                 <>
                   <div>
-                    <label className="block mb-1 text-muted-foreground">Система счёта</label>
+                    <label className="block mb-1 text-muted-foreground">{t("edit.scoringSystem")}</label>
                     <div className="grid grid-cols-2 gap-2">
-                      {([{ v: "POINTS" as const, t: "Очки" }, { v: "SETS" as const, t: "Сеты" }]).map((o) => (
+                      {([{ v: "POINTS" as const, label: t("edit.points") }, { v: "SETS" as const, label: t("edit.sets") }]).map((o) => (
                         <button
                           key={o.v}
                           type="button"
@@ -1524,7 +1535,7 @@ export function V0EventPage(props: { me: any; meLoaded?: boolean }) {
                             editScoringMode === o.v ? "border-primary bg-primary/10 text-primary" : "border-border bg-transparent text-muted-foreground hover:bg-secondary/30",
                           )}
                         >
-                          {o.t}
+                          {o.label}
                         </button>
                       ))}
                     </div>
@@ -1532,7 +1543,7 @@ export function V0EventPage(props: { me: any; meLoaded?: boolean }) {
                   <div className="grid grid-cols-2 gap-3">
                     {editScoringMode === "POINTS" ? (
                       <div>
-                        <label className="block mb-1 text-muted-foreground">Очков на игрока</label>
+                        <label className="block mb-1 text-muted-foreground">{t("edit.pointsPerPlayer")}</label>
                         <input
                           type="number"
                           min={1}
@@ -1543,7 +1554,7 @@ export function V0EventPage(props: { me: any; meLoaded?: boolean }) {
                       </div>
                     ) : (
                       <div>
-                        <label className="block mb-1 text-muted-foreground">Геймов в сете</label>
+                        <label className="block mb-1 text-muted-foreground">{t("edit.gamesPerSet")}</label>
                         <input
                           type="number"
                           min={1}
@@ -1554,7 +1565,7 @@ export function V0EventPage(props: { me: any; meLoaded?: boolean }) {
                       </div>
                     )}
                     <div>
-                      <label className="block mb-1 text-muted-foreground">Кортов</label>
+                      <label className="block mb-1 text-muted-foreground">{t("edit.courts")}</label>
                       <input
                         type="number"
                         min={1}
@@ -1565,7 +1576,7 @@ export function V0EventPage(props: { me: any; meLoaded?: boolean }) {
                     </div>
                     {editScoringMode === "SETS" && (
                       <div>
-                        <label className="block mb-1 text-muted-foreground">Сетов в матче</label>
+                        <label className="block mb-1 text-muted-foreground">{t("edit.setsPerMatch")}</label>
                         <input
                           type="number"
                           min={1}
@@ -1579,15 +1590,15 @@ export function V0EventPage(props: { me: any; meLoaded?: boolean }) {
                 </>
               ) : (
                 <div className="text-xs text-muted-foreground">
-                  Игра уже стартовала — можно редактировать только название, дату, время и видимость.
+                  {t("edit.startedNote")}
                 </div>
               )}
               <div>
-                <label className="block mb-1 text-muted-foreground">Видимость</label>
+                <label className="block mb-1 text-muted-foreground">{t("edit.visibility")}</label>
                 <div className="grid grid-cols-2 gap-2">
                   {([
-                    { value: "PUBLIC" as const, icon: Globe, title: "Открытая", desc: "Видна всем, любой может записаться" },
-                    { value: "PRIVATE" as const, icon: Lock, title: "Приватная", desc: "В /games видна, детали — только участникам" },
+                    { value: "PUBLIC" as const, icon: Globe, title: t("edit.public"), desc: t("edit.publicDesc") },
+                    { value: "PRIVATE" as const, icon: Lock, title: t("edit.private"), desc: t("edit.privateDesc") },
                   ]).map((opt) => {
                     const Icon = opt.icon;
                     const active = editVisibility === opt.value;
@@ -1617,7 +1628,7 @@ export function V0EventPage(props: { me: any; meLoaded?: boolean }) {
             </div>
             <div className="mt-4 flex items-center gap-2 justify-end">
               <Button variant="outline" className="bg-transparent" disabled={editSaving} onClick={() => setEditOpen(false)}>
-                Отмена
+                {t("common.cancel")}
               </Button>
               <Button
                 disabled={editSaving}
@@ -1648,16 +1659,16 @@ export function V0EventPage(props: { me: any; meLoaded?: boolean }) {
                     await api.updateEvent(eventId, payload);
                     const refreshed = await api.getEventDetails(eventId);
                     setData(refreshed);
-                    setInfo("Игра обновлена.");
+                    setInfo(t("edit.updated"));
                     setEditOpen(false);
                   } catch (err: any) {
-                    setEditError(err?.message ?? "Не удалось сохранить");
+                    setEditError(err?.message ?? t("edit.saveError"));
                   } finally {
                     setEditSaving(false);
                   }
                 }}
               >
-                {editSaving ? "Сохраняем…" : "Сохранить"}
+                {editSaving ? t("common.saving") : t("common.save")}
               </Button>
             </div>
           </DialogContent>
@@ -1666,14 +1677,14 @@ export function V0EventPage(props: { me: any; meLoaded?: boolean }) {
         <Dialog open={inviteOpen} onOpenChange={setInviteOpen}>
           <DialogContent className="sm:max-w-md">
             <DialogHeader>
-              <DialogTitle>Пригласить друзей</DialogTitle>
+              <DialogTitle>{t("invite.title")}</DialogTitle>
             </DialogHeader>
             <div className="space-y-2 mt-4">
               {friendsError ? (
                 <div className="rounded-lg border border-destructive/30 bg-destructive/10 p-3 text-sm">{friendsError}</div>
               ) : null}
               {(friends?.friends ?? []).length === 0 ? (
-                <div className="text-sm text-muted-foreground">Пока нет друзей для приглашения.</div>
+                <div className="text-sm text-muted-foreground">{t("invite.noFriends")}</div>
               ) : (
                 (friends?.friends ?? []).map((friend: FriendItem) => (
                   <div
@@ -1686,7 +1697,7 @@ export function V0EventPage(props: { me: any; meLoaded?: boolean }) {
                       </div>
                       <div className="min-w-0">
                         <p className="font-medium truncate">{friend.name}</p>
-                        <p className="text-sm text-muted-foreground">Рейтинг: {friend.rating}</p>
+                        <p className="text-sm text-muted-foreground">{t("common.rating")}: {friend.rating}</p>
                       </div>
                     </div>
                     <div className="flex items-center gap-2 sm:shrink-0">
@@ -1702,7 +1713,7 @@ export function V0EventPage(props: { me: any; meLoaded?: boolean }) {
                               variant="default"
                               className="flex-1 sm:flex-none sm:w-[110px]"
                               disabled={!eventId || invitingId === friend.publicId || isInEvent}
-                              title="Добавить в игру сразу, без согласия друга"
+                              title={t("invite.addDirectTitle")}
                               onClick={async () => {
                                 if (!eventId) return;
                                 setInvitingId(friend.publicId);
@@ -1712,7 +1723,7 @@ export function V0EventPage(props: { me: any; meLoaded?: boolean }) {
                                   const refreshed = await api.getEventDetails(eventId);
                                   setData(refreshed);
                                 } catch (e: any) {
-                                  setFriendsError(e?.message ?? "Не удалось добавить");
+                                  setFriendsError(e?.message ?? t("invite.addError"));
                                 } finally {
                                   setInvitingId(null);
                                 }
@@ -1721,10 +1732,10 @@ export function V0EventPage(props: { me: any; meLoaded?: boolean }) {
                               {isInEvent ? (
                                 <>
                                   <Check className="h-4 w-4 mr-1" />
-                                  Добавлен
+                                  {t("invite.added")}
                                 </>
                               ) : (
-                                "Добавить"
+                                t("common.add")
                               )}
                             </Button>
                             <Button
@@ -1732,7 +1743,7 @@ export function V0EventPage(props: { me: any; meLoaded?: boolean }) {
                               variant="outline"
                               className="flex-1 sm:flex-none sm:w-[110px]"
                               disabled={!eventId || invitingId === friend.publicId || isInEvent || sentInvite}
-                              title="Отправить приглашение — друг сам решит присоединиться"
+                              title={t("invite.sendInviteTitle")}
                               onClick={async () => {
                                 if (!eventId) return;
                                 setInvitingId(friend.publicId);
@@ -1741,13 +1752,13 @@ export function V0EventPage(props: { me: any; meLoaded?: boolean }) {
                                   await api.inviteFriendToEvent(eventId, friend.publicId);
                                   setInvited((m) => ({ ...m, [friend.publicId]: true }));
                                 } catch (e: any) {
-                                  setFriendsError(e?.message ?? "Ошибка приглашения");
+                                  setFriendsError(e?.message ?? t("invite.inviteError"));
                                 } finally {
                                   setInvitingId(null);
                                 }
                               }}
                             >
-                              {sentInvite ? "Приглашён" : "Пригласить"}
+                              {sentInvite ? t("invite.invited") : t("actions.invite")}
                             </Button>
                           </>
                         );
@@ -1778,10 +1789,10 @@ export function V0EventPage(props: { me: any; meLoaded?: boolean }) {
                 <DialogHeader>
                   <DialogTitle className="text-center text-xl">
                     {balancePreview.maxGoodRounds === 0 ? (
-                      "Нет равных раундов"
+                      t("balance.noEqualRounds")
                     ) : (
                       <>
-                        Возможно{" "}
+                        {t("balance.upTo")}{" "}
                         <span className={cn(
                           balancePreview.severity === "LARGE" && "text-rose-700 dark:text-rose-400",
                           balancePreview.severity === "MEDIUM" && "text-amber-700 dark:text-amber-300",
@@ -1801,12 +1812,12 @@ export function V0EventPage(props: { me: any; meLoaded?: boolean }) {
                     const req = balancePreview.requestedRounds;
                     const spread = balancePreview.ratingSpread;
                     if (N === 0) {
-                      return `Состав слишком разнородный (разброс ${spread}) — нет варианта, где команды получились бы равны по силе.`;
+                      return t("balance.tooDiverse", { spread });
                     }
                     if (req !== null && N < req) {
-                      return `Разброс рейтингов ${spread}. С таким составом это максимум — больше равных раундов не получится. Запрошено ${req}.`;
+                      return t("balance.maxReached", { spread, req });
                     }
-                    return `Разброс рейтингов ${spread}, но команды получится сбалансировать во всех раундах.`;
+                    return t("balance.allBalanced", { spread });
                   })()}
                 </p>
 
@@ -1816,7 +1827,7 @@ export function V0EventPage(props: { me: any; meLoaded?: boolean }) {
                     onClick={() => setBalanceModalOpen(false)}
                     disabled={closing || switchingMode}
                   >
-                    Отмена
+                    {t("common.cancel")}
                   </Button>
                   <Button
                     variant="outline"
@@ -1831,15 +1842,15 @@ export function V0EventPage(props: { me: any; meLoaded?: boolean }) {
                         const refreshed = await api.getEventDetails(eventId);
                         setData(refreshed);
                         setBalanceModalOpen(false);
-                        setInfo("Режим переключён на «Каждый с каждым». Теперь можно закрыть регистрацию.");
+                        setInfo(t("balance.switchedToRR"));
                       } catch (err: any) {
-                        setActionError(err?.message ?? "Не удалось сменить режим");
+                        setActionError(err?.message ?? t("balance.switchError"));
                       } finally {
                         setSwitchingMode(false);
                       }
                     }}
                   >
-                    {switchingMode ? "Переключаем…" : "Каждый с каждым"}
+                    {switchingMode ? t("balance.switching") : t("pairing.roundRobin")}
                   </Button>
                   <Button
                     disabled={closing || switchingMode || balancePreview.maxGoodRounds === 0}
@@ -1853,16 +1864,16 @@ export function V0EventPage(props: { me: any; meLoaded?: boolean }) {
                         const refreshed = await api.getEventDetails(eventId);
                         setData(refreshed);
                         setBalanceModalOpen(false);
-                        setInfo("Регистрация закрыта");
+                        setInfo(t("status.registrationClosed"));
                         setStartPromptOpen(true);
                       } catch (err: any) {
-                        setActionError(err?.message ?? "Ошибка закрытия");
+                        setActionError(err?.message ?? t("close.error"));
                       } finally {
                         setClosing(false);
                       }
                     }}
                   >
-                    {closing ? "Закрываем…" : "Продолжить"}
+                    {closing ? t("close.closing") : t("common.continue")}
                   </Button>
                 </div>
               </div>
@@ -1873,14 +1884,14 @@ export function V0EventPage(props: { me: any; meLoaded?: boolean }) {
         <Dialog open={startPromptOpen} onOpenChange={setStartPromptOpen}>
           <DialogContent className="sm:max-w-lg">
             <DialogHeader>
-              <DialogTitle>Готовы начать?</DialogTitle>
+              <DialogTitle>{t("start.readyTitle")}</DialogTitle>
             </DialogHeader>
             <div className="text-sm text-muted-foreground">
-              Игра <b>{data.event.title}</b> готова к началу. Все участники зарегистрированы.
+              {t("start.readyPrefix")} <b>{data.event.title}</b> {t("start.readySuffix")}
             </div>
             <div className="mt-4 flex flex-wrap items-center gap-2 justify-end">
               <Button variant="outline" className="bg-transparent" onClick={() => setStartPromptOpen(false)}>
-                Позже
+                {t("common.later")}
               </Button>
               <Button
                 onClick={async () => {
@@ -1895,14 +1906,14 @@ export function V0EventPage(props: { me: any; meLoaded?: boolean }) {
                     setStartPromptOpen(false);
                     setRoundsOpen(true);
                   } catch (err: any) {
-                    setActionError(err?.message ?? "Ошибка старта");
+                    setActionError(err?.message ?? t("start.error"));
                   } finally {
                     setStarting(false);
                   }
                 }}
                 disabled={starting}
               >
-                {starting ? "Стартуем…" : "Начать игру"}
+                {starting ? t("start.starting") : t("start.startGame")}
               </Button>
             </div>
           </DialogContent>
@@ -1950,28 +1961,28 @@ export function V0EventPage(props: { me: any; meLoaded?: boolean }) {
                 <div className="p-4 rounded-xl bg-card border border-border/50 space-y-2">
                   <div className="flex items-center gap-2 text-muted-foreground">
                     <MapPin className="h-4 w-4" />
-                    <span className="text-sm">Корты</span>
+                    <span className="text-sm">{t("stats.courts")}</span>
                   </div>
                   <p className="text-2xl font-bold">{e.courtsCount}</p>
                 </div>
                 <div className="p-4 rounded-xl bg-card border border-border/50 space-y-2">
                   <div className="flex items-center gap-2 text-muted-foreground">
                     <Zap className="h-4 w-4" />
-                    <span className="text-sm">Режим</span>
+                    <span className="text-sm">{t("stats.mode")}</span>
                   </div>
                   <p className="text-base font-bold leading-tight">{pairingLabel(e.pairingMode, t)}</p>
                 </div>
                 <div className="p-4 rounded-xl bg-card border border-border/50 space-y-2">
                   <div className="flex items-center gap-2 text-muted-foreground">
                     <Target className="h-4 w-4" />
-                    <span className="text-sm">{e.scoringMode === "POINTS" ? "Подач на игрока" : "Сетов"}</span>
+                    <span className="text-sm">{e.scoringMode === "POINTS" ? t("stats.servesPerPlayer") : t("stats.setsCount")}</span>
                   </div>
                   <p className="text-2xl font-bold">{e.scoringMode === "POINTS" ? e.pointsPerPlayerPerMatch : e.setsPerMatch}</p>
                 </div>
                 <div className="p-4 rounded-xl bg-card border border-border/50 space-y-2">
                   <div className="flex items-center gap-2 text-muted-foreground">
                     <Users className="h-4 w-4" />
-                    <span className="text-sm">Игроков</span>
+                    <span className="text-sm">{t("stats.players")}</span>
                   </div>
                   <p className="text-2xl font-bold">
                     {registered.length}
@@ -1987,7 +1998,7 @@ export function V0EventPage(props: { me: any; meLoaded?: boolean }) {
                   )}>
                     <div className="flex items-center gap-2 text-muted-foreground">
                       <Scale className="h-4 w-4" />
-                      <span className="text-sm">Баланс</span>
+                      <span className="text-sm">{t("stats.balance")}</span>
                     </div>
                     <p className="text-2xl font-bold leading-none">
                       {balancePreview.maxGoodRounds}
@@ -1996,7 +2007,7 @@ export function V0EventPage(props: { me: any; meLoaded?: boolean }) {
                       </span>
                     </p>
                     <p className="text-xs text-muted-foreground">
-                      разброс {balancePreview.ratingSpread}
+                      {t("stats.spread")} {balancePreview.ratingSpread}
                     </p>
                   </div>
                 ) : null}
@@ -2013,7 +2024,7 @@ export function V0EventPage(props: { me: any; meLoaded?: boolean }) {
           <div className="p-5 rounded-xl bg-card border border-border/50 space-y-2">
             <div className="flex items-center gap-2 text-muted-foreground">
               <MapPin className="h-4 w-4" />
-              <span className="text-sm">Корты</span>
+              <span className="text-sm">{t("stats.courts")}</span>
             </div>
             <p className="text-2xl font-bold">{e.courtsCount}</p>
           </div>
@@ -2021,7 +2032,7 @@ export function V0EventPage(props: { me: any; meLoaded?: boolean }) {
           <div className="p-5 rounded-xl bg-card border border-border/50 space-y-2">
             <div className="flex items-center gap-2 text-muted-foreground">
               <Zap className="h-4 w-4" />
-              <span className="text-sm">Режим</span>
+              <span className="text-sm">{t("stats.mode")}</span>
             </div>
             <p className="text-lg font-bold">{pairingLabel(e.pairingMode, t)}</p>
           </div>
@@ -2029,7 +2040,7 @@ export function V0EventPage(props: { me: any; meLoaded?: boolean }) {
           <div className="p-5 rounded-xl bg-card border border-border/50 space-y-2">
             <div className="flex items-center gap-2 text-muted-foreground">
               <Target className="h-4 w-4" />
-              <span className="text-sm">{e.scoringMode === "POINTS" ? "Подач на игрока" : "Сетов"}</span>
+              <span className="text-sm">{e.scoringMode === "POINTS" ? t("stats.servesPerPlayer") : t("stats.setsCount")}</span>
             </div>
             <p className="text-2xl font-bold">{e.scoringMode === "POINTS" ? e.pointsPerPlayerPerMatch : e.setsPerMatch}</p>
           </div>
@@ -2037,7 +2048,7 @@ export function V0EventPage(props: { me: any; meLoaded?: boolean }) {
           <div className="p-5 rounded-xl bg-card border border-border/50 space-y-2">
             <div className="flex items-center gap-2 text-muted-foreground">
               <Users className="h-4 w-4" />
-              <span className="text-sm">Игроков</span>
+              <span className="text-sm">{t("stats.players")}</span>
             </div>
             <p className="text-2xl font-bold">
               {registered.length}
@@ -2054,7 +2065,7 @@ export function V0EventPage(props: { me: any; meLoaded?: boolean }) {
             )}>
               <div className="flex items-center gap-2 text-muted-foreground">
                 <Scale className="h-4 w-4" />
-                <span className="text-sm">Баланс</span>
+                <span className="text-sm">{t("stats.balance")}</span>
               </div>
               <p className="text-2xl font-bold leading-none">
                 {balancePreview.maxGoodRounds}
@@ -2063,7 +2074,7 @@ export function V0EventPage(props: { me: any; meLoaded?: boolean }) {
                 </span>
               </p>
               <p className="text-xs text-muted-foreground">
-                разброс {balancePreview.ratingSpread}
+                {t("stats.spread")} {balancePreview.ratingSpread}
               </p>
             </div>
           ) : null}
@@ -2077,8 +2088,8 @@ export function V0EventPage(props: { me: any; meLoaded?: boolean }) {
                   <Users className="h-5 w-5 text-primary" />
                 </div>
                 <div>
-                  <h2 className="text-xl font-semibold">Участники</h2>
-                  <p className="text-sm text-muted-foreground">Для старта нужно минимум {e.courtsCount * 4} игроков</p>
+                  <h2 className="text-xl font-semibold">{t("participants.title")}</h2>
+                  <p className="text-sm text-muted-foreground">{t("participants.minRequired", { n: e.courtsCount * 4 })}</p>
                 </div>
               </div>
               <span
@@ -2087,7 +2098,7 @@ export function V0EventPage(props: { me: any; meLoaded?: boolean }) {
                   registered.length >= e.courtsCount * 4 ? "bg-primary/20 text-primary" : "bg-secondary text-secondary-foreground",
                 )}
               >
-                {registered.length} из {e.courtsCount * 4}
+                {t("participants.count", { a: registered.length, b: e.courtsCount * 4 })}
               </span>
             </div>
             <div className="mt-4">
@@ -2105,13 +2116,13 @@ export function V0EventPage(props: { me: any; meLoaded?: boolean }) {
               <div className="mb-5 rounded-xl border border-emerald-500/30 bg-emerald-500/5 p-4 space-y-3">
                 <div className="flex items-center gap-2 text-sm font-medium">
                   <Trophy className="h-4 w-4 text-emerald-500" />
-                  Добавить участников турнира
+                  {t("tournament.addParticipants")}
                 </div>
                 <div className="space-y-2">
                   <input
                     value={tournamentQuery}
                     onChange={(ev) => setTournamentQuery(ev.target.value)}
-                    placeholder="Найти зарегистрированного игрока по имени…"
+                    placeholder={t("tournament.searchPlaceholder")}
                     className="h-10 w-full rounded-md border border-border bg-background px-3 text-sm"
                   />
                   {tournamentQuery.trim() !== "" && (() => {
@@ -2123,7 +2134,7 @@ export function V0EventPage(props: { me: any; meLoaded?: boolean }) {
                     if (found.length === 0) {
                       return (
                         <p className="px-1 text-xs text-muted-foreground">
-                          Никого не нашли. Если человека нет в приложении — впишите его гостем ниже.
+                          {t("tournament.nobodyFound")}
                         </p>
                       );
                     }
@@ -2144,9 +2155,9 @@ export function V0EventPage(props: { me: any; meLoaded?: boolean }) {
                                 const refreshed = await api.getEventDetails(eventId);
                                 setData(refreshed);
                                 setTournamentQuery("");
-                                setInfo(`${p.name} добавлен(а)`);
+                                setInfo(t("tournament.playerAdded", { name: p.name }));
                               } catch (err: any) {
-                                setActionError(err?.message ?? "Ошибка добавления игрока");
+                                setActionError(err?.message ?? t("tournament.addPlayerError"));
                               } finally {
                                 setTournamentAddingId(null);
                               }
@@ -2162,7 +2173,7 @@ export function V0EventPage(props: { me: any; meLoaded?: boolean }) {
                             </span>
                             <span className="flex-1 truncate">{p.name}</span>
                             <span className="shrink-0 text-xs font-medium text-primary">
-                              {tournamentAddingId === p.id ? "Добавляем…" : "+ Добавить"}
+                              {tournamentAddingId === p.id ? t("common.adding") : t("tournament.addBtn")}
                             </span>
                           </button>
                         ))}
@@ -2174,7 +2185,7 @@ export function V0EventPage(props: { me: any; meLoaded?: boolean }) {
                   <input
                     value={guestName}
                     onChange={(ev) => setGuestName(ev.target.value)}
-                    placeholder="Или впишите имя вручную (гость без аккаунта)…"
+                    placeholder={t("tournament.guestPlaceholder")}
                     maxLength={60}
                     className="h-10 flex-1 rounded-md border border-border bg-background px-3 text-sm"
                   />
@@ -2191,20 +2202,20 @@ export function V0EventPage(props: { me: any; meLoaded?: boolean }) {
                         const refreshed = await api.getEventDetails(eventId);
                         setData(refreshed);
                         setGuestName("");
-                        setInfo("Гость вписан");
+                        setInfo(t("tournament.guestAdded"));
                       } catch (err: any) {
-                        setActionError(err?.message ?? "Ошибка добавления гостя");
+                        setActionError(err?.message ?? t("tournament.guestError"));
                       } finally {
                         setGuestBusy(false);
                       }
                     }}
                     className="h-10 px-5 rounded-md border border-emerald-500/50 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 text-sm font-medium hover:bg-emerald-500/20 transition-colors disabled:opacity-50 disabled:cursor-not-allowed shrink-0"
                   >
-                    {guestBusy ? "…" : "Вписать гостя"}
+                    {guestBusy ? "…" : t("tournament.addGuest")}
                   </button>
                 </div>
                 <p className="text-xs text-muted-foreground">
-                  Турнир не влияет на рейтинг: итоговая таблица считается только по очкам.
+                  {t("tournament.noRatingNote")}
                 </p>
               </div>
             )}
@@ -2212,7 +2223,7 @@ export function V0EventPage(props: { me: any; meLoaded?: boolean }) {
               <div className="mb-5 rounded-xl border border-violet-500/30 bg-violet-500/5 p-4 space-y-3">
                 <div className="flex items-center gap-2 text-sm font-medium">
                   <Users className="h-4 w-4 text-violet-500" />
-                  Добавить пару
+                  {t("pairs.addPair")}
                 </div>
                 <div className="flex flex-col gap-2 sm:flex-row">
                   <select
@@ -2220,7 +2231,7 @@ export function V0EventPage(props: { me: any; meLoaded?: boolean }) {
                     onChange={(ev) => setPairP1(ev.target.value)}
                     className="h-10 flex-1 rounded-md border border-border bg-background px-3 text-sm"
                   >
-                    <option value="">Игрок 1…</option>
+                    <option value="">{t("pairs.player1")}</option>
                     {allPlayers
                       .filter((p) => !registered.some((r) => r.id === p.id) && p.id !== pairP2)
                       .map((p) => (
@@ -2232,7 +2243,7 @@ export function V0EventPage(props: { me: any; meLoaded?: boolean }) {
                     onChange={(ev) => setPairP2(ev.target.value)}
                     className="h-10 flex-1 rounded-md border border-border bg-background px-3 text-sm"
                   >
-                    <option value="">Игрок 2…</option>
+                    <option value="">{t("pairs.player2")}</option>
                     {allPlayers
                       .filter((p) => !registered.some((r) => r.id === p.id) && p.id !== pairP1)
                       .map((p) => (
@@ -2253,20 +2264,20 @@ export function V0EventPage(props: { me: any; meLoaded?: boolean }) {
                         setData(refreshed);
                         setPairP1("");
                         setPairP2("");
-                        setInfo("Пара добавлена");
+                        setInfo(t("pairs.pairAdded"));
                       } catch (err: any) {
-                        setActionError(err?.message ?? "Ошибка регистрации пары");
+                        setActionError(err?.message ?? t("pairs.pairError"));
                       } finally {
                         setPairBusy(false);
                       }
                     }}
                     className="h-10 px-5 rounded-md bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed shrink-0"
                   >
-                    {pairBusy ? "…" : "Добавить пару"}
+                    {pairBusy ? "…" : t("pairs.addPair")}
                   </button>
                 </div>
                 <p className="text-xs text-muted-foreground">
-                  Пары играют круговую (каждая с каждой). Для {e.courtsCount} кортов нужно {e.courtsCount * 2} пар.
+                  {t("pairs.note", { courts: e.courtsCount, pairs: e.courtsCount * 2 })}
                 </p>
               </div>
             )}
@@ -2295,7 +2306,7 @@ export function V0EventPage(props: { me: any; meLoaded?: boolean }) {
                   }
                   onAddFriend={async () => {
                     if (!p.publicId) {
-                      throw new Error("Не удалось определить публичный ID");
+                      throw new Error(t("friends.noPublicId"));
                     }
                     await api.requestFriend(p.publicId);
                     const publicId = p.publicId;
@@ -2311,7 +2322,7 @@ export function V0EventPage(props: { me: any; meLoaded?: boolean }) {
                           : prev,
                       );
                     }
-                    return "Заявка отправлена";
+                    return t("friends.requestSent");
                   }}
                 >
                   <div className="group relative w-full p-4 rounded-xl bg-gradient-to-br from-primary/10 to-primary/5 border border-primary/20 hover:border-primary/40 transition-all hover:shadow-lg hover:shadow-primary/10">
@@ -2319,15 +2330,15 @@ export function V0EventPage(props: { me: any; meLoaded?: boolean }) {
                       <button
                         type="button"
                         className="absolute -top-2 -left-2 h-6 w-6 rounded-full bg-destructive text-white flex items-center justify-center shadow-sm z-10"
-                        title="Исключить"
-                        aria-label="Исключить"
+                        title={t("participants.remove")}
+                        aria-label={t("participants.remove")}
                         onClick={async (ev) => {
                           ev.stopPropagation();
                           if (!eventId) return;
                           const ok = await confirm({
-                            title: "Исключить игрока?",
-                            description: <>Игрок <b>{p.name}</b> будет удалён из регистрации.</>,
-                            confirmLabel: "Исключить",
+                            title: t("participants.removeConfirmTitle"),
+                            description: <>{t("participants.removePrefix")} <b>{p.name}</b> {t("participants.removeSuffix")}</>,
+                            confirmLabel: t("participants.remove"),
                             confirmVariant: "destructive",
                           });
                           if (!ok) return;
@@ -2337,9 +2348,9 @@ export function V0EventPage(props: { me: any; meLoaded?: boolean }) {
                             await api.removePlayerFromEvent(eventId, p.id);
                             const refreshed = await api.getEventDetails(eventId);
                             setData(refreshed);
-                            setInfo("Игрок исключен");
+                            setInfo(t("participants.removed"));
                           } catch (err: any) {
-                            setActionError(err?.message ?? "Ошибка исключения");
+                            setActionError(err?.message ?? t("participants.removeError"));
                           }
                         }}
                       >
@@ -2358,7 +2369,7 @@ export function V0EventPage(props: { me: any; meLoaded?: boolean }) {
                     </div>
                     <p className="text-sm font-medium text-center truncate">{p.name}</p>
                     <p className="text-xs text-muted-foreground text-center">
-                      {p.isGuest ? "гость" : isTournament ? " " : p.rating}
+                      {p.isGuest ? t("participants.guest") : isTournament ? " " : p.rating}
                     </p>
                   </div>
                 </PlayerTooltip>
@@ -2378,7 +2389,7 @@ export function V0EventPage(props: { me: any; meLoaded?: boolean }) {
                   <div className="w-10 h-10 rounded-full border-2 border-dashed border-current flex items-center justify-center mb-2 group-hover:border-primary/50">
                     <UserPlus className="h-4 w-4 opacity-50" />
                   </div>
-                  <p className="text-xs">Свободно</p>
+                  <p className="text-xs">{t("participants.openSpot")}</p>
                 </div>
               ))}
             </div>
@@ -2394,8 +2405,8 @@ export function V0EventPage(props: { me: any; meLoaded?: boolean }) {
                     <Users className="h-5 w-5 text-foreground" />
                   </div>
                   <div>
-                    <h2 className="text-xl font-semibold">Запросы на отмену</h2>
-                    <p className="text-sm text-muted-foreground">Игроки хотят выйти из игры</p>
+                    <h2 className="text-xl font-semibold">{t("cancelRequests.title")}</h2>
+                    <p className="text-sm text-muted-foreground">{t("cancelRequests.subtitle")}</p>
                   </div>
                 </div>
                 <span className="px-3 py-1.5 text-sm rounded-md bg-secondary text-secondary-foreground">
@@ -2419,11 +2430,11 @@ export function V0EventPage(props: { me: any; meLoaded?: boolean }) {
                           const refreshed = await api.getEventDetails(eventId);
                           setData(refreshed);
                         } catch (err: any) {
-                          setActionError(err?.message ?? "Ошибка подтверждения");
+                          setActionError(err?.message ?? t("cancelRequests.approveError"));
                         }
                       }}
                     >
-                      Подтвердить
+                      {t("cancelRequests.approve")}
                     </Button>
                   </div>
                 ))}
@@ -2443,7 +2454,7 @@ export function V0EventPage(props: { me: any; meLoaded?: boolean }) {
         >
           <DialogContent className="max-w-4xl">
             <DialogHeader>
-              <DialogTitle>Раунды</DialogTitle>
+              <DialogTitle>{t("rounds.title")}</DialogTitle>
             </DialogHeader>
 
             <ModalScrollArea ref={roundsScrollRef} className="space-y-4 max-h-[70vh] overflow-y-auto pr-4">
@@ -2484,17 +2495,17 @@ export function V0EventPage(props: { me: any; meLoaded?: boolean }) {
                         <div className="flex items-center gap-2 flex-wrap">
                           <div>
                             <div className="text-lg font-semibold flex items-center gap-2">
-                              Раунд {r.roundNumber}
+                              {t("rounds.round")} {r.roundNumber}
                               {isFinalRound && (
                                 <span className="inline-flex items-center gap-1 rounded-full bg-amber-500/20 px-2 py-0.5 text-xs font-medium text-amber-600 dark:text-amber-400">
                                   <Trophy className="h-3.5 w-3.5" />
-                                  Финальный
+                                  {t("rounds.final")}
                                 </span>
                               )}
                             </div>
                             <div className="text-sm text-muted-foreground">
-                              Матчей: {r.matches.length}
-                              {allPlayed && r.matches.length > 0 && " • Сыгран"}
+                              {t("rounds.matches")}: {r.matches.length}
+                              {allPlayed && r.matches.length > 0 && ` • ${t("rounds.played")}`}
                             </div>
                           </div>
                         </div>
@@ -2503,27 +2514,27 @@ export function V0EventPage(props: { me: any; meLoaded?: boolean }) {
                       {canDeleteRound && (
                         <button
                           type="button"
-                          aria-label="Удалить раунд"
+                          aria-label={t("rounds.deleteRound")}
                           className="px-3 my-3 mr-2 rounded-md text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors"
                           onClick={async (ev) => {
                             ev.stopPropagation();
                             if (!eventId) return;
                             const ok = await confirm({
-                              title: "Удалить раунд?",
+                              title: t("rounds.deleteConfirmTitle"),
                               description: (
                                 <>
-                                  Раунд <b>{r.roundNumber}</b>
+                                  {t("rounds.round")} <b>{r.roundNumber}</b>
                                   {r.matches.length > 0
-                                    ? ` и его ${r.matches.length} ${r.matches.length === 1 ? "матч" : r.matches.length < 5 ? "матча" : "матчей"} будут удалены.`
-                                    : " будет удалён."} Действие нельзя отменить.
+                                    ? ` ${t("rounds.deleteWithMatches", { n: r.matches.length, word: matchWord(r.matches.length, lang) })}`
+                                    : ` ${t("rounds.deleteAlone")}`} {t("common.cannotUndo")}
                                 </>
                               ),
                               warning: finishedCount > 0 ? (
                                 <>
-                                  Из них <b>{finishedCount} {finishedCount === 1 ? "сыгран" : "сыграно"}</b> — счёт будет потерян. Рейтинги ещё не применены (применяются только при завершении игры).
+                                  {t("rounds.warnPlayedPrefix")} <b>{finishedCount} {finishedCount === 1 ? t("rounds.playedOne") : t("rounds.playedMany")}</b> {t("rounds.warnPlayedSuffix")}
                                 </>
                               ) : undefined,
-                              confirmLabel: "Удалить",
+                              confirmLabel: t("common.delete"),
                               confirmVariant: "destructive",
                             });
                             if (!ok) return;
@@ -2534,9 +2545,9 @@ export function V0EventPage(props: { me: any; meLoaded?: boolean }) {
                               const refreshed = await api.getEventDetails(eventId);
                               setData(refreshed);
                               if (expandedRoundId === r.id) setExpandedRoundId(null);
-                              setInfo("Раунд удалён.");
+                              setInfo(t("rounds.roundDeleted"));
                             } catch (err: any) {
-                              setActionError(err?.message ?? "Не удалось удалить раунд");
+                              setActionError(err?.message ?? t("rounds.deleteError"));
                             }
                           }}
                         >
@@ -2563,13 +2574,13 @@ export function V0EventPage(props: { me: any; meLoaded?: boolean }) {
                             // Подсказка для не-автора, почему карточка дизейблнута.
                             const lockHint = !canEdit && !isAuthor
                               ? finalScored
-                                ? `Введён${m.submittedByName ? `: ${m.submittedByName}` : ""}. Изменить может только организатор.`
+                                ? `${t("score.enteredPrefix")}${m.submittedByName ? `: ${m.submittedByName}` : ""}. ${t("score.onlyOrganizerCanChange")}`
                                 : !isMyMatch(m)
-                                  ? "Этот матч введёт его участник или организатор."
+                                  ? t("score.participantWillEnter")
                                   : null
                               : // свой финальный счёт во время игры можно исправить — подскажем это
                                 canEdit && !isAuthor && finalScored && !!m.submittedByMe
-                                ? "Счёт введён вами — нажмите, чтобы исправить."
+                                ? t("score.enteredByYou")
                                 : null;
                             const handleSelectTeam = (team: "A" | "B") => {
                               if (!canEdit) return;
@@ -2592,7 +2603,7 @@ export function V0EventPage(props: { me: any; meLoaded?: boolean }) {
                                   // (т.е. ввёл кто-то другой). Свой же счёт во время игры править можно.
                                   if (updatedMatch && hasFinalScore(updatedMatch) && !canSubmitScore(updatedMatch)) {
                                     setScorePadOpen(false);
-                                    setInfo("Счёт уже введён другим участником");
+                                    setInfo(t("score.alreadyEnteredByOther"));
                                   }
                                 }).catch(() => {
                                   /* сеть умерла — продолжаем оптимистично, submit поймает 409 если что */
@@ -2616,7 +2627,7 @@ export function V0EventPage(props: { me: any; meLoaded?: boolean }) {
                                       : "border-border/50 bg-secondary/10",
                                 )}
                               >
-                                <div className="text-sm text-muted-foreground">{m.courtName ?? `Корт ${m.courtNumber}`}</div>
+                                <div className="text-sm text-muted-foreground">{m.courtName ?? `${t("score.court")} ${m.courtNumber}`}</div>
                                 {lockHint && (
                                   <div className="mt-1 text-xs text-muted-foreground">{lockHint}</div>
                                 )}
@@ -2677,7 +2688,7 @@ export function V0EventPage(props: { me: any; meLoaded?: boolean }) {
                                     <div data-pad="1" className="mt-3 pt-3 border-t border-border/40 space-y-3">
                                       {Array.from({ length: setsCount }).map((_, i) => (
                                         <div key={i} className="flex items-center justify-center gap-3">
-                                          {setsCount > 1 && <span className="w-12 text-xs text-muted-foreground">Сет {i + 1}</span>}
+                                          {setsCount > 1 && <span className="w-12 text-xs text-muted-foreground">{t("score.set")} {i + 1}</span>}
                                           <Stepper i={i} team="a" />
                                           <span className="text-muted-foreground">:</span>
                                           <Stepper i={i} team="b" />
@@ -2686,7 +2697,7 @@ export function V0EventPage(props: { me: any; meLoaded?: boolean }) {
                                       <div className="flex items-center justify-between gap-3">
                                         <span className="text-xs text-muted-foreground">
                                           {scoreError && active ? <span className="text-destructive">{scoreError}</span>
-                                            : scoreSavingId === m.id ? "Сохраняем…" : "Геймы слева : справа"}
+                                            : scoreSavingId === m.id ? t("common.saving") : t("score.gamesHint")}
                                         </span>
                                         <Button
                                           size="sm"
@@ -2699,15 +2710,15 @@ export function V0EventPage(props: { me: any; meLoaded?: boolean }) {
                                             api.submitSetsScore(m.id, sets)
                                               .then(async () => {
                                                 setFinishedMatchIds((prev) => new Set([...prev, m.id]));
-                                                setInfo("Счёт сохранён");
+                                                setInfo(t("score.saved"));
                                                 setScorePadOpen(false);
                                                 setData(await api.getEventDetails(eventId));
                                               })
-                                              .catch((err: any) => setScoreError(err?.message ?? "Не удалось сохранить счёт"))
+                                              .catch((err: any) => setScoreError(err?.message ?? t("score.saveError")))
                                               .finally(() => setScoreSavingId(null));
                                           }}
                                         >
-                                          Сохранить счёт
+                                          {t("score.saveScore")}
                                         </Button>
                                       </div>
                                     </div>
@@ -2753,7 +2764,7 @@ export function V0EventPage(props: { me: any; meLoaded?: boolean }) {
                                                 api.submitScore(m.id, { teamAPoints: nextA, teamBPoints: nextB })
                                                   .then(async () => {
                                                     setFinishedMatchIds((prev) => new Set([...prev, m.id]));
-                                                    setInfo("Счёт сохранён");
+                                                    setInfo(t("score.saved"));
                                                     setScorePadOpen(false);
                                                     const refreshed = await api.getEventDetails(eventId);
                                                     setData(refreshed);
@@ -2765,7 +2776,7 @@ export function V0EventPage(props: { me: any; meLoaded?: boolean }) {
                                                   })
                                                   .catch(async (err: any) => {
                                                     delete pendingScoreRef.current[m.id];
-                                                    setScoreError(err?.message ?? "Не удалось сохранить счёт");
+                                                    setScoreError(err?.message ?? t("score.saveError"));
                                                     // Возможен 409 «уже введён» — обновим, чтобы UI показал актуальный счёт/автора.
                                                     if (eventId) {
                                                       try {
@@ -2791,10 +2802,10 @@ export function V0EventPage(props: { me: any; meLoaded?: boolean }) {
                                       {scoreError && active ? (
                                         <span className="text-destructive">{scoreError}</span>
                                       ) : scoreSavingId === m.id ? (
-                                        <span className="text-muted-foreground">Сохраняем…</span>
+                                        <span className="text-muted-foreground">{t("common.saving")}</span>
                                       ) : (
                                         <span className="text-muted-foreground">
-                                          Выберите значение для команды {activeTeam === "A" ? "слева" : "справа"}
+                                          {t("score.pickValue", { side: activeTeam === "A" ? t("score.sideLeft") : t("score.sideRight") })}
                                         </span>
                                       )}
                                     </div>
@@ -2807,7 +2818,7 @@ export function V0EventPage(props: { me: any; meLoaded?: boolean }) {
 
                         {r.matches.length > 0 && (!activeMatchId || !scorePadOpen) && (
                           <div className="mt-4 flex items-center justify-between gap-3">
-                            <div className="text-xs text-muted-foreground">Нажмите на счёт команды, чтобы выбрать очки.</div>
+                            <div className="text-xs text-muted-foreground">{t("score.tapTeamHint")}</div>
                           </div>
                         )}
                         {nextButtonLabel && expanded && (
@@ -2855,11 +2866,11 @@ export function V0EventPage(props: { me: any; meLoaded?: boolean }) {
                     }
                     const seriesLen = e.roundsPlanned ?? 0;
                     const choice = await confirm({
-                      title: "Добавить раунды",
+                      title: t("rounds.addRoundsTitle"),
                       choices: [
-                        { id: "one", label: "Один раунд", description: "Планировщик продолжит ротацию с учётом сыгранного" },
+                        { id: "one", label: t("rounds.oneRound"), description: t("rounds.oneRoundDesc") },
                         ...(seriesLen > 1
-                          ? [{ id: "series", label: `Серия из ${seriesLen} раундов`, description: "Ещё один полный цикл, как при старте игры" }]
+                          ? [{ id: "series", label: t("rounds.seriesOf", { n: seriesLen }), description: t("rounds.seriesDesc") }]
                           : []),
                       ],
                     });
@@ -2868,8 +2879,8 @@ export function V0EventPage(props: { me: any; meLoaded?: boolean }) {
                   }}
                 >
                   {addingRounds
-                    ? "Добавляем…"
-                    : e.format === "MEXICANO" ? "+ Раунд по таблице" : "+ Раунд"}
+                    ? t("common.adding")
+                    : e.format === "MEXICANO" ? t("rounds.addRoundMexicano") : t("rounds.addRoundBtn")}
                 </Button>
                 {e.format === "AMERICANA" && (
                 <Button
@@ -2878,9 +2889,9 @@ export function V0EventPage(props: { me: any; meLoaded?: boolean }) {
                   onClick={async () => {
                     if (!eventId) return;
                     const ok = await confirm({
-                      title: "Добавить финальный раунд?",
-                      description: "Пары будут расставлены по турнирной таблице. После добавления финального раунда новые обычные раунды создавать нельзя.",
-                      confirmLabel: "Добавить",
+                      title: t("rounds.finalConfirmTitle"),
+                      description: t("rounds.finalConfirmDesc"),
+                      confirmLabel: t("common.add"),
                     });
                     if (!ok) return;
                     setInfo(null);
@@ -2890,7 +2901,7 @@ export function V0EventPage(props: { me: any; meLoaded?: boolean }) {
                       await api.addFinalRound(eventId);
                       const refreshed = await api.getEventDetails(eventId);
                       setData(refreshed);
-                      setInfo("Финальный раунд добавлен.");
+                      setInfo(t("rounds.finalAdded"));
                       localStorage.setItem(`padix_final_round_${eventId}`, "1");
                       setFinalRoundLocked(true);
                       const rounds = refreshed.rounds ?? [];
@@ -2900,11 +2911,11 @@ export function V0EventPage(props: { me: any; meLoaded?: boolean }) {
                         setTimeout(() => activeRoundRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" }), 150);
                       }
                     } catch (err: any) {
-                      setActionError(err?.message ?? "Ошибка финального раунда");
+                      setActionError(err?.message ?? t("rounds.finalError"));
                     }
                   }}
                 >
-                  Финальный раунд
+                  {t("rounds.finalRoundBtn")}
                 </Button>
                 )}
               </div>
@@ -2930,22 +2941,20 @@ export function V0EventPage(props: { me: any; meLoaded?: boolean }) {
                   const maxMatches = counts.length ? Math.max(...counts) : 0;
                   const uneven = maxMatches - minMatches > 0;
                   const ok = await confirm({
-                    title: isTournament ? "Завершить турнир?" : "Завершить игру?",
-                    description: isTournament
-                      ? "Турнир будет завершён. Рейтинг не пересчитывается — итоговая таблица считается по очкам."
-                      : "Игра будет завершена, рейтинги участников пересчитаны. Дальше изменить счёт нельзя.",
+                    title: isTournament ? t("finish.confirmTitleTournament") : t("finish.confirmTitleGame"),
+                    description: isTournament ? t("finish.descTournament") : t("finish.descGame"),
                     warning: (
                       <>
                         {uneven && !isTournament ? (
                           <div>
-                            У игроков разное число сыгранных матчей (<b>{minMatches}–{maxMatches}</b>).
-                            Рейтинги будут <b>нормализованы</b>: у тех, кто сыграл больше, движения слегка уменьшатся; у тех, кто меньше — увеличатся.
+                            {t("finish.unevenMatches")} (<b>{minMatches}–{maxMatches}</b>).
+                            {" "}{t("finish.ratingsWillBe")} <b>{t("finish.normalized")}</b>: {t("finish.unevenTail")}
                           </div>
                         ) : null}
-                        <div>Действие нельзя отменить.</div>
+                        <div>{t("common.cannotUndo")}</div>
                       </>
                     ),
-                    confirmLabel: "Завершить",
+                    confirmLabel: t("finish.confirmLabel"),
                     confirmVariant: "destructive",
                   });
                   if (!ok) return;
@@ -2956,16 +2965,16 @@ export function V0EventPage(props: { me: any; meLoaded?: boolean }) {
                     await api.finishEvent(eventId);
                     const refreshed = await api.getEventDetails(eventId);
                     setData(refreshed);
-                    setInfo(isTournament ? "Турнир завершён." : "Игра завершена. Рейтинг обновится автоматически.");
+                    setInfo(isTournament ? t("finish.doneTournament") : t("finish.doneGame"));
                     setRoundsOpen(false);
                   } catch (err: any) {
-                    setActionError(err?.message ?? "Ошибка завершения");
+                    setActionError(err?.message ?? t("finish.error"));
                   } finally {
                     setFinishing(false);
                   }
                 }}
               >
-                {finishing ? "Завершаем…" : isTournament ? "Завершить турнир" : "Завершить игру"}
+                {finishing ? t("finish.finishing") : isTournament ? t("finish.finishTournament") : t("finish.finishGame")}
               </Button>
             </div>
 
@@ -2977,12 +2986,12 @@ export function V0EventPage(props: { me: any; meLoaded?: boolean }) {
             <DialogHeader>
               <DialogTitle className="flex items-center gap-2">
                 <Trophy className="h-5 w-5 text-amber-500" />
-                Таблица лидеров
+                {t("actions.leaderboard")}
               </DialogTitle>
               {finalRoundLocked && (data.rounds?.length ?? 0) > 0 && (
                 <p className="text-sm text-muted-foreground flex items-center gap-1.5 mt-1">
                   <Trophy className="h-4 w-4 text-amber-500" />
-                  Включает финальный раунд
+                  {t("leaderboard.includesFinal")}
                 </p>
               )}
             </DialogHeader>
@@ -3066,6 +3075,9 @@ export function V0EventPage(props: { me: any; meLoaded?: boolean }) {
     tournamentAddingId,
     guestName,
     guestBusy,
+    // Смена языка обязана перестроить content — иначе страница остаётся на старом языке.
+    t,
+    lang,
   ]);
 
   return <>{content}</>;
@@ -3076,16 +3088,18 @@ export function V0EventPage(props: { me: any; meLoaded?: boolean }) {
  * Пороги в expectedA-шкале соответствуют разнице рейтингов 50/150/300/500 (см. spec).
  */
 function WinProbabilityHint({ expectedA }: { expectedA: number }) {
+  const { t } = useI18n(TR);
   const pctA = Math.round(expectedA * 100);
   const pctB = 100 - pctA;
   const absDelta = Math.abs(expectedA - 0.5);
   const favA = expectedA > 0.5;
+  const arrow = favA ? "←" : "→";
   let label: string;
-  if (absDelta < 0.07) label = "Равные шансы ⚖️";
-  else if (absDelta < 0.20) label = favA ? "Лёгкий фаворит ←" : "Лёгкий фаворит →";
-  else if (absDelta < 0.34) label = favA ? "Фаворит ←" : "Фаворит →";
-  else if (absDelta < 0.45) label = favA ? "Сильный фаворит ←" : "Сильный фаворит →";
-  else label = "Битва Давида и Голиафа 🎭";
+  if (absDelta < 0.07) label = t("prob.even");
+  else if (absDelta < 0.20) label = `${t("prob.slightFavorite")} ${arrow}`;
+  else if (absDelta < 0.34) label = `${t("prob.favorite")} ${arrow}`;
+  else if (absDelta < 0.45) label = `${t("prob.strongFavorite")} ${arrow}`;
+  else label = t("prob.davidGoliath");
 
   return (
     <div className="mt-2 space-y-1">

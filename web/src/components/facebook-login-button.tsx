@@ -1,5 +1,10 @@
 import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
+import { Dict, useI18n } from "@/lib/i18n";
+
+const TR = {
+  "facebook.signin": { ru: "Войти через Facebook", en: "Sign in with Facebook" },
+} satisfies Dict;
 
 declare global {
   interface Window {
@@ -41,6 +46,7 @@ export function FacebookLoginButton(props: {
   onAuth: (accessToken: string) => void;
   text?: string;
 }) {
+  const { t } = useI18n(TR);
   const [sdkReady, setSdkReady] = useState(false);
 
   useEffect(() => {
@@ -90,7 +96,7 @@ export function FacebookLoginButton(props: {
       type="button"
       onClick={handleClick}
       disabled={!sdkReady}
-      title={props.text ?? "Войти через Facebook"}
+      title={props.text ?? t("facebook.signin")}
       className="h-10 w-10 flex items-center justify-center rounded-md border border-border bg-secondary/40 text-[#1877F2] transition-colors hover:bg-secondary/60 disabled:opacity-50 disabled:cursor-not-allowed"
     >
       <svg className="h-5 w-5" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">

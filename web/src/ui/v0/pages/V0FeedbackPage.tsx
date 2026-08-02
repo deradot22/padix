@@ -44,6 +44,7 @@ const TR = {
   "fb.attachPick": { ru: "Прикрепить фото или видео", en: "Attach a photo or video" },
   "fb.attachLimit": { ru: "Изображения или видео до {max}.", en: "Images or videos up to {max}." },
   "fb.attachmentAlt": { ru: "вложение", en: "attachment" },
+  "fb.previewAlt": { ru: "предпросмотр вложения", en: "attachment preview" },
   "fb.attachDownload": { ru: "Скачать вложение", en: "Download attachment" },
   "fb.sending": { ru: "Отправляем…", en: "Sending…" },
   "fb.send": { ru: "Отправить", en: "Send" },
@@ -275,7 +276,7 @@ export function V0FeedbackPage(props: { me: MeResponse | null; meLoaded: boolean
                 <div className="rounded-lg border border-border bg-secondary/20 p-3">
                   <div className="flex items-center gap-3">
                     {attachment.mime.startsWith("image/") ? (
-                      <img src={attachment.dataUrl} alt="preview" className="h-16 w-16 rounded object-cover" />
+                      <img src={attachment.dataUrl} alt={t("fb.previewAlt")} className="h-16 w-16 rounded object-cover" />
                     ) : (
                       <video src={attachment.dataUrl} className="h-16 w-24 rounded object-cover bg-black" muted />
                     )}

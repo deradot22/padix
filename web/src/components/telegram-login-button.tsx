@@ -2,6 +2,11 @@ import { useNavigate } from "react-router-dom";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { api } from "@/lib/api";
+import { Dict, useI18n } from "@/lib/i18n";
+
+const TR = {
+  "tgLogin.signin": { ru: "Войти через Telegram", en: "Sign in with Telegram" },
+} satisfies Dict;
 
 /**
  * Кнопка «Войти через Telegram» — bot-login flow.
@@ -22,6 +27,7 @@ export function TelegramLoginButton(props: {
   /** "link" — привязка к существующему юзеру (требует JWT). */
   mode?: "login" | "link";
 }) {
+  const { t } = useI18n(TR);
   const nav = useNavigate();
   const [loading, setLoading] = useState(false);
 
@@ -48,7 +54,7 @@ export function TelegramLoginButton(props: {
       variant="outline"
       onClick={handleClick}
       disabled={loading}
-      title="Войти через Telegram"
+      title={t("tgLogin.signin")}
       className="h-11 w-11 md:h-10 md:w-10 p-0 flex items-center justify-center rounded-md border border-border bg-secondary/40 text-primary transition-colors hover:bg-secondary/60 disabled:opacity-60"
     >
       <svg className="h-5 w-5" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">

@@ -47,6 +47,7 @@ const TR = {
   "auth.register": { ru: "Регистрация", en: "Sign up" },
   "auth.hint": { ru: "Профиль доступен после авторизации.", en: "The profile is available after signing in." },
   "header.editProfile": { ru: "Редактировать профиль", en: "Edit profile" },
+  "header.avatarAlt": { ru: "Аватар", en: "Avatar" },
   "header.statusCalibration": { ru: "на калибровке", en: "in calibration" },
   "header.statusActive": { ru: "Активен", en: "Active" },
   "header.genderM": { ru: "М", en: "M" },
@@ -96,10 +97,12 @@ const TR = {
   "partners.title": { ru: "Лучшие напарники", en: "Best partners" },
   "partners.description": { ru: "С кем ты чаще всего побеждаешь", en: "Who you win with most often" },
   "partners.empty": { ru: "Пока недостаточно игр.", en: "Not enough games yet." },
+  "partners.winRateSuffix": { ru: "побед", en: "wr" },
   "details.editScore": { ru: "Редактировать счет", en: "Edit score" },
   "details.close": { ru: "Закрыть", en: "Close" },
   "details.stats": { ru: "Статистика", en: "Statistics" },
   "details.colRound": { ru: "Раунд", en: "Round" },
+  "details.roundShort": { ru: "Р{n}", en: "R{n}" },
   "details.colCourt": { ru: "Корт", en: "Court" },
   "details.colPair": { ru: "Пара", en: "Pair" },
   "details.colOpponents": { ru: "Соперники", en: "Opponents" },
@@ -492,7 +495,7 @@ export function V0ProfilePage(props: { me: any; meLoaded?: boolean; onMeUpdate?:
               <div className="flex items-end gap-4">
                 <div className="flex h-24 w-24 -mt-7 items-center justify-center rounded-2xl border-4 border-background bg-gradient-to-br from-primary/20 to-primary/5 shadow-xl overflow-hidden">
                   {avatar ? (
-                    <img src={avatar} alt="Avatar" className="h-full w-full object-cover" />
+                    <img src={avatar} alt={t("header.avatarAlt")} className="h-full w-full object-cover" />
                   ) : (
                     <User className="h-12 w-12 text-primary" />
                   )}
@@ -1064,7 +1067,7 @@ export function V0ProfilePage(props: { me: any; meLoaded?: boolean; onMeUpdate?:
                     <p className="text-xs text-muted-foreground">
                       {p.gamesTogether} {plural(lang, p.gamesTogether, ["игра", "игры", "игр"], ["game", "games"])},{" "}
                       {p.winsTogether} {plural(lang, p.winsTogether, ["победа", "победы", "побед"], ["win", "wins"])},{" "}
-                      {Math.round(p.winRate * 100)}% wr
+                      {Math.round(p.winRate * 100)}% {t("partners.winRateSuffix")}
                     </p>
                   </div>
                 </div>
@@ -1217,7 +1220,7 @@ export function V0ProfilePage(props: { me: any; meLoaded?: boolean; onMeUpdate?:
                     )}>
                       <div className="flex items-center justify-between">
                         <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
-                          <span>R{it.roundNumber}</span>
+                          <span>{t("details.roundShort", { n: it.roundNumber })}</span>
                         </div>
                         {it.ratingDelta == null ? null : it.ratingDelta >= 0 ? (
                           <Badge className="gap-1 bg-primary/20 text-primary border-primary/30 border text-[11px] py-0 px-1.5">

@@ -5,6 +5,42 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogD
 import { Input } from "@/components/ui/input";
 import { KeyRound } from "lucide-react";
 import { api, MeResponse } from "@/lib/api";
+import { Dict, useI18n } from "@/lib/i18n";
+
+const TR = {
+  "password.title": { ru: "Пароль", en: "Password" },
+  "password.descHas": { ru: "Можете сменить пароль от аккаунта.", en: "You can change your account password." },
+  "password.descNone": {
+    ru: "Установите пароль, чтобы входить по email + паролю в дополнение к привязанным аккаунтам.",
+    en: "Set a password to sign in with email + password alongside your linked accounts.",
+  },
+  "password.noEmail": {
+    ru: "У тебя не привязан email — пароль будет работать только после добавления email в разделе «Профиль».",
+    en: "No email linked yet — the password will only work once you add one in Profile.",
+  },
+  "password.change": { ru: "Сменить пароль", en: "Change password" },
+  "password.set": { ru: "Установить пароль", en: "Set password" },
+  "password.dlgDescHas": {
+    ru: "Введите текущий пароль для подтверждения, затем новый дважды.",
+    en: "Enter your current password to confirm, then the new one twice.",
+  },
+  "password.dlgDescNone": {
+    ru: "Придумайте пароль (минимум 6 символов) — затем сможете входить по email + паролю.",
+    en: "Pick a password (6 characters minimum) — then you can sign in with email + password.",
+  },
+  "password.current": { ru: "Текущий пароль", en: "Current password" },
+  "password.new": { ru: "Новый пароль", en: "New password" },
+  "password.repeat": { ru: "Повторите новый пароль", en: "Repeat new password" },
+  "password.cancel": { ru: "Отмена", en: "Cancel" },
+  "password.saving": { ru: "Сохраняем…", en: "Saving…" },
+  "password.errTooShort": {
+    ru: "Пароль должен быть не короче 6 символов",
+    en: "Password must be at least 6 characters",
+  },
+  "password.errMismatch": { ru: "Пароли не совпадают", en: "Passwords don't match" },
+  "password.errCurrentRequired": { ru: "Введите текущий пароль", en: "Enter your current password" },
+  "password.errSave": { ru: "Не удалось сохранить пароль", en: "Couldn't save the password" },
+} satisfies Dict;
 
 /**
  * Секция «Пароль» в настройках. Компактная карточка с одной кнопкой:
@@ -17,6 +53,7 @@ export function PasswordSection(props: {
   me: MeResponse;
   onMeUpdate: (me: MeResponse) => void;
 }) {
+  const { t } = useI18n(TR);
   const hasPassword = props.me.hasPassword;
   const emailMissing = !props.me.email;
   const [open, setOpen] = useState(false);
@@ -26,22 +63,20 @@ export function PasswordSection(props: {
       <CardHeader>
         <CardTitle className="text-base flex items-center gap-2">
           <KeyRound className="h-4 w-4 text-muted-foreground" />
-          Пароль
+          {t("password.title")}
         </CardTitle>
         <CardDescription>
-          {hasPassword
-            ? "Можете сменить пароль от аккаунта."
-            : "Установите пароль, чтобы входить по email + паролю в дополнение к привязанным аккаунтам."}
+          {hasPassword ? t("password.descHas") : t("password.descNone")}
         </CardDescription>
       </CardHeader>
       <CardContent>
         {emailMissing ? (
           <div className="mb-3 rounded-md border border-amber-500/40 dark:border-amber-500/30 bg-amber-500/10 p-3 text-xs text-amber-900 dark:text-amber-100">
-            У тебя не привязан email — пароль будет работать только после добавления email в разделе «Профиль».
+            {t("password.noEmail")}
           </div>
         ) : null}
         <Button onClick={() => setOpen(true)} variant={hasPassword ? "outline" : "default"}>
-          {hasPassword ? "Сменить пароль" : "Установить пароль"}
+          {hasPassword ? t("password.change") : t("password.set")}
         </Button>
       </CardContent>
 
@@ -61,6 +96,7 @@ function PasswordDialog(props: {
   hasPassword: boolean;
   onMeUpdate: (me: MeResponse) => void;
 }) {
+  const { t } = useI18n(TR);
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
@@ -82,15 +118,15 @@ function PasswordDialog(props: {
     e.preventDefault();
     setError(null);
     if (newPassword.length < 6) {
-      setError("Пароль должен быть не короче 6 символов");
+      setError(t("password.errTooShort"));
       return;
     }
     if (newPassword !== confirmPassword) {
-      setError("Пароли не совпадают");
+      setError(t("password.errMismatch"));
       return;
     }
     if (props.hasPassword && !currentPassword) {
-      setError("Введите текущий пароль");
+      setError(t("password.errCurrentRequired"));
       return;
     }
     setSaving(true);
@@ -99,7 +135,7 @@ function PasswordDialog(props: {
       props.onMeUpdate(updated);
       props.onOpenChange(false);
     } catch (e: any) {
-      setError(e?.message ?? "Не удалось сохранить пароль");
+      setError(e?.message ?? t("password.errSave"));
     } finally {
       setSaving(false);
     }
@@ -109,18 +145,16 @@ function PasswordDialog(props: {
     <Dialog open={props.open} onOpenChange={props.onOpenChange}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>{props.hasPassword ? "Сменить пароль" : "Установить пароль"}</DialogTitle>
+          <DialogTitle>{props.hasPassword ? t("password.change") : t("password.set")}</DialogTitle>
           <DialogDescription>
-            {props.hasPassword
-              ? "Введите текущий пароль для подтверждения, затем новый дважды."
-              : "Придумайте пароль (минимум 6 символов) — затем сможете входить по email + паролю."}
+            {props.hasPassword ? t("password.dlgDescHas") : t("password.dlgDescNone")}
           </DialogDescription>
         </DialogHeader>
 
         <form onSubmit={onSubmit} className="space-y-3">
           {props.hasPassword ? (
             <div className="space-y-1">
-              <label className="text-xs text-muted-foreground">Текущий пароль</label>
+              <label className="text-xs text-muted-foreground">{t("password.current")}</label>
               <Input
                 type="password"
                 value={currentPassword}
@@ -131,7 +165,7 @@ function PasswordDialog(props: {
             </div>
           ) : null}
           <div className="space-y-1">
-            <label className="text-xs text-muted-foreground">Новый пароль</label>
+            <label className="text-xs text-muted-foreground">{t("password.new")}</label>
             <Input
               type="password"
               value={newPassword}
@@ -142,7 +176,7 @@ function PasswordDialog(props: {
             />
           </div>
           <div className="space-y-1">
-            <label className="text-xs text-muted-foreground">Повторите новый пароль</label>
+            <label className="text-xs text-muted-foreground">{t("password.repeat")}</label>
             <Input
               type="password"
               value={confirmPassword}
@@ -155,10 +189,10 @@ function PasswordDialog(props: {
           ) : null}
           <DialogFooter className="gap-2">
             <Button type="button" variant="outline" onClick={() => props.onOpenChange(false)} disabled={saving}>
-              Отмена
+              {t("password.cancel")}
             </Button>
             <Button type="submit" disabled={saving}>
-              {saving ? "Сохраняем…" : props.hasPassword ? "Сменить пароль" : "Установить пароль"}
+              {saving ? t("password.saving") : props.hasPassword ? t("password.change") : t("password.set")}
             </Button>
           </DialogFooter>
         </form>

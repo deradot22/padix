@@ -1,4 +1,9 @@
 import { api } from "@/lib/api";
+import { Dict, useI18n } from "@/lib/i18n";
+
+const TR = {
+  "x.signin": { ru: "Войти через X", en: "Sign in with X" },
+} satisfies Dict;
 
 /**
  * Кнопка «Войти через X». В отличие от Google/FB/Telegram у Twitter нет встроенного widget'а
@@ -8,13 +13,14 @@ import { api } from "@/lib/api";
  * Соответственно кнопка делает простой `window.location.href = ...` на бэковый endpoint.
  */
 export function TwitterLoginButton(props: { text?: string }) {
+  const { t } = useI18n(TR);
   return (
     <button
       type="button"
       onClick={() => {
         window.location.href = api.twitterAuthStartUrl();
       }}
-      title={props.text ?? "Войти через X"}
+      title={props.text ?? t("x.signin")}
       className="h-10 w-10 flex items-center justify-center rounded-md border border-border bg-secondary/40 text-foreground transition-colors hover:bg-secondary/60"
     >
       <svg className="h-4 w-4" viewBox="0 0 1200 1227" fill="currentColor" aria-hidden="true">

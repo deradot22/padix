@@ -1,16 +1,33 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { ArrowLeftRight } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { Dict, Lang, useI18n } from "@/lib/i18n";
+
+const TR = {
+  "period.7d": { ru: "7д", en: "7d" },
+  "period.30d": { ru: "30д", en: "30d" },
+  "period.3m": { ru: "3м", en: "3m" },
+  "period.all": { ru: "Всё", en: "All" },
+  "mode.byMatches": { ru: "По матчам (нажмите для оси времени)", en: "By matches (tap for the time axis)" },
+  "mode.byTime": { ru: "По времени (нажмите для оси матчей)", en: "By time (tap for the match axis)" },
+  "mode.toggleAria": { ru: "Переключить режим оси X", en: "Toggle X axis mode" },
+  "decay": { ru: "простой (затухание)", en: "inactivity (decay)" },
+  "empty": { ru: "Недостаточно данных за выбранный период", en: "Not enough data for the selected period" },
+  "scrollHint": {
+    ru: "← прокрути график, чтобы увидеть весь период →",
+    en: "← scroll the chart to see the whole period →",
+  },
+} satisfies Dict;
 
 type Point = { date: string; rating: number; kind?: "MATCH" | "DECAY" };
 type Period = "7d" | "30d" | "3m" | "all";
 type Mode = "matches" | "time";
 
-const PERIOD_LABELS: { value: Period; label: string }[] = [
-  { value: "7d", label: "7д" },
-  { value: "30d", label: "30д" },
-  { value: "3m", label: "3м" },
-  { value: "all", label: "Всё" },
+const PERIOD_LABELS: { value: Period; labelKey: keyof typeof TR }[] = [
+  { value: "7d", labelKey: "period.7d" },
+  { value: "30d", labelKey: "period.30d" },
+  { value: "3m", labelKey: "period.3m" },
+  { value: "all", labelKey: "period.all" },
 ];
 
 const MODE_STORAGE_KEY = "padix:rating-graph:mode";
@@ -67,14 +84,21 @@ function lttb(points: { x: number; y: number; original: Point }[], threshold: nu
   return sampled;
 }
 
-const MONTHS_SHORT = ["янв", "фев", "мар", "апр", "мая", "июн", "июл", "авг", "сен", "окт", "ноя", "дек"];
-function formatShortDate(iso: string): string {
+// Пары ru/en, как в src/ui/v0/utils.ts и date-picker: порядок «день месяц» для ru,
+// «месяц день» для en.
+const MONTHS_SHORT: Record<Lang, string[]> = {
+  ru: ["янв", "фев", "мар", "апр", "мая", "июн", "июл", "авг", "сен", "окт", "ноя", "дек"],
+  en: ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"],
+};
+function formatShortDate(iso: string, lang: Lang): string {
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return iso.slice(0, 10);
-  return `${d.getDate()} ${MONTHS_SHORT[d.getMonth()] ?? ""}`;
+  const month = MONTHS_SHORT[lang][d.getMonth()] ?? "";
+  return lang === "en" ? `${month} ${d.getDate()}` : `${d.getDate()} ${month}`;
 }
 
 export function RatingGraph(props: { points: Point[] }) {
+  const { t, lang } = useI18n(TR);
   const [period, setPeriod] = useState<Period>("30d");
   // Интерактивность: индекс точки под курсором/пальцем (в системе sampled).
   const [hovered, setHovered] = useState<number | null>(null);
@@ -285,7 +309,7 @@ export function RatingGraph(props: { points: Point[] }) {
                   {deltaStr ? <tspan dx={6} style={{ fontSize: labelFs * 0.85, fill: deltaColor }}>{deltaStr}</tspan> : null}
                 </text>
                 <text x={8} y={tipH - 8} style={{ fontSize: labelFs * 0.8, fill: "var(--muted-foreground)" }}>
-                  {isDecay ? "простой (затухание)" : formatShortDate(hp.original.date)}
+                  {isDecay ? t("decay") : formatShortDate(hp.original.date, lang)}
                 </text>
               </g>
             </g>
@@ -333,16 +357,16 @@ export function RatingGraph(props: { points: Point[] }) {
                 : "text-muted-foreground hover:text-foreground hover:bg-secondary/50"
             )}
           >
-            {p.label}
+            {t(p.labelKey)}
           </button>
         ))}
       </div>
       <button
         type="button"
         onClick={() => setMode((m) => (m === "matches" ? "time" : "matches"))}
-        title={mode === "matches" ? "По матчам (нажмите для оси времени)" : "По времени (нажмите для оси матчей)"}
+        title={mode === "matches" ? t("mode.byMatches") : t("mode.byTime")}
         className="p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-secondary/50 transition-colors"
-        aria-label="Переключить режим оси X"
+        aria-label={t("mode.toggleAria")}
       >
         <ArrowLeftRight className="h-4 w-4" />
       </button>
@@ -354,7 +378,7 @@ export function RatingGraph(props: { points: Point[] }) {
       <div>
         {Controls}
         <div className="text-sm text-muted-foreground text-center py-8">
-          Недостаточно данных за выбранный период
+          {t("empty")}
         </div>
       </div>
     );
@@ -422,7 +446,7 @@ export function RatingGraph(props: { points: Point[] }) {
 
         {scrollable ? (
           <div className="mt-1.5 text-center text-[10px] text-muted-foreground/70">
-            ← прокрути график, чтобы увидеть весь период →
+            {t("scrollHint")}
           </div>
         ) : (
           <div

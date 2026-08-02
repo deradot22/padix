@@ -3,7 +3,13 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { ChevronLeft, ChevronRight, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { Dict, Lang, useI18n } from "@/lib/i18n";
 import type { Event } from "@/lib/api";
+
+const TR = {
+  "loading": { ru: "Загрузка…", en: "Loading…" },
+  "close": { ru: "Закрыть", en: "Close" },
+} satisfies Dict;
 
 export interface GamesCalendarProps {
   open: boolean;
@@ -15,21 +21,42 @@ export interface GamesCalendarProps {
   loading?: boolean;
 }
 
-const WEEKDAYS = ["ПН", "ВТ", "СР", "ЧТ", "ПТ", "СБ", "ВС"];
-const MONTHS = [
-  "январь",
-  "февраль",
-  "март",
-  "апрель",
-  "май",
-  "июнь",
-  "июль",
-  "август",
-  "сентябрь",
-  "октябрь",
-  "ноябрь",
-  "декабрь",
-];
+// Пары ru/en в стиле date-picker.tsx: массив нельзя положить в Dict, поэтому
+// отдельный Record<Lang, string[]>. Неделя начинается с понедельника (см. getFirstDayOfMonth).
+const WEEKDAYS: Record<Lang, string[]> = {
+  ru: ["ПН", "ВТ", "СР", "ЧТ", "ПТ", "СБ", "ВС"],
+  en: ["MO", "TU", "WE", "TH", "FR", "SA", "SU"],
+};
+const MONTHS: Record<Lang, string[]> = {
+  ru: [
+    "январь",
+    "февраль",
+    "март",
+    "апрель",
+    "май",
+    "июнь",
+    "июль",
+    "август",
+    "сентябрь",
+    "октябрь",
+    "ноябрь",
+    "декабрь",
+  ],
+  en: [
+    "January",
+    "February",
+    "March",
+    "April",
+    "May",
+    "June",
+    "July",
+    "August",
+    "September",
+    "October",
+    "November",
+    "December",
+  ],
+};
 
 function getDaysInMonth(year: number, month: number) {
   return new Date(year, month + 1, 0).getDate();
@@ -41,6 +68,7 @@ function getFirstDayOfMonth(year: number, month: number) {
 }
 
 export function GamesCalendar({ open, onOpenChange, onSelectDate, events, onMonthChange, inline, loading }: GamesCalendarProps) {
+  const { t, lang } = useI18n(TR);
   const [currentDate, setCurrentDate] = useState(new Date());
   const wasOpenRef = useRef(false);
 
@@ -108,7 +136,7 @@ export function GamesCalendar({ open, onOpenChange, onSelectDate, events, onMont
           <ChevronLeft className="h-5 w-5 sm:h-4 sm:w-4" />
         </button>
         <span className="px-5 py-2 sm:px-4 sm:py-1.5 rounded-full border border-border bg-secondary/50 text-sm font-medium flex items-center justify-center gap-2 min-w-[140px]">
-          {MONTHS[month]} {year}
+          {MONTHS[lang][month]} {year}
         </span>
         <button
           type="button"
@@ -122,7 +150,7 @@ export function GamesCalendar({ open, onOpenChange, onSelectDate, events, onMont
 
       {/* Weekday headers */}
       <div className="grid grid-cols-7 gap-1.5 sm:gap-1 mb-1.5 sm:mb-1">
-        {WEEKDAYS.map((day) => (
+        {WEEKDAYS[lang].map((day) => (
           <div key={day} className="text-center text-xs font-medium text-muted-foreground py-1.5 sm:py-1">
             {day}
           </div>
@@ -199,7 +227,7 @@ export function GamesCalendar({ open, onOpenChange, onSelectDate, events, onMont
         <div className="absolute inset-0 z-20 rounded-[inherit] bg-background/45 backdrop-blur-[2px] flex items-center justify-center">
           <div className="flex items-center gap-2 rounded-lg border border-border bg-card/90 px-3 py-2 text-sm font-medium">
             <Loader2 className="h-4 w-4 animate-spin" />
-            Загрузка…
+            {t("loading")}
           </div>
         </div>
       ) : null}
@@ -216,7 +244,7 @@ export function GamesCalendar({ open, onOpenChange, onSelectDate, events, onMont
         onClick={() => onOpenChange(false)}
         className="mt-4 w-full max-w-md py-2.5 rounded-xl border border-border bg-secondary/50 text-sm font-medium text-muted-foreground hover:bg-secondary transition-colors"
       >
-        Закрыть
+        {t("close")}
       </button>
     </div>
   );
