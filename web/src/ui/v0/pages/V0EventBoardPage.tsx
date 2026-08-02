@@ -36,7 +36,8 @@ function hasScore(m: Match): boolean {
  * Табло для телевизора: /events/:eventId/board (открывается кнопкой «На ТВ»).
  * Показывает крупно, кто с кем играет в текущем раунде (по кортам) и счёт —
  * только противостояния, без таблицы лидеров. Обновляется само каждые 5 секунд,
- * пока организатор вводит счёт с телефона. Тёмная всегда, без шапки и навигации.
+ * пока организатор вводит счёт с телефона. Без шапки и навигации; цвета — общие
+ * токены темы, поэтому табло следует светлой/тёмной теме приложения.
  */
 export function V0EventBoardPage() {
   const { eventId } = useParams();
@@ -97,14 +98,14 @@ export function V0EventBoardPage() {
 
   if (error) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-[#09090f] p-8 text-2xl text-zinc-400">
+      <div className="flex min-h-screen items-center justify-center bg-background p-8 text-2xl text-muted-foreground">
         {t("board.notFound")}
       </div>
     );
   }
   if (!data) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-[#09090f] p-8 text-2xl text-zinc-400">
+      <div className="flex min-h-screen items-center justify-center bg-background p-8 text-2xl text-muted-foreground">
         {t("board.loading")}
       </div>
     );
@@ -115,7 +116,7 @@ export function V0EventBoardPage() {
   const teamNames = (team: Match["teamA"]) => team.map((p) => p.name);
 
   return (
-    <div ref={rootRef} className="flex min-h-screen flex-col bg-[#09090f] px-[2.5vw] py-[2.5vh] text-white">
+    <div ref={rootRef} className="flex min-h-screen flex-col bg-background px-[2.5vw] py-[2.5vh] text-foreground">
       {/* Шапка табло */}
       <div className="flex items-start justify-between gap-6">
         <div className="min-w-0">
@@ -124,13 +125,13 @@ export function V0EventBoardPage() {
               {e.title}
             </h1>
             {e.kind === "TOURNAMENT" && (
-              <span className="hidden shrink-0 items-center gap-2 rounded-lg border border-emerald-500/40 bg-emerald-500/10 px-3 py-1 text-[clamp(0.8rem,1.2vw,1.2rem)] font-medium text-emerald-300 sm:inline-flex">
+              <span className="hidden shrink-0 items-center gap-2 rounded-lg border border-emerald-500/40 bg-emerald-500/10 px-3 py-1 text-[clamp(0.8rem,1.2vw,1.2rem)] font-medium text-emerald-700 dark:text-emerald-300 sm:inline-flex">
                 <Trophy className="h-[1em] w-[1em]" />
                 {t("board.tournament")}
               </span>
             )}
           </div>
-          <div className="mt-1 text-[clamp(1rem,1.6vw,1.6rem)] text-zinc-400">
+          <div className="mt-1 text-[clamp(1rem,1.6vw,1.6rem)] text-muted-foreground">
             {finished
               ? t("board.finished")
               : activeRound
@@ -143,7 +144,7 @@ export function V0EventBoardPage() {
           onClick={toggleFullscreen}
           title={isFullscreen ? t("board.exitFullscreen") : t("board.fullscreen")}
           aria-label={isFullscreen ? t("board.exitFullscreen") : t("board.fullscreen")}
-          className="shrink-0 rounded-xl border border-zinc-700 bg-zinc-900 p-3 text-zinc-300 transition-colors hover:bg-zinc-800 hover:text-white"
+          className="shrink-0 rounded-xl border border-border bg-card p-3 text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
         >
           {isFullscreen ? <Minimize className="h-6 w-6" /> : <Maximize className="h-6 w-6" />}
         </button>
@@ -163,9 +164,9 @@ export function V0EventBoardPage() {
                 return (
                   <div
                     key={m.id}
-                    className="rounded-3xl border border-zinc-800 bg-zinc-900/60 px-[2vw] py-[2.2vh] shadow-xl"
+                    className="rounded-3xl border border-border/50 bg-card px-[2vw] py-[2.2vh] shadow-xl"
                   >
-                    <div className="mb-[1vh] text-center text-[clamp(0.9rem,1.3vw,1.3rem)] font-medium uppercase tracking-widest text-zinc-500">
+                    <div className="mb-[1vh] text-center text-[clamp(0.9rem,1.3vw,1.3rem)] font-medium uppercase tracking-widest text-muted-foreground">
                       {m.courtName?.trim() ? m.courtName : `${t("board.court")} ${m.courtNumber}`}
                     </div>
                     <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-[1.5vw]">
@@ -185,12 +186,12 @@ export function V0EventBoardPage() {
                             {score}
                           </div>
                         ) : (
-                          <div className="text-[clamp(1.6rem,3.4vw,3.6rem)] font-bold leading-none text-zinc-600">
+                          <div className="text-[clamp(1.6rem,3.4vw,3.6rem)] font-bold leading-none text-muted-foreground/60">
                             VS
                           </div>
                         )}
                         {!score && (
-                          <div className="mt-2 text-[clamp(0.8rem,1.1vw,1.1rem)] uppercase tracking-widest text-zinc-600">
+                          <div className="mt-2 text-[clamp(0.8rem,1.1vw,1.1rem)] uppercase tracking-widest text-muted-foreground/70">
                             {t("board.waitingScore")}
                           </div>
                         )}
@@ -210,7 +211,7 @@ export function V0EventBoardPage() {
                 );
               })
           ) : (
-            <div className="text-center text-[clamp(1.2rem,2vw,2rem)] text-zinc-500">{t("board.noRounds")}</div>
+            <div className="text-center text-[clamp(1.2rem,2vw,2rem)] text-muted-foreground">{t("board.noRounds")}</div>
           )}
 
           {/* Прошлые раунды: компактная лента результатов */}
@@ -221,8 +222,8 @@ export function V0EventBoardPage() {
                 .sort((a, b) => b.roundNumber - a.roundNumber)
                 .slice(0, 3)
                 .map((r) => (
-                  <div key={r.id} className="text-[clamp(0.9rem,1.3vw,1.3rem)] text-zinc-500">
-                    <span className="font-medium text-zinc-400">{t("board.prevRound", { n: r.roundNumber })}</span>{" "}
+                  <div key={r.id} className="text-[clamp(0.9rem,1.3vw,1.3rem)] text-muted-foreground/80">
+                    <span className="font-medium text-muted-foreground">{t("board.prevRound", { n: r.roundNumber })}</span>{" "}
                     {r.matches
                       .slice()
                       .sort((a, b) => a.courtNumber - b.courtNumber)
