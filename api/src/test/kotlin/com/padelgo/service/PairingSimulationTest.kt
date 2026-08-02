@@ -161,10 +161,14 @@ class PairingSimulationTest {
      * За 15 раундов каждая из C(16,2)=120 пар обязана сыграть вместе ровно один раз.
      */
     @Test
-    fun `16 игроков на 4 кортах - каждый играет в паре с каждым ровно один раз`() {
-        val ratings = (0 until 16).map { 1200 + it * 40 }
+    fun `16 гостей на 4 кортах - каждый играет в паре с каждым ровно один раз`() {
+        // Одинаковый рейтинг — это реальный турнир на гостях: всем ставится 1000.
+        // Именно на равных рейтингах пораундовый перебор давал повторы, а на разбросанных
+        // (1200..1800) случайно проскакивал — из-за этого первая версия теста была зелёной
+        // при живом баге.
+        val ratings = List(16) { 1000 }
         val (_, stats) = simulate(16, 4, 15, ratings, PairingMode.ROUND_ROBIN)
-        printStats("16×4×15 ROUND_ROBIN — полный круг партнёрств", stats)
+        printStats("16×4×15 ROUND_ROBIN, равные рейтинги — полный круг партнёрств", stats)
 
         check(stats.maxPartnerCount == 1) {
             "Кто-то сыграл в паре с кем-то дважды: max=${stats.maxPartnerCount}, " +
@@ -182,6 +186,31 @@ class PairingSimulationTest {
         val perPlayer = stats.matchesPerPlayer.values
         check(perPlayer.minOrNull() == 15 && perPlayer.maxOrNull() == 15) {
             "Матчи распределены неравномерно: min=${perPlayer.minOrNull()}, max=${perPlayer.maxOrNull()}"
+        }
+    }
+
+    /** То же свойство на разбросанных рейтингах — круговое расписание не должно от них зависеть. */
+    @Test
+    fun `16 игроков с разными рейтингами на 4 кортах - полный круг партнёрств`() {
+        val ratings = (0 until 16).map { 1200 + it * 40 }
+        val (_, stats) = simulate(16, 4, 15, ratings, PairingMode.ROUND_ROBIN)
+        printStats("16×4×15 ROUND_ROBIN, рейтинги 1200..1800", stats)
+        check(stats.totalPartnerRepeats == 0 && stats.partnerHistogram[1] == 120) {
+            "Повторов=${stats.totalPartnerRepeats}, пар ровно с одним матчем=${stats.partnerHistogram[1]}"
+        }
+    }
+
+    /** 5 кортов / 20 игроков: свойство не должно зависеть от числа кортов. */
+    @Test
+    fun `20 игроков на 5 кортах - каждый играет в паре с каждым ровно один раз`() {
+        val ratings = List(20) { 1000 }
+        val (_, stats) = simulate(20, 5, 19, ratings, PairingMode.ROUND_ROBIN)
+        printStats("20×5×19 ROUND_ROBIN, равные рейтинги", stats)
+        check(stats.totalPartnerRepeats == 0) {
+            "Повторов партнёрств: ${stats.totalPartnerRepeats}"
+        }
+        check(stats.partnerHistogram[1] == 190) {
+            "Покрыты не все пары: ${stats.partnerHistogram[1]} из 190"
         }
     }
 
