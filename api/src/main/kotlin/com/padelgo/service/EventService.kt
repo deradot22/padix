@@ -153,7 +153,9 @@ class EventService(
     }
 
     fun listPlayersByRating(): List<Player> =
-        playerRepo.findAll().sortedWith(compareByDescending<Player> { it.rating }.thenBy { it.name.lowercase() })
+        playerRepo.findAll()
+            .filter { !it.isGuest }
+            .sortedWith(compareByDescending<Player> { it.rating }.thenBy { it.name.lowercase() })
 
     @Transactional
     fun createEvent(event: Event, creatorUserId: UUID, courtNames: List<String>? = null): Event {
@@ -896,6 +898,9 @@ class EventService(
             throw ApiException(HttpStatus.CONFLICT, "Registration is closed (status=${event.status})")
         }
         val player = playerRepo.findById(playerId).orElseThrow { ApiException(HttpStatus.NOT_FOUND, "Player not found") }
+        if (player.isGuest && event.kind != com.padelgo.domain.EventKind.TOURNAMENT) {
+            throw ApiException(HttpStatus.BAD_REQUEST, "Гость может участвовать только в турнирах")
+        }
 
         // Ограничение по рейтингу (задача #9). Организатор может добавить игрока
         // вне диапазона вручную (override), поэтому проверяем только когда регистрирует
@@ -953,8 +958,12 @@ class EventService(
             throw ApiException(HttpStatus.CONFLICT, "Registration is closed (status=${event.status})")
         }
         if (player1Id == player2Id) throw ApiException(HttpStatus.BAD_REQUEST, "Игрок не может быть в паре сам с собой")
-        playerRepo.findById(player1Id).orElseThrow { ApiException(HttpStatus.NOT_FOUND, "Player not found") }
-        playerRepo.findById(player2Id).orElseThrow { ApiException(HttpStatus.NOT_FOUND, "Player not found") }
+        listOf(player1Id, player2Id).forEach { pid ->
+            val p = playerRepo.findById(pid).orElseThrow { ApiException(HttpStatus.NOT_FOUND, "Player not found") }
+            if (p.isGuest && event.kind != com.padelgo.domain.EventKind.TOURNAMENT) {
+                throw ApiException(HttpStatus.BAD_REQUEST, "Гость может участвовать только в турнирах")
+            }
+        }
 
         val teamId = UUID.randomUUID()
         val before = regRepo.countByEventIdAndStatus(eventId).toInt()
@@ -975,6 +984,45 @@ class EventService(
             }
         }
         notifyRosterChanged(event, before)
+    }
+
+    /**
+     * Турнир: организатор вписывает участника без аккаунта («гость»).
+     * Гость — обычный Player с isGuest=true: матчи и таблица работают как есть,
+     * но он исключён из общего рейтинга (listPlayersByRating) и decay.
+     */
+    @Transactional
+    fun addGuest(eventId: UUID, userId: UUID, name: String): Player {
+        val event = getEvent(eventId)
+        requireAuthor(event, userId)
+        if (event.kind != com.padelgo.domain.EventKind.TOURNAMENT) {
+            throw ApiException(HttpStatus.BAD_REQUEST, "Гостей можно вписывать только в турнир")
+        }
+        if (event.format == com.padelgo.domain.EventFormat.FIXED_PAIRS) {
+            throw ApiException(HttpStatus.BAD_REQUEST, "Для формата «Фиксированные пары» гости пока не поддерживаются")
+        }
+        if (event.status != EventStatus.OPEN_FOR_REGISTRATION) {
+            throw ApiException(HttpStatus.CONFLICT, "Registration is closed (status=${event.status})")
+        }
+        val normalized = name.trim()
+        if (normalized.isBlank()) throw ApiException(HttpStatus.BAD_REQUEST, "Имя гостя не может быть пустым")
+        if (normalized.length > 60) throw ApiException(HttpStatus.BAD_REQUEST, "Имя гостя слишком длинное")
+
+        val guest = playerRepo.save(Player(name = uniqueGuestName(normalized), isGuest = true))
+        val before = regRepo.countByEventIdAndStatus(eventId).toInt()
+        regRepo.save(Registration(eventId = eventId, playerId = guest.id))
+        notifyRosterChanged(event, before)
+        return guest
+    }
+
+    /** players.name глобально уникально — при коллизии добавляем суффикс, как в auth-флоу. */
+    private fun uniqueGuestName(base: String): String {
+        if (playerRepo.findByNameIgnoreCase(base) == null) return base
+        repeat(10) {
+            val candidate = "$base #${java.util.concurrent.ThreadLocalRandom.current().nextInt(1000, 10000)}"
+            if (playerRepo.findByNameIgnoreCase(candidate) == null) return candidate
+        }
+        return "$base #${System.currentTimeMillis() % 100000}"
     }
 
     @Transactional
@@ -1440,33 +1488,41 @@ class EventService(
             return
         }
 
-        val playerIds = finishedMatches.flatMap {
-            listOf(it.teamAPlayer1Id!!, it.teamAPlayer2Id!!, it.teamBPlayer1Id!!, it.teamBPlayer2Id!!)
-        }.toSet()
-        val players = playerRepo.findAllById(playerIds).associateBy { it.id!! }.toMutableMap()
-        val accounts = userRepo.findAllByPlayerIdIn(playerIds.toList())
-
-        // Ядро начисления — общий проход для боевого финиша и глобального пересчёта.
-        // Возвращает стартовые рейтинги для расчёта delta в нотификации.
-        val ratingBefore: Map<UUID, Int> = try {
-            applyEventRatingPass(event, finishedMatches, setsByMatch, players, accounts, matchTime = java.time.Instant.now())
-        } finally {
+        if (event.kind == com.padelgo.domain.EventKind.TOURNAMENT) {
+            // Турнир не влияет на рейтинг: пропускаем начисление и рейтинг-нотификации.
+            // Телеграм-сводка ниже уходит как обычно (топ-3 по дельте будет пуст,
+            // основной блок — таблица по очкам).
             event.status = EventStatus.FINISHED
             eventRepo.save(event)
-        }
+        } else {
+            val playerIds = finishedMatches.flatMap {
+                listOf(it.teamAPlayer1Id!!, it.teamAPlayer2Id!!, it.teamBPlayer1Id!!, it.teamBPlayer2Id!!)
+            }.toSet()
+            val players = playerRepo.findAllById(playerIds).associateBy { it.id!! }.toMutableMap()
+            val accounts = userRepo.findAllByPlayerIdIn(playerIds.toList())
 
-        // Нотификации участникам — только боевой финиш (глобальный пересчёт их не шлёт).
-        accounts.forEach { acc ->
-            val player = acc.playerId?.let { players[it] } ?: return@forEach
-            val before = ratingBefore[player.id] ?: player.rating
-            ratingNotificationRepo.save(
-                com.padelgo.domain.UserRatingNotification(
-                    userId = acc.id!!,
-                    eventId = eventId,
-                    newRating = player.rating,
-                    delta = player.rating - before
+            // Ядро начисления — общий проход для боевого финиша и глобального пересчёта.
+            // Возвращает стартовые рейтинги для расчёта delta в нотификации.
+            val ratingBefore: Map<UUID, Int> = try {
+                applyEventRatingPass(event, finishedMatches, setsByMatch, players, accounts, matchTime = java.time.Instant.now())
+            } finally {
+                event.status = EventStatus.FINISHED
+                eventRepo.save(event)
+            }
+
+            // Нотификации участникам — только боевой финиш (глобальный пересчёт их не шлёт).
+            accounts.forEach { acc ->
+                val player = acc.playerId?.let { players[it] } ?: return@forEach
+                val before = ratingBefore[player.id] ?: player.rating
+                ratingNotificationRepo.save(
+                    com.padelgo.domain.UserRatingNotification(
+                        userId = acc.id!!,
+                        eventId = eventId,
+                        newRating = player.rating,
+                        delta = player.rating - before
+                    )
                 )
-            )
+            }
         }
 
         // Telegram: после успешного финиша шлём сводку — полная таблица лидеров
@@ -1618,9 +1674,9 @@ class EventService(
                 list.minByOrNull { it.createdAt ?: java.time.Instant.MAX }!!.oldRating
             }
 
-        // 2. FINISHED-эвенты в хронологии.
+        // 2. FINISHED-эвенты в хронологии. Турниры не влияют на рейтинг — в реплей не входят.
         val events = eventRepo.findAll()
-            .filter { it.status == EventStatus.FINISHED }
+            .filter { it.status == EventStatus.FINISHED && it.kind != com.padelgo.domain.EventKind.TOURNAMENT }
             .sortedWith(
                 compareBy<Event>({ it.date }, { it.startTime })
                     .thenBy { it.createdAt ?: java.time.Instant.EPOCH }
@@ -1865,6 +1921,12 @@ class EventService(
                     .thenBy { it.courtNumber }
             )
 
+        if (event.kind == com.padelgo.domain.EventKind.TOURNAMENT) {
+            // Турнир: рейтинг не считается — при правке счёта только обновляем телеграм-пост результатов.
+            notifyResultsUpdatedAfterCommit(event, finishedMatches.size)
+            return
+        }
+
         // Порядковый индекс матча в прогоне — для восстановления pre-event рейтинга
         // (рейтинг игрока перед ПЕРВЫМ его матчем в этом порядке).
         val matchOrder: Map<UUID, Int> = finishedMatches.mapIndexed { idx, m -> m.id!! to idx }.toMap()
@@ -1964,29 +2026,32 @@ class EventService(
         }
 
         // 9. Telegram: обновляем уже опубликованный пост результатов.
-        val ownerId = event.createdByUserId
-        if (ownerId != null) {
-            try {
-                val (top, leaderboard) = buildEventResultsPayload(event)
-                val payload = EventResultsUpdatedNotify(
-                    eventId = eventId,
-                    ownerUserId = ownerId,
-                    title = event.title,
-                    date = event.date,
-                    startTime = event.startTime,
-                    endTime = event.endTime,
-                    courtsCount = event.courtsCount,
-                    top = top,
-                    leaderboard = leaderboard,
-                    matchCount = finishedMatches.size
-                )
-                runAfterCommit {
-                    try { botClient.notifyEventResultsUpdated(payload) }
-                    catch (e: Exception) { log.warn("Failed to notify bot about RESULTS UPDATED: {}", e.message) }
-                }
-            } catch (e: Exception) {
-                log.warn("Failed to compute Telegram RESULTS UPDATED payload: {}", e.message)
+        notifyResultsUpdatedAfterCommit(event, finishedMatches.size)
+    }
+
+    /** Шлёт боту обновлённые результаты завершённого эвента (после коммита транзакции). */
+    private fun notifyResultsUpdatedAfterCommit(event: Event, matchCount: Int) {
+        val ownerId = event.createdByUserId ?: return
+        try {
+            val (top, leaderboard) = buildEventResultsPayload(event)
+            val payload = EventResultsUpdatedNotify(
+                eventId = event.id!!,
+                ownerUserId = ownerId,
+                title = event.title,
+                date = event.date,
+                startTime = event.startTime,
+                endTime = event.endTime,
+                courtsCount = event.courtsCount,
+                top = top,
+                leaderboard = leaderboard,
+                matchCount = matchCount
+            )
+            runAfterCommit {
+                try { botClient.notifyEventResultsUpdated(payload) }
+                catch (e: Exception) { log.warn("Failed to notify bot about RESULTS UPDATED: {}", e.message) }
             }
+        } catch (e: Exception) {
+            log.warn("Failed to compute Telegram RESULTS UPDATED payload: {}", e.message)
         }
     }
 
@@ -2382,10 +2447,18 @@ class EventService(
                     eventStartTime = e.startTime,
                     eventEndTime = e.endTime,
                     participants = participantsByEvent[eventId] ?: emptyList(),
-                    finishedAt = finishedAtByEvent[eventId],
+                    // У турниров (и форс-финишей) нет rating_changes — берём время окончания самого эвента,
+                    // иначе завершённый турнир сортируется как незавершённый.
+                    finishedAt = finishedAtByEvent[eventId]
+                        ?: if (e.status == EventStatus.FINISHED) {
+                            e.date.atTime(e.endTime).toInstant(java.time.ZoneOffset.UTC)
+                        } else {
+                            null
+                        },
                     matchesCount = items.size,
                     totalPoints = totalPoints,
-                    ratingDelta = ratingDeltas[eventId] ?: 0
+                    ratingDelta = ratingDeltas[eventId] ?: 0,
+                    kind = e.kind
                 )
             }
             .sortedWith(
@@ -2550,6 +2623,8 @@ data class PlayerEventHistoryItem(
     @Schema(description = "Сумма очков игрока за все матчи (при scoringMode=POINTS). null при scoringMode=SETS")
     val totalPoints: Int?,
     @Schema(description = "Суммарное изменение рейтинга за игру")
-    val ratingDelta: Int
+    val ratingDelta: Int,
+    @Schema(description = "Вид события: REGULAR — обычная игра, TOURNAMENT — турнир (не влияет на рейтинг)")
+    val kind: com.padelgo.domain.EventKind = com.padelgo.domain.EventKind.REGULAR
 )
 

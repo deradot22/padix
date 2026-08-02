@@ -5,7 +5,37 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { api, MeResponse } from "@/lib/api";
 import { cn } from "@/lib/utils";
+import { Dict, useI18n } from "@/lib/i18n";
 import { Upload } from "lucide-react";
+
+const TR = {
+  "profile.title": { ru: "Редактировать профиль", en: "Edit profile" },
+  "profile.avatar": { ru: "Аватар", en: "Avatar" },
+  "profile.upload": { ru: "Загрузить фото", en: "Upload photo" },
+  "profile.name": { ru: "Имя", en: "Name" },
+  "profile.gender": { ru: "Пол", en: "Gender" },
+  "profile.genderUnset": { ru: "Не указан", en: "Not specified" },
+  "profile.genderM": { ru: "М", en: "Male" },
+  "profile.genderF": { ru: "Ж", en: "Female" },
+  "profile.showOdds": { ru: "Показывать шансы выигрыша", en: "Show win probability" },
+  "profile.showOddsHint": {
+    ru: "В модале «Раунды» под каждым матчем будет полоска шансов и метка «Лёгкий фаворит» / «Равные шансы» и т.п. По Elo.",
+    en: "In the Rounds modal every match gets a probability bar and a label like “Slight favorite” or “Even odds”. Based on Elo.",
+  },
+  "profile.cancel": { ru: "Отмена", en: "Cancel" },
+  "profile.saving": { ru: "Сохранение…", en: "Saving…" },
+  "profile.save": { ru: "Сохранить", en: "Save" },
+  "profile.errReadFile": { ru: "Не удалось прочитать файл", en: "Couldn't read the file" },
+  "profile.errLoadImage": { ru: "Не удалось загрузить изображение", en: "Couldn't load the image" },
+  "profile.errCanvas": { ru: "Нет контекста canvas", en: "No canvas context" },
+  "profile.errAvatar": { ru: "Не удалось обновить аватар", en: "Couldn't update the avatar" },
+  "profile.errSetting": { ru: "Не удалось сохранить настройку", en: "Couldn't save the setting" },
+  "profile.errProcess": { ru: "Ошибка обработки", en: "Processing failed" },
+  "profile.errSave": { ru: "Не удалось сохранить", en: "Couldn't save" },
+} satisfies Dict;
+
+// compressAvatar живёт вне компонента — t прокидываем параметром (как chatTypeLabel в telegram-integration).
+type Translate = (key: keyof typeof TR & string) => string;
 
 const BOY_AVATARS = [
   "https://api.dicebear.com/8.x/avataaars/png?seed=boy1",
@@ -22,14 +52,14 @@ const GIRL_AVATARS = [
   "https://api.dicebear.com/8.x/avataaars/png?seed=girl5",
 ];
 
-function compressAvatar(file: File, maxSize = 256, quality = 0.8): Promise<string> {
+function compressAvatar(file: File, t: Translate, maxSize = 256, quality = 0.8): Promise<string> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
-    reader.onerror = () => reject(new Error("Не удалось прочитать файл"));
+    reader.onerror = () => reject(new Error(t("profile.errReadFile")));
     reader.onload = () => {
       const src = reader.result as string;
       const img = new Image();
-      img.onerror = () => reject(new Error("Не удалось загрузить изображение"));
+      img.onerror = () => reject(new Error(t("profile.errLoadImage")));
       img.onload = () => {
         const scale = Math.min(1, maxSize / Math.max(img.width, img.height));
         const width = Math.max(1, Math.round(img.width * scale));
@@ -39,7 +69,7 @@ function compressAvatar(file: File, maxSize = 256, quality = 0.8): Promise<strin
         canvas.height = height;
         const ctx = canvas.getContext("2d");
         if (!ctx) {
-          reject(new Error("Нет контекста canvas"));
+          reject(new Error(t("profile.errCanvas")));
           return;
         }
         ctx.drawImage(img, 0, 0, width, height);
@@ -69,6 +99,7 @@ export function EditProfileDialog(props: {
   me: MeResponse;
   onSaved: (me: MeResponse) => void;
 }) {
+  const { t } = useI18n(TR);
   const [name, setName] = useState(props.me.name ?? "");
   const [email, setEmail] = useState(props.me.email ?? "");
   const [gender, setGender] = useState(props.me.gender ?? "");
@@ -104,7 +135,7 @@ export function EditProfileDialog(props: {
       const updated = await api.updateAvatar(next);
       props.onSaved(updated);
     } catch (e: any) {
-      setError(e?.message ?? "Не удалось обновить аватар");
+      setError(e?.message ?? t("profile.errAvatar"));
     }
   };
 
@@ -115,7 +146,7 @@ export function EditProfileDialog(props: {
       const updated = await api.updateProfile({ showWinProbability: next });
       props.onSaved(updated);
     } catch (e: any) {
-      setError(e?.message ?? "Не удалось сохранить настройку");
+      setError(e?.message ?? t("profile.errSetting"));
       // Откатим UI к серверному значению.
       setShowWinProbability(!next);
     }
@@ -137,7 +168,7 @@ export function EditProfileDialog(props: {
       props.onSaved(updated);
       props.onOpenChange(false);
     } catch (e: any) {
-      setError(e?.message ?? "Не удалось сохранить");
+      setError(e?.message ?? t("profile.errSave"));
     } finally {
       setSaving(false);
     }
@@ -147,13 +178,13 @@ export function EditProfileDialog(props: {
     <Dialog open={props.open} onOpenChange={props.onOpenChange}>
       <DialogContent className="sm:max-w-lg max-h-[calc(100dvh-4rem)] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>Редактировать профиль</DialogTitle>
+          <DialogTitle>{t("profile.title")}</DialogTitle>
         </DialogHeader>
 
         <div className="space-y-5">
           {/* Аватар — авто-сохранение при выборе. */}
           <div className="space-y-3">
-            <div className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Аватар</div>
+            <div className="text-xs font-medium text-muted-foreground uppercase tracking-wide">{t("profile.avatar")}</div>
             <div className="flex items-start gap-4">
               <div className="h-20 w-20 rounded-full bg-secondary/60 border border-border overflow-hidden flex items-center justify-center text-xl font-semibold shrink-0">
                 {avatar ? (
@@ -165,7 +196,7 @@ export function EditProfileDialog(props: {
               <div className="space-y-3 flex-1 min-w-0">
                 <label className="inline-flex cursor-pointer items-center gap-2 rounded-md border border-border bg-background px-3 py-2 text-xs font-medium hover:bg-secondary transition-colors">
                   <Upload className="h-3.5 w-3.5" />
-                  Загрузить фото
+                  {t("profile.upload")}
                   <input
                     type="file"
                     accept="image/*"
@@ -173,9 +204,9 @@ export function EditProfileDialog(props: {
                     onChange={(e) => {
                       const file = e.target.files?.[0];
                       if (!file) return;
-                      compressAvatar(file)
+                      compressAvatar(file, t)
                         .then(persistAvatar)
-                        .catch((err: any) => setError(err?.message ?? "Ошибка обработки"));
+                        .catch((err: any) => setError(err?.message ?? t("profile.errProcess")));
                     }}
                   />
                 </label>
@@ -201,7 +232,7 @@ export function EditProfileDialog(props: {
           {/* Имя/email/пол. */}
           <div className="space-y-3 pt-2 border-t border-border">
             <div className="space-y-1.5">
-              <label className="text-sm font-medium">Имя</label>
+              <label className="text-sm font-medium">{t("profile.name")}</label>
               <Input value={name} onChange={(e) => setName(e.target.value)} autoComplete="name" />
             </div>
             <div className="space-y-1.5">
@@ -214,15 +245,15 @@ export function EditProfileDialog(props: {
               />
             </div>
             <div className="space-y-1.5">
-              <label className="text-sm font-medium">Пол</label>
+              <label className="text-sm font-medium">{t("profile.gender")}</label>
               <Select value={gender || "_unset"} onValueChange={(v) => setGender(v === "_unset" ? "" : v)}>
                 <SelectTrigger className="h-10">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="_unset">Не указан</SelectItem>
-                  <SelectItem value="M">М</SelectItem>
-                  <SelectItem value="F">Ж</SelectItem>
+                  <SelectItem value="_unset">{t("profile.genderUnset")}</SelectItem>
+                  <SelectItem value="M">{t("profile.genderM")}</SelectItem>
+                  <SelectItem value="F">{t("profile.genderF")}</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -231,10 +262,8 @@ export function EditProfileDialog(props: {
           {/* Тоггл «показывать шансы» — авто-сохранение по клику. */}
           <label className="flex items-start justify-between gap-3 cursor-pointer rounded-md border border-border bg-background/50 hover:bg-background px-3 py-2.5 transition-colors">
             <div className="space-y-0.5 min-w-0">
-              <div className="text-sm font-medium">Показывать шансы выигрыша</div>
-              <div className="text-xs text-muted-foreground">
-                В модале «Раунды» под каждым матчем будет полоска шансов и метка «Лёгкий фаворит» / «Равные шансы» и т.п. По Elo.
-              </div>
+              <div className="text-sm font-medium">{t("profile.showOdds")}</div>
+              <div className="text-xs text-muted-foreground">{t("profile.showOddsHint")}</div>
             </div>
             <input
               type="checkbox"
@@ -251,10 +280,10 @@ export function EditProfileDialog(props: {
 
         <DialogFooter className="gap-2">
           <Button type="button" variant="outline" onClick={() => props.onOpenChange(false)} disabled={saving}>
-            Отмена
+            {t("profile.cancel")}
           </Button>
           <Button type="button" onClick={onSave} disabled={saving || !dirty}>
-            {saving ? "Сохранение…" : "Сохранить"}
+            {saving ? t("profile.saving") : t("profile.save")}
           </Button>
         </DialogFooter>
       </DialogContent>

@@ -7,6 +7,43 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { formatEventDate, timeRange } from "../utils";
+import { Dict, useI18n } from "@/lib/i18n";
+
+const TR = {
+  "format.americana": { ru: "Американка", en: "Americano" },
+  "format.mexicano": { ru: "Мексикано", en: "Mexicano" },
+  "format.fixedPairs": { ru: "Фиксированные пары", en: "Fixed pairs" },
+  "hero.season": { ru: "Сезон {year}", en: "Season {year}" },
+  "hero.welcome": { ru: "Добро пожаловать в", en: "Welcome to" },
+  "hero.subtitle": {
+    ru: "Организуйте игры в падел, отслеживайте свой рейтинг и находите партнеров для игры.",
+    en: "Organize padel games, track your rating and find partners to play with.",
+  },
+  "hero.findGame": { ru: "Найти игру", en: "Find a game" },
+  "hero.createGame": { ru: "Создать игру", en: "Create game" },
+  "hero.createTournament": { ru: "Создать турнир", en: "Create tournament" },
+  "stats.activePlayers": { ru: "Активных игроков", en: "Active players" },
+  "stats.calibration": {
+    ru: "{calibrated} откалибровано, {notCalibrated} в калибровке",
+    en: "{calibrated} calibrated, {notCalibrated} in calibration",
+  },
+  "stats.gamesToday": { ru: "Игр сегодня", en: "Games today" },
+  "stats.matchesWeek": { ru: "Матчей за неделю", en: "Matches this week" },
+  "upcoming.title": { ru: "Ближайшие игры", en: "Upcoming games" },
+  "upcoming.all": { ru: "Все игры", en: "All games" },
+  "upcoming.empty": { ru: "Ближайших игр нет.", en: "No upcoming games." },
+  "upcoming.registered": { ru: "Вы записаны", en: "You're registered" },
+  "upcoming.join": { ru: "Вступить", en: "Join" },
+  "top.title": { ru: "Топ игроков", en: "Top players" },
+  "top.fullRating": { ru: "Полный рейтинг", en: "Full rating" },
+  "top.empty": { ru: "Пока нет участников.", en: "No players yet." },
+  "common.loading": { ru: "Загрузка…", en: "Loading…" },
+  "join.noPlayerId": {
+    ru: "Не удалось определить игрока (playerId). Перезайдите в аккаунт.",
+    en: "Couldn't identify the player (playerId). Please sign in again.",
+  },
+  "join.error": { ru: "Ошибка записи", en: "Failed to join" },
+} satisfies Dict;
 
 // Hero-анимация: stagger fade-up.
 // При prefers-reduced-motion staggered children всё равно работают,
@@ -86,14 +123,14 @@ function formatDate(d: Date): string {
   return `${yyyy}-${mm}-${dd}`;
 }
 
-function formatLabel(format: Event["format"]) {
+function formatLabel(format: Event["format"], t: (key: keyof typeof TR & string) => string) {
   switch (format) {
     case "AMERICANA":
-      return "Американка";
+      return t("format.americana");
     case "MEXICANO":
-      return "Мексикано";
+      return t("format.mexicano");
     case "FIXED_PAIRS":
-      return "Фиксированные пары";
+      return t("format.fixedPairs");
     default:
       return format;
   }
@@ -101,6 +138,7 @@ function formatLabel(format: Event["format"]) {
 
 export function V0HomePage(props: { me: any }) {
   const nav = useNavigate();
+  const { t } = useI18n(TR);
   const prefersReducedMotion = useReducedMotion() ?? false;
   const childVariant = prefersReducedMotion ? heroChildReduced : heroChild;
   const statVariant = prefersReducedMotion ? statCardReduced : statCardVariant;
@@ -196,7 +234,7 @@ export function V0HomePage(props: { me: any }) {
       return;
     }
     if (!props.me.playerId) {
-      setJoinError("Не удалось определить игрока (playerId). Перезайдите в аккаунт.");
+      setJoinError(t("join.noPlayerId"));
       return;
     }
     setJoiningId(eventId);
@@ -205,7 +243,7 @@ export function V0HomePage(props: { me: any }) {
       await api.registerForEvent(eventId, props.me.playerId);
       nav(`/events/${eventId}`);
     } catch (e: any) {
-      setJoinError(e?.message ?? "Ошибка записи");
+      setJoinError(e?.message ?? t("join.error"));
     } finally {
       setJoiningId(null);
     }
@@ -214,16 +252,16 @@ export function V0HomePage(props: { me: any }) {
   // Restyle B: bento — первый блок крупный (col-span-2) и акцентный.
   const quickStats = [
     {
-      label: "Активных игроков",
+      label: t("stats.activePlayers"),
       value: String(stats.activePlayers),
-      sublabel: stats.notCalibrated > 0 ? `${stats.calibrated} откалибровано, ${stats.notCalibrated} в калибровке` : undefined,
+      sublabel: stats.notCalibrated > 0 ? t("stats.calibration", { calibrated: stats.calibrated, notCalibrated: stats.notCalibrated }) : undefined,
       icon: Users,
       iconWrap: "bg-primary/15 text-primary",
       span: "sm:col-span-2",
       big: true,
     },
-    { label: "Игр сегодня", value: String(stats.gamesToday), icon: Gamepad2, iconWrap: "bg-accent/15 text-accent", span: "sm:col-span-1", big: false },
-    { label: "Матчей за неделю", value: String(stats.gamesWeek), icon: TrendingUp, iconWrap: "bg-primary/15 text-primary", span: "sm:col-span-1", big: false },
+    { label: t("stats.gamesToday"), value: String(stats.gamesToday), icon: Gamepad2, iconWrap: "bg-accent/15 text-accent", span: "sm:col-span-1", big: false },
+    { label: t("stats.matchesWeek"), value: String(stats.gamesWeek), icon: TrendingUp, iconWrap: "bg-primary/15 text-primary", span: "sm:col-span-1", big: false },
   ];
 
   return (
@@ -238,26 +276,32 @@ export function V0HomePage(props: { me: any }) {
           <motion.div variants={childVariant}>
             <Badge className="mb-4 bg-primary/20 text-primary border-primary/30 border">
               <Zap className="mr-1 h-3 w-3" />
-              Сезон {new Date().getFullYear()}
+              {t("hero.season", { year: new Date().getFullYear() })}
             </Badge>
           </motion.div>
           <motion.h1 variants={childVariant} className="text-4xl font-bold tracking-tight lg:text-5xl">
-            Добро пожаловать в <span className="text-primary">padix</span>
+            {t("hero.welcome")} <span className="text-primary">padix</span>
           </motion.h1>
           <motion.p variants={childVariant} className="mt-4 text-lg text-muted-foreground">
-            Организуйте игры в падел, отслеживайте свой рейтинг и находите партнеров для игры.
+            {t("hero.subtitle")}
           </motion.p>
           <motion.div variants={childVariant} className="mt-6 flex flex-wrap gap-3">
             <Button asChild size="lg">
               <Link to="/games">
                 <Gamepad2 className="mr-2 h-5 w-5" />
-                Найти игру
+                {t("hero.findGame")}
               </Link>
             </Button>
             <Button asChild variant="outline" size="lg">
               <Link to={props.me ? "/create" : "/register"}>
-                Создать игру
+                {t("hero.createGame")}
                 <ArrowRight className="ml-2 h-4 w-4" />
+              </Link>
+            </Button>
+            <Button asChild variant="outline" size="lg">
+              <Link to={props.me ? "/create?kind=tournament" : "/register"}>
+                <Trophy className="mr-2 h-4 w-4" />
+                {t("hero.createTournament")}
               </Link>
             </Button>
           </motion.div>
@@ -303,11 +347,11 @@ export function V0HomePage(props: { me: any }) {
           <CardHeader className="flex flex-col gap-2 pb-4 px-4 sm:px-6 sm:flex-row sm:items-center sm:justify-between">
             <CardTitle className="flex items-center gap-2">
               <Calendar className="h-5 w-5 text-primary" />
-              Ближайшие игры
+              {t("upcoming.title")}
             </CardTitle>
             <Button asChild variant="ghost" size="sm">
               <Link to="/games">
-                Все игры
+                {t("upcoming.all")}
                 <ArrowRight className="ml-1 h-4 w-4" />
               </Link>
             </Button>
@@ -317,9 +361,9 @@ export function V0HomePage(props: { me: any }) {
               <div className="rounded-lg border border-destructive/30 bg-destructive/10 p-3 text-sm">{joinError}</div>
             ) : null}
             {loading ? (
-              <div className="text-sm text-muted-foreground">Загрузка…</div>
+              <div className="text-sm text-muted-foreground">{t("common.loading")}</div>
             ) : upcoming.length === 0 ? (
-              <div className="text-sm text-muted-foreground">Ближайших игр нет.</div>
+              <div className="text-sm text-muted-foreground">{t("upcoming.empty")}</div>
             ) : (
               <motion.div className="space-y-3" variants={listContainer} initial="hidden" animate="show">
               {upcoming.map((e) => (
@@ -333,7 +377,7 @@ export function V0HomePage(props: { me: any }) {
                       <Clock className="h-5 w-5 text-muted-foreground" />
                     </div>
                     <div>
-                      <p className="font-medium">{formatLabel(e.format)}</p>
+                      <p className="font-medium">{formatLabel(e.format, t)}</p>
                       <p className="text-sm text-muted-foreground">
                         {formatEventDate(e.date)} • {timeRange(e.startTime, e.endTime)}
                       </p>
@@ -346,11 +390,11 @@ export function V0HomePage(props: { me: any }) {
                     </Badge>
                     {registeredIds[e.id] ? (
                       <Button size="sm" variant="secondary" onClick={() => nav(`/events/${e.id}`)}>
-                        Вы записаны
+                        {t("upcoming.registered")}
                       </Button>
                     ) : (
                       <Button size="sm" disabled={joiningId === e.id} onClick={() => joinEvent(e.id)}>
-                        Вступить
+                        {t("upcoming.join")}
                       </Button>
                     )}
                   </div>
@@ -365,20 +409,20 @@ export function V0HomePage(props: { me: any }) {
           <CardHeader className="flex flex-col gap-2 pb-4 px-4 sm:px-6 sm:flex-row sm:items-center sm:justify-between">
             <CardTitle className="flex items-center gap-2">
               <Trophy className="h-5 w-5 text-primary" />
-              Топ игроков
+              {t("top.title")}
             </CardTitle>
             <Button asChild variant="ghost" size="sm">
               <Link to="/rating">
-                Полный рейтинг
+                {t("top.fullRating")}
                 <ArrowRight className="ml-1 h-4 w-4" />
               </Link>
             </Button>
           </CardHeader>
           <CardContent className="space-y-3 px-4 sm:px-6">
             {loading ? (
-              <div className="text-sm text-muted-foreground">Загрузка…</div>
+              <div className="text-sm text-muted-foreground">{t("common.loading")}</div>
             ) : topPlayers.length === 0 ? (
-              <div className="text-sm text-muted-foreground">Пока нет участников.</div>
+              <div className="text-sm text-muted-foreground">{t("top.empty")}</div>
             ) : (
               <motion.div className="space-y-3" variants={listContainer} initial="hidden" animate="show">
               {topPlayers.map((player, i) => {

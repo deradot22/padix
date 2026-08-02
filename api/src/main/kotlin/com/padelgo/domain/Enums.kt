@@ -54,3 +54,10 @@ enum class EventVisibility {
     PRIVATE,
     PUBLIC
 }
+
+enum class EventKind {
+    /** Обычная игра — влияет на рейтинг. */
+    REGULAR,
+    /** Турнир — рейтинг не пересчитывается, допускаются вписанные вручную гости. */
+    TOURNAMENT
+}

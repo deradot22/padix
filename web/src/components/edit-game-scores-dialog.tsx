@@ -4,6 +4,32 @@ import { api, EventDetails, Match, Round } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ModalScrollArea } from "@/components/ui/modal-scroll-area";
+import { Dict, useI18n } from "@/lib/i18n";
+
+const TR = {
+  "scores.loadError": { ru: "Ошибка загрузки события", en: "Failed to load event" },
+  "scores.saveError": { ru: "Ошибка сохранения счёта", en: "Failed to save score" },
+  "scores.close": { ru: "Закрыть", en: "Close" },
+  "scores.editTitle": { ru: "Редактирование счёта", en: "Edit score" },
+  "scores.viewTitle": { ru: "Счёт игры", en: "Game score" },
+  "scores.loading": { ru: "Загрузка...", en: "Loading..." },
+  "scores.onlyOrganizer": {
+    ru: "Изменить счёт может только организатор игры.",
+    en: "Only the game organizer can edit the score.",
+  },
+  "scores.round": { ru: "Раунд {n}", en: "Round {n}" },
+  "scores.court": { ru: "Корт {n}", en: "Court {n}" },
+  "scores.teamA": { ru: "Команда A", en: "Team A" },
+  "scores.teamB": { ru: "Команда B", en: "Team B" },
+  "scores.set": { ru: "Сет {n}", en: "Set {n}" },
+  "scores.gamesA": { ru: "Геймы A", en: "Games A" },
+  "scores.gamesB": { ru: "Геймы B", en: "Games B" },
+  "scores.pointsA": { ru: "Точки Team A", en: "Team A points" },
+  "scores.pointsB": { ru: "Точки Team B", en: "Team B points" },
+  "scores.cancel": { ru: "Отмена", en: "Cancel" },
+  "scores.saving": { ru: "Сохранение...", en: "Saving..." },
+  "scores.save": { ru: "Сохранить", en: "Save" },
+} satisfies Dict;
 
 // Значения держим строками, чтобы поле можно было очистить (пусто), а не залипало на 0,
 // и чтобы не появлялись ведущие нули («055»). В число парсим только при сохранении.
@@ -39,6 +65,7 @@ export function EditGameScoresDialog(props: {
   onClose: () => void;
   onSave: () => void;
 }) {
+  const { t } = useI18n(TR);
   const [eventData, setEventData] = useState<EventDetails | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -82,12 +109,13 @@ export function EditGameScoresDialog(props: {
         setSetsMap(initialSets);
         originalSetsRef.current = JSON.parse(JSON.stringify(initialSets));
       } catch (e: any) {
-        setError(e?.message ?? "Ошибка загрузки события");
+        setError(e?.message ?? t("scores.loadError"));
       } finally {
         setLoading(false);
       }
     };
     load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- t меняется только со сменой языка, перезагрузка не нужна
   }, [props.eventId]);
 
   const handleSave = async () => {
@@ -127,7 +155,7 @@ export function EditGameScoresDialog(props: {
       }
       props.onSave();
     } catch (e: any) {
-      setError(e?.message ?? "Ошибка сохранения счёта");
+      setError(e?.message ?? t("scores.saveError"));
     } finally {
       setSaving(false);
     }
@@ -137,9 +165,9 @@ export function EditGameScoresDialog(props: {
     return (
       <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-6" onClick={props.onClose}>
         <div className="bg-card border border-border rounded-lg p-6 max-w-md" onClick={(e) => e.stopPropagation()}>
-          <div className="text-red-500">Ошибка загрузки события</div>
+          <div className="text-red-500">{t("scores.loadError")}</div>
           <Button variant="outline" size="sm" className="mt-4 w-full" onClick={props.onClose}>
-            Закрыть
+            {t("scores.close")}
           </Button>
         </div>
       </div>
@@ -155,7 +183,7 @@ export function EditGameScoresDialog(props: {
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center justify-between mb-6">
-          <div className="text-lg font-semibold">{isAuthor ? "Редактирование счёта" : "Счёт игры"}</div>
+          <div className="text-lg font-semibold">{isAuthor ? t("scores.editTitle") : t("scores.viewTitle")}</div>
           <Button variant="outline" size="sm" onClick={props.onClose}>
             <X className="h-4 w-4" />
           </Button>
@@ -166,35 +194,35 @@ export function EditGameScoresDialog(props: {
         )}
 
         {loading ? (
-          <div className="text-center py-6 text-muted-foreground">Загрузка...</div>
+          <div className="text-center py-6 text-muted-foreground">{t("scores.loading")}</div>
         ) : (
           <>
             {!isAuthor && (
               <div className="mb-4 p-3 rounded-md bg-secondary/40 text-muted-foreground text-sm">
-                Изменить счёт может только организатор игры.
+                {t("scores.onlyOrganizer")}
               </div>
             )}
             <div className="space-y-4">
               {matches.map((match) => (
                 <div key={match.id} className="border border-border rounded-lg p-4 space-y-3">
                   <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-primary">
-                    <span>Раунд {match.roundNumber ?? "—"}</span>
+                    <span>{t("scores.round", { n: match.roundNumber ?? "—" })}</span>
                     {match.courtNumber != null && (
                       <>
                         <span className="text-border">·</span>
-                        <span>Корт {match.courtNumber}</span>
+                        <span>{t("scores.court", { n: match.courtNumber })}</span>
                       </>
                     )}
                   </div>
                   <div className="grid grid-cols-2 gap-4">
                     <div>
-                      <div className="text-sm font-medium mb-1">Команда A</div>
+                      <div className="text-sm font-medium mb-1">{t("scores.teamA")}</div>
                       <div className="flex items-center gap-1 text-sm text-muted-foreground">
                         {match.teamA?.map((p) => p.name).join(" + ")}
                       </div>
                     </div>
                     <div>
-                      <div className="text-sm font-medium mb-1">Команда B</div>
+                      <div className="text-sm font-medium mb-1">{t("scores.teamB")}</div>
                       <div className="flex items-center gap-1 text-sm text-muted-foreground">
                         {match.teamB?.map((p) => p.name).join(" + ")}
                       </div>
@@ -205,9 +233,9 @@ export function EditGameScoresDialog(props: {
                     <div className="space-y-2">
                       {Array.from({ length: setsPerMatch }).map((_, i) => (
                         <div key={i} className="flex items-center gap-3">
-                          {setsPerMatch > 1 && <span className="w-12 text-xs text-muted-foreground">Сет {i + 1}</span>}
+                          {setsPerMatch > 1 && <span className="w-12 text-xs text-muted-foreground">{t("scores.set", { n: i + 1 })}</span>}
                           <div className="flex-1">
-                            {i === 0 && <label className="text-xs text-muted-foreground">Геймы A</label>}
+                            {i === 0 && <label className="text-xs text-muted-foreground">{t("scores.gamesA")}</label>}
                             <Input
                               type="text"
                               inputMode="numeric"
@@ -224,7 +252,7 @@ export function EditGameScoresDialog(props: {
                           </div>
                           <div className="text-xl font-bold mt-5">:</div>
                           <div className="flex-1">
-                            {i === 0 && <label className="text-xs text-muted-foreground">Геймы B</label>}
+                            {i === 0 && <label className="text-xs text-muted-foreground">{t("scores.gamesB")}</label>}
                             <Input
                               type="text"
                               inputMode="numeric"
@@ -245,7 +273,7 @@ export function EditGameScoresDialog(props: {
                   ) : (
                   <div className="flex items-center gap-3">
                     <div className="flex-1">
-                      <label className="text-xs text-muted-foreground">Точки Team A</label>
+                      <label className="text-xs text-muted-foreground">{t("scores.pointsA")}</label>
                       <Input
                         type="text"
                         inputMode="numeric"
@@ -264,7 +292,7 @@ export function EditGameScoresDialog(props: {
                     </div>
                     <div className="text-xl font-bold mt-5">:</div>
                     <div className="flex-1">
-                      <label className="text-xs text-muted-foreground">Точки Team B</label>
+                      <label className="text-xs text-muted-foreground">{t("scores.pointsB")}</label>
                       <Input
                         type="text"
                         inputMode="numeric"
@@ -289,11 +317,11 @@ export function EditGameScoresDialog(props: {
 
             <div className="flex gap-2 mt-6">
               <Button variant="outline" onClick={props.onClose} disabled={saving} className="flex-1">
-                {isAuthor ? "Отмена" : "Закрыть"}
+                {isAuthor ? t("scores.cancel") : t("scores.close")}
               </Button>
               {isAuthor && (
                 <Button onClick={handleSave} disabled={saving} className="flex-1">
-                  {saving ? "Сохранение..." : "Сохранить"}
+                  {saving ? t("scores.saving") : t("scores.save")}
                 </Button>
               )}
             </div>

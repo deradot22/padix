@@ -11,6 +11,13 @@ data class PlannedMatch(
     val teamB: Pair<UUID, UUID>
 )
 
+/**
+ * Бюджет узлов DFS для поиска раунда без повторов партнёрств (4+ кортов).
+ * Ограничение «обе пары матча ещё не играли вместе» само по себе режет дерево
+ * на порядки; бюджет — страховка от патологических случаев на больших составах.
+ */
+private const val NO_REPEAT_NODE_BUDGET = 300_000
+
 private data class PairKey(val a: UUID, val b: UUID) {
     companion object {
         fun of(x: UUID, y: UUID): PairKey = if (x < y) PairKey(x, y) else PairKey(y, x)
@@ -86,7 +93,9 @@ private data class RoundCost(
  * - для каждой четвёрки выбирает наилучший split на команды и корт,
  * - lexicographic приоритеты: сначала ротация (партнёры → соперники), потом баланс.
  *
- * Для 2-3 кортов перебор быстрый (≪200K вариантов). На 4+ кортов добавлен жадный fallback.
+ * Для 2-3 кортов перебор быстрый (≪200K вариантов). На 4+ кортов полный перебор неподъёмен,
+ * поэтому там сначала пробуем жадный план, а если он повторяет партнёрства — ищем раунд
+ * с жёстким запретом повторов (см. planRoundWithoutPartnerRepeats).
  */
 class PairingPlanner(
     private val ratingByPlayer: Map<UUID, Int>,
@@ -105,14 +114,104 @@ class PairingPlanner(
         val capacity = courtsCount * 4
         require(allPlayers.size >= capacity) { "Need at least $capacity players for $courtsCount courts" }
 
+        // Идеальная конфигурация (все играют каждый раунд, истории нет) — строим расписание
+        // партнёрств сразу на весь турнир круговым методом. Пораундовый перебор так не умеет:
+        // он оптимизирует текущий раунд и к концу загоняет себя в угол, когда раунда без
+        // повторов уже не существует. Здесь же «каждый с каждым ровно один раз» гарантировано
+        // построением. См. perfectPartnerSchedule.
+        val partnerSchedule = perfectPartnerSchedule(allPlayers, rounds)
+
         val result = mutableListOf<List<PlannedMatch>>()
-        repeat(rounds) {
-            val selected = selectPlayersForRound(allPlayers, capacity)
-            val matches = planSingleRound(selected)
+        repeat(rounds) { roundIndex ->
+            val matches = if (partnerSchedule != null) {
+                matchesFromPairs(partnerSchedule[roundIndex])
+            } else {
+                planSingleRound(selectPlayersForRound(allPlayers, capacity))
+            }
             applyRoundStats(matches)
             result.add(matches)
         }
         return result
+    }
+
+    /**
+     * Расписание партнёрств на весь турнир круговым методом (1-факторизация полного графа):
+     * фиксируем одного игрока, остальных вращаем по кругу. За n−1 раундов каждая пара
+     * встречается РОВНО один раз — это свойство самого построения, искать ничего не нужно.
+     *
+     * null (работает старый пораундовый путь), если построение неприменимо:
+     * - игроков больше вместимости: нужна ротация отдыха, а круговое расписание её не знает;
+     * - уже есть история партнёрств: раунды догенерируются к сыгранному, круг начинать поздно;
+     * - раундов больше n−1: круг исчерпан, дальше повторы неизбежны;
+     * - BALANCED: там пары подбираются по рейтингу (сильный+слабый), а круговой метод
+     *   рейтинги игнорирует — это сломало бы смысл режима.
+     */
+    private fun perfectPartnerSchedule(
+        allPlayers: List<UUID>,
+        rounds: Int
+    ): List<List<Pair<UUID, UUID>>>? {
+        val n = allPlayers.size
+        if (pairingMode != com.padelgo.domain.PairingMode.ROUND_ROBIN) return null
+        if (n != courtsCount * 4) return null
+        if (partnerCounts.isNotEmpty()) return null
+        if (rounds > n - 1) return null
+
+        val fixed = allPlayers.last()
+        val rot = allPlayers.dropLast(1)
+        val m = rot.size
+        return (0 until rounds).map { r ->
+            val pairs = ArrayList<Pair<UUID, UUID>>(n / 2)
+            pairs += rot[r % m] to fixed
+            for (i in 1 until n / 2) {
+                pairs += rot[(r + i) % m] to rot[((r - i) % m + m) % m]
+            }
+            pairs
+        }
+    }
+
+    /**
+     * Пары раунда уже заданы — осталось разложить их по матчам (пара против пары) и кортам.
+     * Партнёрства трогать нельзя, поэтому перебираем только разбиение пар на противостояния
+     * и выбираем лучшее по той же lexicographic cost: ротация соперников, баланс, корты.
+     * Вариантов немного (для 8 пар — 105), перебор мгновенный.
+     */
+    private fun matchesFromPairs(pairs: List<Pair<UUID, UUID>>): List<PlannedMatch> {
+        val k = pairs.size
+        val used = BooleanArray(k)
+        val acc = mutableListOf<PlannedMatch>()
+        var best: List<PlannedMatch>? = null
+        var bestCost: RoundCost? = null
+
+        fun rec(running: RoundCost) {
+            if (acc.size == k / 2) {
+                val withCourts = assignCourts(acc.toList())
+                val cost = totalRoundCost(withCourts)
+                val bound = bestCost
+                if (bound == null || costComparator.compare(cost, bound) < 0) {
+                    bestCost = cost
+                    best = withCourts
+                }
+                return
+            }
+            val bound = bestCost
+            if (bound != null && costComparator.compare(running, bound) > 0) return
+
+            val first = (0 until k).firstOrNull { !used[it] } ?: return
+            for (j in (first + 1) until k) {
+                if (used[j]) continue
+                val match = PlannedMatch(1, teamA = pairs[first], teamB = pairs[j])
+                used[first] = true; used[j] = true
+                acc.add(match)
+                rec(running + matchCostBeforeCourt(match))
+                acc.removeAt(acc.size - 1)
+                used[first] = false; used[j] = false
+            }
+        }
+
+        rec(RoundCost.ZERO)
+        return best ?: assignCourts(
+            (pairs.indices step 2).map { PlannedMatch(1, teamA = pairs[it], teamB = pairs[it + 1]) }
+        )
     }
 
     fun seedFromMatches(matches: List<Match>) {
@@ -164,7 +263,13 @@ class PairingPlanner(
         val greedyCost = totalRoundCost(greedyMatches)
 
         if (expectedCourts >= 4) {
-            return greedyMatches
+            // Полный перебор здесь неподъёмен (16 игроков — ~2.6 млн разбиений), но требование
+            // «никто не играет в паре с кем-то дважды» жёсткое, а жадность его регулярно нарушала:
+            // на 4 кортах и 16 игроках получалось 4-6 повторных партнёрств за эвент и столько же
+            // пар, которые не сыграли вместе ни разу. Поэтому если жадный план уже без повторов —
+            // берём его (быстрый путь), иначе ищем раунд с жёстким запретом повторов.
+            if (greedyCost.partnerRepeats == 0) return greedyMatches
+            return planRoundWithoutPartnerRepeats(sorted, expectedCourts) ?: greedyMatches
         }
 
         // Полный перебор разбиений на четвёрки. Фиксируем первого свободного игрока в текущей четвёрке,
@@ -221,6 +326,85 @@ class PairingPlanner(
 
         search(RoundCost.ZERO)
         return bestMatches
+    }
+
+    /**
+     * Раунд БЕЗ повторов партнёрств: DFS по разбиениям, где обе пары каждого матча ещё ни разу
+     * не играли вместе. Жёсткое ограничение отсекает подавляющую часть дерева, поэтому при 4+
+     * кортах это на порядки дешевле полного перебора. Среди допустимых вариантов выбираем
+     * лучший по той же lexicographic cost, что и везде, и выходим сразу, как только нашли
+     * идеальный по ротации раунд (не повторили ни партнёров, ни соперников).
+     *
+     * null — такого раунда не нашлось: либо партнёрская сетка исчерпана (все возможные пары
+     * уже сыграны), либо кончился бюджет узлов. Вызывающий код в этом случае берёт жадный план.
+     */
+    private fun planRoundWithoutPartnerRepeats(
+        sorted: List<UUID>,
+        expectedCourts: Int
+    ): List<PlannedMatch>? {
+        val n = sorted.size
+        val taken = BooleanArray(n)
+        val acc = mutableListOf<PlannedMatch>()
+        var best: List<PlannedMatch>? = null
+        var bestCost: RoundCost? = null
+        var budget = NO_REPEAT_NODE_BUDGET
+        var stop = false
+
+        fun neverPartnered(x: UUID, y: UUID): Boolean = (partnerCounts[PairKey.of(x, y)] ?: 0) == 0
+
+        fun search(running: RoundCost) {
+            if (stop) return
+            if (budget-- <= 0) {
+                stop = true
+                return
+            }
+            if (acc.size == expectedCourts) {
+                val withCourts = assignCourts(acc.toList())
+                val finalCost = totalRoundCost(withCourts)
+                val prev = bestCost
+                if (prev == null || costComparator.compare(finalCost, prev) < 0) {
+                    bestCost = finalCost
+                    best = withCourts
+                    if (finalCost.partnerRepeats == 0 && finalCost.opponentRepeats == 0) stop = true
+                }
+                return
+            }
+            val boundBefore = bestCost
+            if (boundBefore != null && costComparator.compare(running, boundBefore) > 0) return
+
+            val firstFree = (0 until n).firstOrNull { !taken[it] } ?: return
+            for (i in (firstFree + 1) until n) {
+                if (taken[i]) continue
+                for (j in (i + 1) until n) {
+                    if (taken[j]) continue
+                    for (k in (j + 1) until n) {
+                        if (taken[k]) continue
+                        val q = listOf(sorted[firstFree], sorted[i], sorted[j], sorted[k])
+                        val splits = listOf(
+                            PlannedMatch(1, teamA = q[0] to q[1], teamB = q[2] to q[3]),
+                            PlannedMatch(1, teamA = q[0] to q[2], teamB = q[1] to q[3]),
+                            PlannedMatch(1, teamA = q[0] to q[3], teamB = q[1] to q[2])
+                        )
+                        for (split in splits) {
+                            if (!neverPartnered(split.teamA.first, split.teamA.second)) continue
+                            if (!neverPartnered(split.teamB.first, split.teamB.second)) continue
+                            val newRunning = running + matchCostBeforeCourt(split)
+                            val bound = bestCost
+                            if (bound != null && costComparator.compare(newRunning, bound) > 0) continue
+                            taken[firstFree] = true; taken[i] = true; taken[j] = true; taken[k] = true
+                            acc.add(split)
+                            search(newRunning)
+                            acc.removeAt(acc.size - 1)
+                            taken[firstFree] = false; taken[i] = false; taken[j] = false; taken[k] = false
+                            if (stop) return
+                        }
+                    }
+                }
+            }
+        }
+
+        search(RoundCost.ZERO)
+        return best
     }
 
     /** Жадный fallback: тот же anchor-first что и раньше, но через ту же lexicographic cost. */

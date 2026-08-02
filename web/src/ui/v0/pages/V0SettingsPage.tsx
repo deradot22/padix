@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { api, EventSeries, MeResponse, TelegramChat, TelegramSettings, TelegramStatus } from "../../../lib/api";
 import { cn } from "@/lib/utils";
+import { Dict, Lang, plural, useI18n, useLang } from "@/lib/i18n";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
@@ -11,19 +12,91 @@ import { useConfirm } from "@/components/ui/confirm-dialog";
 import { TelegramIntegrationCard } from "@/components/telegram-integration";
 import { ConnectedAccountsSection } from "@/components/connected-accounts-section";
 import { PasswordSection } from "@/components/password-section";
-import { User, Bell, Link2, ShieldCheck, Upload, Check, Send, ChevronLeft, ChevronRight, BellOff, BellRing, Repeat, Pause, Play, Trash2, Plus, Pencil } from "lucide-react";
+import { User, Bell, Link2, ShieldCheck, Upload, Check, Send, ChevronLeft, ChevronRight, BellOff, BellRing, Repeat, Pause, Play, Trash2, Plus, Pencil, Globe } from "lucide-react";
 
-type SectionId = "notifications" | "subscriptions" | "integrations" | "security";
+const TR = {
+  "page.title": { ru: "Настройки", en: "Settings" },
+  "page.subtitle": { ru: "Аккаунт, уведомления и безопасность.", en: "Account, notifications and security." },
+  "sections.general": { ru: "Общие", en: "General" },
+  "sections.notifications": { ru: "Уведомления", en: "Notifications" },
+  "sections.subscriptions": { ru: "Подписки", en: "Subscriptions" },
+  "sections.integrations": { ru: "Интеграции", en: "Integrations" },
+  "sections.security": { ru: "Безопасность", en: "Security" },
+  "general.langTitle": { ru: "Язык / Language", en: "Language / Язык" },
+  "general.langDesc": {
+    ru: "Язык интерфейса. Применяется сразу и запоминается на этом устройстве.",
+    en: "Interface language. Applies instantly and is remembered on this device.",
+  },
+  "notif.backToChannels": { ru: "К списку каналов", en: "Back to channel list" },
+  "notif.channelsTitle": { ru: "Каналы уведомлений", en: "Notification channels" },
+  "notif.channelsDesc": { ru: "Где вы хотите получать уведомления о играх.", en: "Where you want to receive game notifications." },
+  "notif.notConnected": { ru: "Не подключено", en: "Not connected" },
+  "notif.tgDisabledOnServer": { ru: "Интеграция выключена на сервере", en: "Integration is disabled on the server" },
+  "notif.connectedBadge": { ru: "подключено", en: "connected" },
+  "notif.groupChatsNote": {
+    ru: "Анонсы новых игр, изменения и финал — идут в групповые чаты (их {n}).",
+    en: "New game announcements, changes and finals go to the group chats ({n} of them).",
+  },
+  "notif.hours1": { ru: "за 1 час", en: "1 hour" },
+  "notif.hours24": { ru: "за сутки", en: "a day" },
+  "notif.hoursN": { ru: "за {n} часов", en: "{n} hours" },
+  "notif.remindersOnTitle": { ru: "Личные напоминания включены", en: "Personal reminders are on" },
+  "notif.remindersOnDesc": {
+    ru: "Бот пришлёт в личный чат напоминание {when} до старта каждой игры, в которую вы зарегистрированы.",
+    en: "The bot will send a reminder to your private chat {when} before the start of every game you are registered for.",
+  },
+  "notif.remindersOffTitle": { ru: "Личные напоминания не настроены", en: "Personal reminders are not set up" },
+  "notif.reasonNoPrivateChat": { ru: "Личный чат с ботом не привязан.", en: "Private chat with the bot is not linked." },
+  "notif.reasonNoHours": { ru: "В настройках выключено время напоминания.", en: "Reminder time is turned off in the settings." },
+  "notif.reasonNoFlag": { ru: "У личного чата выключен чекбокс «напоминание».", en: "The \"reminder\" checkbox is off for the private chat." },
+  "notif.reasonAllOff": { ru: "Уведомления полностью выключены.", en: "Notifications are turned off entirely." },
+  "notif.configure": { ru: "Настроить", en: "Set up" },
+  "common.edit": { ru: "Изменить", en: "Edit" },
+  "common.delete": { ru: "Удалить", en: "Delete" },
+  "common.loading": { ru: "Загрузка…", en: "Loading…" },
+  "series.title": { ru: "Подписки на регулярные игры", en: "Recurring game subscriptions" },
+  "series.desc": {
+    ru: "Шаблоны, по которым система автоматически создаёт игры в выбранные дни недели.",
+    en: "Templates the system uses to create games automatically on the selected days of the week.",
+  },
+  "series.create": { ru: "Создать", en: "Create" },
+  "series.empty": { ru: "У вас пока нет подписок.", en: "You don't have any subscriptions yet." },
+  "series.createFirst": { ru: "Создать первую", en: "Create the first one" },
+  "series.courts": { ru: "Кортов: {n}", en: "Courts: {n}" },
+  "series.announce": { ru: "Анонс {when} в {time}", en: "Announcement {when} at {time}" },
+  "series.ann1d": { ru: "за 1 день", en: "1 day ahead" },
+  "series.ann3d": { ru: "за 3 дня", en: "3 days ahead" },
+  "series.annWeek": { ru: "за неделю", en: "a week ahead" },
+  "series.ann2w": { ru: "за 2 недели", en: "2 weeks ahead" },
+  "series.annHours": { ru: "за {n} ч", en: "{n} h ahead" },
+  "series.public": { ru: "Открытая", en: "Public" },
+  "series.private": { ru: "Приватная", en: "Private" },
+  "series.paused": { ru: "На паузе", en: "Paused" },
+  "series.pause": { ru: "Пауза", en: "Pause" },
+  "series.resume": { ru: "Возобновить", en: "Resume" },
+  "series.deleteTitle": { ru: "Удалить подписку?", en: "Delete subscription?" },
+  "series.deleteDesc1": { ru: "Подписка", en: "Subscription" },
+  "series.deleteDesc2": {
+    ru: "будет удалена. Уже созданные ею игры останутся — их можно удалить вручную через страницу игры.",
+    en: "will be deleted. Games it has already created will remain — you can delete them manually from the game page.",
+  },
+  "series.loadError": { ru: "Не удалось загрузить подписки", en: "Failed to load subscriptions" },
+  "series.updateError": { ru: "Не удалось обновить", en: "Failed to update" },
+  "series.deleteError": { ru: "Не удалось удалить", en: "Failed to delete" },
+} satisfies Dict;
 
-const SECTIONS: { id: SectionId; label: string; icon: typeof User }[] = [
-  { id: "notifications", label: "Уведомления", icon: Bell },
-  { id: "subscriptions", label: "Подписки", icon: Repeat },
-  { id: "integrations", label: "Интеграции", icon: Link2 },
-  { id: "security", label: "Безопасность", icon: ShieldCheck },
+type SectionId = "general" | "notifications" | "subscriptions" | "integrations" | "security";
+
+const SECTIONS: { id: SectionId; label: keyof typeof TR & string; icon: typeof User }[] = [
+  { id: "general", label: "sections.general", icon: Globe },
+  { id: "notifications", label: "sections.notifications", icon: Bell },
+  { id: "subscriptions", label: "sections.subscriptions", icon: Repeat },
+  { id: "integrations", label: "sections.integrations", icon: Link2 },
+  { id: "security", label: "sections.security", icon: ShieldCheck },
 ];
 
 function isSectionId(v: string | null): v is SectionId {
-  return v === "notifications" || v === "subscriptions" || v === "integrations" || v === "security";
+  return v === "general" || v === "notifications" || v === "subscriptions" || v === "integrations" || v === "security";
 }
 
 export function V0SettingsPage(props: {
@@ -32,6 +105,7 @@ export function V0SettingsPage(props: {
   onMeUpdate?: (me: MeResponse) => void;
 }) {
   const nav = useNavigate();
+  const { t } = useI18n(TR);
   const [searchParams, setSearchParams] = useSearchParams();
   const tabFromUrl = searchParams.get("tab");
   const [section, setSection] = useState<SectionId>(isSectionId(tabFromUrl) ? tabFromUrl : "notifications");
@@ -58,14 +132,14 @@ export function V0SettingsPage(props: {
   return (
     <div className="mx-auto max-w-5xl space-y-6">
       <div>
-        <h1 className="text-2xl font-bold tracking-tight">Настройки</h1>
-        <p className="text-sm text-muted-foreground">Аккаунт, уведомления и безопасность.</p>
+        <h1 className="text-2xl font-bold tracking-tight">{t("page.title")}</h1>
+        <p className="text-sm text-muted-foreground">{t("page.subtitle")}</p>
       </div>
 
       <div className="grid gap-6 md:grid-cols-[220px_1fr]">
         {/* Mobile: pill-tabs в общем контейнере. Десктоп: вертикальный sidebar. */}
         <nav className="md:sticky md:top-20 self-start">
-          <div className="md:hidden grid grid-cols-4 gap-1 rounded-lg bg-secondary/40 p-1">
+          <div className="md:hidden grid grid-cols-5 gap-1 rounded-lg bg-secondary/40 p-1">
             {SECTIONS.map(({ id, label }) => {
               const active = section === id;
               return (
@@ -80,7 +154,7 @@ export function V0SettingsPage(props: {
                       : "text-muted-foreground"
                   )}
                 >
-                  {label}
+                  {t(label)}
                 </button>
               );
             })}
@@ -101,7 +175,7 @@ export function V0SettingsPage(props: {
                     )}
                   >
                     <Icon className="h-4 w-4 shrink-0" />
-                    {label}
+                    {t(label)}
                   </button>
                 </li>
               );
@@ -110,6 +184,7 @@ export function V0SettingsPage(props: {
         </nav>
 
         <div className="space-y-6 min-w-0">
+          {section === "general" && <GeneralSection />}
           {section === "notifications" && <NotificationsSection />}
           {section === "subscriptions" && <SubscriptionsSection />}
           {section === "integrations" && (
@@ -132,11 +207,49 @@ export function V0SettingsPage(props: {
   );
 }
 
+// ---------- General section (язык интерфейса) ----------
+
+function GeneralSection() {
+  const { t, lang } = useI18n(TR);
+  const { setLang } = useLang();
+  return (
+    <Card className="border-border/50">
+      <CardHeader>
+        <CardTitle>{t("general.langTitle")}</CardTitle>
+        <CardDescription>{t("general.langDesc")}</CardDescription>
+      </CardHeader>
+      <CardContent>
+        <div className="inline-flex gap-1 rounded-lg bg-secondary/40 p-1">
+          {([["ru", "Русский"], ["en", "English"]] as const).map(([code, label]) => {
+            const active = lang === code;
+            return (
+              <button
+                key={code}
+                type="button"
+                onClick={() => setLang(code)}
+                className={cn(
+                  "rounded-full px-4 py-2 text-sm transition-colors",
+                  active
+                    ? "bg-background text-foreground font-medium shadow-sm"
+                    : "text-muted-foreground hover:text-foreground"
+                )}
+              >
+                {label}
+              </button>
+            );
+          })}
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
 // ---------- Notifications section ----------
 
 type Channel = "telegram";
 
 function NotificationsSection() {
+  const { t, lang } = useI18n(TR);
   const [channel, setChannel] = useState<Channel | null>(null);
   const [status, setStatus] = useState<TelegramStatus | null>(null);
   const [chats, setChats] = useState<TelegramChat[]>([]);
@@ -177,7 +290,7 @@ function NotificationsSection() {
           className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
         >
           <ChevronLeft className="h-4 w-4" />
-          К списку каналов
+          {t("notif.backToChannels")}
         </button>
         <TelegramIntegrationCard />
       </div>
@@ -203,8 +316,8 @@ function NotificationsSection() {
 
       <Card className="border-border/50">
         <CardHeader>
-          <CardTitle>Каналы уведомлений</CardTitle>
-          <CardDescription>Где вы хотите получать уведомления о играх.</CardDescription>
+          <CardTitle>{t("notif.channelsTitle")}</CardTitle>
+          <CardDescription>{t("notif.channelsDesc")}</CardDescription>
         </CardHeader>
         <CardContent>
           <div className="grid gap-3 sm:grid-cols-2">
@@ -214,9 +327,9 @@ function NotificationsSection() {
               subtitle={
                 tgEnabled
                   ? chats.length > 0
-                    ? `${chats.length} ${chatsPlural(chats.length)} привязан${chats.length === 1 ? "" : "о"}`
-                    : "Не подключено"
-                  : "Интеграция выключена на сервере"
+                    ? `${chats.length} ${plural(lang, chats.length, ["чат привязан", "чата привязано", "чатов привязано"], ["chat linked", "chats linked"])}`
+                    : t("notif.notConnected")
+                  : t("notif.tgDisabledOnServer")
               }
               connected={tgEnabled && chats.length > 0}
               onClick={() => setChannel("telegram")}
@@ -226,21 +339,13 @@ function NotificationsSection() {
           </div>
           {tgEnabled && groupChatsCount > 0 && (
             <div className="mt-3 text-xs text-muted-foreground">
-              Анонсы новых игр, изменения и финал — идут в групповые чаты (их {groupChatsCount}).
+              {t("notif.groupChatsNote", { n: groupChatsCount })}
             </div>
           )}
         </CardContent>
       </Card>
     </div>
   );
-}
-
-function chatsPlural(n: number): string {
-  const mod10 = n % 10;
-  const mod100 = n % 100;
-  if (mod10 === 1 && mod100 !== 11) return "чат";
-  if (mod10 >= 2 && mod10 <= 4 && (mod100 < 12 || mod100 > 14)) return "чата";
-  return "чатов";
 }
 
 function PersonalRemindersCard(props: {
@@ -251,27 +356,27 @@ function PersonalRemindersCard(props: {
   reminderHours: number;
   onConfigure: () => void;
 }) {
+  const { t } = useI18n(TR);
   if (!props.loaded || !props.tgEnabled) return null;
 
   if (props.on) {
     const hours = props.reminderHours;
     const hoursLabel =
-      hours === 1 ? "за 1 час" : hours === 24 ? "за сутки" : `за ${hours} часов`;
+      hours === 1 ? t("notif.hours1") : hours === 24 ? t("notif.hours24") : t("notif.hoursN", { n: hours });
     return (
       <div className="rounded-lg border border-emerald-500/40 dark:border-emerald-500/30 bg-emerald-500/10 p-4">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-start">
           <div className="flex items-start gap-3 flex-1 min-w-0">
             <BellRing className="h-5 w-5 text-emerald-600 dark:text-emerald-400 shrink-0 mt-0.5" />
             <div className="min-w-0">
-              <div className="text-sm font-medium text-emerald-800 dark:text-emerald-200">Личные напоминания включены</div>
+              <div className="text-sm font-medium text-emerald-800 dark:text-emerald-200">{t("notif.remindersOnTitle")}</div>
               <div className="text-xs text-emerald-800/80 dark:text-emerald-200/80 mt-1">
-                Бот пришлёт в личный чат напоминание {hoursLabel} до старта каждой игры,
-                в которую вы зарегистрированы.
+                {t("notif.remindersOnDesc", { when: hoursLabel })}
               </div>
             </div>
           </div>
           <Button variant="ghost" size="sm" onClick={props.onConfigure} className="self-end sm:self-auto shrink-0">
-            Изменить
+            {t("common.edit")}
           </Button>
         </div>
       </div>
@@ -280,12 +385,12 @@ function PersonalRemindersCard(props: {
 
   // Off
   const reason = !props.privateChat
-    ? "Личный чат с ботом не привязан."
+    ? t("notif.reasonNoPrivateChat")
     : props.reminderHours <= 0
-      ? "В настройках выключено время напоминания."
+      ? t("notif.reasonNoHours")
       : !props.privateChat.notifyReminder
-        ? "У личного чата выключен чекбокс «напоминание»."
-        : "Уведомления полностью выключены.";
+        ? t("notif.reasonNoFlag")
+        : t("notif.reasonAllOff");
 
   return (
     <div className="rounded-lg border border-amber-500/40 dark:border-amber-500/30 bg-amber-500/10 p-4">
@@ -293,7 +398,7 @@ function PersonalRemindersCard(props: {
         <div className="flex items-start gap-3 flex-1 min-w-0">
           <BellOff className="h-5 w-5 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
           <div className="min-w-0">
-            <div className="text-sm font-medium text-amber-800 dark:text-amber-200">Личные напоминания не настроены</div>
+            <div className="text-sm font-medium text-amber-800 dark:text-amber-200">{t("notif.remindersOffTitle")}</div>
             <div className="text-xs text-amber-800/80 dark:text-amber-200/80 mt-1">{reason}</div>
           </div>
         </div>
@@ -303,7 +408,7 @@ function PersonalRemindersCard(props: {
           className="bg-transparent self-end sm:self-auto shrink-0"
           onClick={props.onConfigure}
         >
-          Настроить
+          {t("notif.configure")}
         </Button>
       </div>
     </div>
@@ -318,6 +423,7 @@ function ChannelButton(props: {
   disabled?: boolean;
   onClick: () => void;
 }) {
+  const { t } = useI18n(TR);
   return (
     <button
       type="button"
@@ -337,7 +443,7 @@ function ChannelButton(props: {
           {props.connected && (
             <span className="inline-flex items-center gap-1 text-[10px] uppercase tracking-wide rounded-full bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 px-2 py-0.5">
               <Check className="h-3 w-3" />
-              подключено
+              {t("notif.connectedBadge")}
             </span>
           )}
         </div>
@@ -350,16 +456,22 @@ function ChannelButton(props: {
 
 // ---------- Subscriptions section ----------
 
-const DAY_LABELS: Record<string, string> = {
-  MON: "Пн", TUE: "Вт", WED: "Ср", THU: "Чт", FRI: "Пт", SAT: "Сб", SUN: "Вс",
+const DAY_LABELS: Record<string, { ru: string; en: string }> = {
+  MON: { ru: "Пн", en: "Mon" },
+  TUE: { ru: "Вт", en: "Tue" },
+  WED: { ru: "Ср", en: "Wed" },
+  THU: { ru: "Чт", en: "Thu" },
+  FRI: { ru: "Пт", en: "Fri" },
+  SAT: { ru: "Сб", en: "Sat" },
+  SUN: { ru: "Вс", en: "Sun" },
 };
 
-function formatDays(csv: string): string {
+function formatDays(csv: string, lang: Lang): string {
   return csv
     .split(",")
     .map((d) => d.trim().toUpperCase())
     .filter(Boolean)
-    .map((d) => DAY_LABELS[d] ?? d)
+    .map((d) => DAY_LABELS[d]?.[lang] ?? d)
     .join(" · ");
 }
 
@@ -367,16 +479,17 @@ function formatTime(t: string): string {
   return t.slice(0, 5);
 }
 
-function hoursLabel(h: number): string {
-  if (h === 24) return "за 1 день";
-  if (h === 72) return "за 3 дня";
-  if (h === 168) return "за неделю";
-  if (h === 336) return "за 2 недели";
-  return `за ${h} ч`;
+function hoursLabel(h: number, lang: Lang): string {
+  if (h === 24) return TR["series.ann1d"][lang];
+  if (h === 72) return TR["series.ann3d"][lang];
+  if (h === 168) return TR["series.annWeek"][lang];
+  if (h === 336) return TR["series.ann2w"][lang];
+  return TR["series.annHours"][lang].replace("{n}", String(h));
 }
 
 function SubscriptionsSection() {
   const nav = useNavigate();
+  const { t, lang } = useI18n(TR);
   const [items, setItems] = useState<EventSeries[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
@@ -387,7 +500,7 @@ function SubscriptionsSection() {
       const list = await api.listEventSeries();
       setItems(list);
     } catch (e: any) {
-      setError(e?.message ?? "Не удалось загрузить подписки");
+      setError(e?.message ?? t("series.loadError"));
     }
   };
 
@@ -401,7 +514,7 @@ function SubscriptionsSection() {
       const updated = s.active ? await api.pauseEventSeries(s.id) : await api.resumeEventSeries(s.id);
       setItems((prev) => (prev ?? []).map((x) => (x.id === s.id ? updated : x)));
     } catch (e: any) {
-      setError(e?.message ?? "Не удалось обновить");
+      setError(e?.message ?? t("series.updateError"));
     } finally {
       setBusyId(null);
     }
@@ -409,14 +522,13 @@ function SubscriptionsSection() {
 
   const remove = async (s: EventSeries) => {
     const ok = await confirm({
-      title: "Удалить подписку?",
+      title: t("series.deleteTitle"),
       description: (
         <>
-          Подписка <b>{s.title}</b> будет удалена. Уже созданные ею игры останутся —
-          их можно удалить вручную через страницу игры.
+          {t("series.deleteDesc1")} <b>{s.title}</b> {t("series.deleteDesc2")}
         </>
       ),
-      confirmLabel: "Удалить",
+      confirmLabel: t("common.delete"),
       confirmVariant: "destructive",
     });
     if (!ok) return;
@@ -425,7 +537,7 @@ function SubscriptionsSection() {
       await api.deleteEventSeries(s.id);
       setItems((prev) => (prev ?? []).filter((x) => x.id !== s.id));
     } catch (e: any) {
-      setError(e?.message ?? "Не удалось удалить");
+      setError(e?.message ?? t("series.deleteError"));
     } finally {
       setBusyId(null);
     }
@@ -436,14 +548,14 @@ function SubscriptionsSection() {
       <CardHeader>
         <div className="flex items-start justify-between gap-3">
           <div>
-            <CardTitle>Подписки на регулярные игры</CardTitle>
+            <CardTitle>{t("series.title")}</CardTitle>
             <CardDescription>
-              Шаблоны, по которым система автоматически создаёт игры в выбранные дни недели.
+              {t("series.desc")}
             </CardDescription>
           </div>
           <Button size="sm" onClick={() => nav("/create?recurring=1")} className="shrink-0">
             <Plus className="h-4 w-4 mr-1" />
-            <span className="hidden sm:inline">Создать</span>
+            <span className="hidden sm:inline">{t("series.create")}</span>
           </Button>
         </div>
       </CardHeader>
@@ -453,13 +565,13 @@ function SubscriptionsSection() {
         )}
 
         {items === null ? (
-          <div className="text-sm text-muted-foreground">Загрузка…</div>
+          <div className="text-sm text-muted-foreground">{t("common.loading")}</div>
         ) : items.length === 0 ? (
           <div className="rounded-lg border border-dashed border-border p-6 text-center text-sm text-muted-foreground">
-            У вас пока нет подписок.
+            {t("series.empty")}
             <div className="mt-3">
               <Button variant="outline" className="bg-transparent" onClick={() => nav("/create?recurring=1")}>
-                <Plus className="h-4 w-4 mr-1" /> Создать первую
+                <Plus className="h-4 w-4 mr-1" /> {t("series.createFirst")}
               </Button>
             </div>
           </div>
@@ -480,20 +592,20 @@ function SubscriptionsSection() {
                     <div className="min-w-0 flex-1">
                       <div className="text-sm font-medium truncate">{s.title}</div>
                       <div className="text-xs text-muted-foreground mt-0.5">
-                        {formatDays(s.daysOfWeek)} · {formatTime(s.startTime)}–{formatTime(s.endTime)}
+                        {formatDays(s.daysOfWeek, lang)} · {formatTime(s.startTime)}–{formatTime(s.endTime)}
                       </div>
                       <div className="flex flex-wrap items-center gap-2 mt-1.5 text-xs text-muted-foreground">
-                        <span>Кортов: {s.courtsCount}</span>
+                        <span>{t("series.courts", { n: s.courtsCount })}</span>
                         <span>·</span>
-                        <span>Анонс {hoursLabel(s.materializeHoursBefore)} в {formatTime(s.materializeAtTime)}</span>
+                        <span>{t("series.announce", { when: hoursLabel(s.materializeHoursBefore, lang), time: formatTime(s.materializeAtTime) })}</span>
                         <span>·</span>
                         <span className="inline-flex items-center gap-1">
-                          {s.visibility === "PUBLIC" ? (<><Bell className="h-3 w-3" /> Открытая</>) : (<><ShieldCheck className="h-3 w-3" /> Приватная</>)}
+                          {s.visibility === "PUBLIC" ? (<><Bell className="h-3 w-3" /> {t("series.public")}</>) : (<><ShieldCheck className="h-3 w-3" /> {t("series.private")}</>)}
                         </span>
                         {!s.active && (
                           <>
                             <span>·</span>
-                            <span className="text-amber-700 dark:text-amber-300">На паузе</span>
+                            <span className="text-amber-700 dark:text-amber-300">{t("series.paused")}</span>
                           </>
                         )}
                       </div>
@@ -507,7 +619,7 @@ function SubscriptionsSection() {
                       onClick={() => nav(`/create?recurring=1&editSeries=${s.id}`)}
                     >
                       <Pencil className="h-3.5 w-3.5 mr-1" />
-                      Изменить
+                      {t("common.edit")}
                     </Button>
                     <Button
                       size="sm"
@@ -519,12 +631,12 @@ function SubscriptionsSection() {
                       {s.active ? (
                         <>
                           <Pause className="h-3.5 w-3.5 mr-1" />
-                          Пауза
+                          {t("series.pause")}
                         </>
                       ) : (
                         <>
                           <Play className="h-3.5 w-3.5 mr-1" />
-                          Возобновить
+                          {t("series.resume")}
                         </>
                       )}
                     </Button>
@@ -536,7 +648,7 @@ function SubscriptionsSection() {
                       onClick={() => remove(s)}
                     >
                       <Trash2 className="h-3.5 w-3.5 mr-1" />
-                      Удалить
+                      {t("common.delete")}
                     </Button>
                   </div>
                 </div>

@@ -7,6 +7,27 @@ import { useConfirm } from "@/components/ui/confirm-dialog";
 import { api, AuthConfig, MeResponse } from "@/lib/api";
 import { GoogleLoginButton } from "@/components/google-login-button";
 import { FacebookLoginButton } from "@/components/facebook-login-button";
+import { Dict, useI18n } from "@/lib/i18n";
+
+const TR = {
+  "accounts.title": { ru: "Связанные аккаунты", en: "Linked accounts" },
+  "accounts.linked": { ru: "Привязан", en: "Linked" },
+  "accounts.notLinked": { ru: "Не привязан", en: "Not linked" },
+  "accounts.link": { ru: "Привязать", en: "Link" },
+  "accounts.unlink": { ru: "Отвязать", en: "Unlink" },
+  "accounts.cancel": { ru: "Отмена", en: "Cancel" },
+  "accounts.connectFacebook": { ru: "Подключить Facebook", en: "Connect Facebook" },
+  "accounts.unlinkTitle": { ru: "Отвязать {p}?", en: "Unlink {p}?" },
+  "accounts.unlinkDesc": {
+    ru: "Вход через этот провайдер перестанет работать. Привязку можно вернуть позже.",
+    en: "Signing in through this provider will stop working. You can link it again later.",
+  },
+  "accounts.errUnlink": { ru: "Не удалось отвязать", en: "Couldn't unlink" },
+  "accounts.errLinkGoogle": { ru: "Не удалось привязать Google", en: "Couldn't link Google" },
+  "accounts.errLinkFacebook": { ru: "Не удалось привязать Facebook", en: "Couldn't link Facebook" },
+  "accounts.errLinkTwitter": { ru: "Не удалось начать привязку X", en: "Couldn't start linking X" },
+  "accounts.errLinkTelegram": { ru: "Не удалось начать привязку Telegram", en: "Couldn't start linking Telegram" },
+} satisfies Dict;
 
 type Provider = "telegram" | "google" | "facebook" | "twitter";
 
@@ -27,6 +48,7 @@ export function ConnectedAccountsSection(props: {
   me: MeResponse;
   onMeUpdate: (me: MeResponse) => void;
 }) {
+  const { t } = useI18n(TR);
   const confirm = useConfirm();
   const nav = useNavigate();
   const [authConfig, setAuthConfig] = useState<AuthConfig | null>(null);
@@ -53,9 +75,9 @@ export function ConnectedAccountsSection(props: {
 
   async function handleUnlink(provider: Provider) {
     const ok = await confirm({
-      title: `Отвязать ${PROVIDER_LABELS[provider]}?`,
-      description: "Вход через этот провайдер перестанет работать. Привязку можно вернуть позже.",
-      confirmLabel: "Отвязать",
+      title: t("accounts.unlinkTitle", { p: PROVIDER_LABELS[provider] }),
+      description: t("accounts.unlinkDesc"),
+      confirmLabel: t("accounts.unlink"),
       confirmVariant: "destructive",
     });
     if (!ok) return;
@@ -65,7 +87,7 @@ export function ConnectedAccountsSection(props: {
       const updated = await api.unlinkProvider(provider);
       props.onMeUpdate(updated);
     } catch (e: any) {
-      setError(e?.message ?? "Не удалось отвязать");
+      setError(e?.message ?? t("accounts.errUnlink"));
     } finally {
       setActiveProvider(null);
     }
@@ -79,7 +101,7 @@ export function ConnectedAccountsSection(props: {
       props.onMeUpdate(updated);
       setOpenLinkUi(null);
     } catch (e: any) {
-      setError(e?.message ?? "Не удалось привязать Google");
+      setError(e?.message ?? t("accounts.errLinkGoogle"));
     } finally {
       setActiveProvider(null);
     }
@@ -93,7 +115,7 @@ export function ConnectedAccountsSection(props: {
       props.onMeUpdate(updated);
       setOpenLinkUi(null);
     } catch (e: any) {
-      setError(e?.message ?? "Не удалось привязать Facebook");
+      setError(e?.message ?? t("accounts.errLinkFacebook"));
     } finally {
       setActiveProvider(null);
     }
@@ -106,7 +128,7 @@ export function ConnectedAccountsSection(props: {
       const { url } = await api.linkTwitterStart();
       window.location.href = url;
     } catch (e: any) {
-      setError(e?.message ?? "Не удалось начать привязку X");
+      setError(e?.message ?? t("accounts.errLinkTwitter"));
       setActiveProvider(null);
     }
   }
@@ -123,7 +145,7 @@ export function ConnectedAccountsSection(props: {
       window.open(r.deepLink, "_blank", "noopener,noreferrer");
       nav(`/auth/telegram-login?token=${encodeURIComponent(r.token)}&deepLink=${encodeURIComponent(r.deepLink)}&mode=link`);
     } catch (e: any) {
-      setError(e?.message ?? "Не удалось начать привязку Telegram");
+      setError(e?.message ?? t("accounts.errLinkTelegram"));
       setActiveProvider(null);
     }
   }
@@ -135,7 +157,7 @@ export function ConnectedAccountsSection(props: {
   return (
     <Card>
       <CardHeader>
-        <CardTitle className="text-base">Связанные аккаунты</CardTitle>
+        <CardTitle className="text-base">{t("accounts.title")}</CardTitle>
       </CardHeader>
       <CardContent className="space-y-3">
         {error ? (
@@ -154,10 +176,10 @@ export function ConnectedAccountsSection(props: {
                   <span className="font-medium">{PROVIDER_LABELS[p]}</span>
                   {linked ? (
                     <span className="ml-2 rounded bg-emerald-500/10 px-2 py-0.5 text-xs font-medium text-emerald-700 dark:text-emerald-400">
-                      Привязан
+                      {t("accounts.linked")}
                     </span>
                   ) : (
-                    <span className="ml-2 text-xs text-muted-foreground">Не привязан</span>
+                    <span className="ml-2 text-xs text-muted-foreground">{t("accounts.notLinked")}</span>
                   )}
                 </div>
                 <div>
@@ -168,7 +190,7 @@ export function ConnectedAccountsSection(props: {
                       onClick={() => handleUnlink(p)}
                       disabled={busy}
                     >
-                      {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : "Отвязать"}
+                      {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : t("accounts.unlink")}
                     </Button>
                   ) : (
                     <Button
@@ -180,7 +202,7 @@ export function ConnectedAccountsSection(props: {
                       }}
                       disabled={busy}
                     >
-                      {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : "Привязать"}
+                      {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : t("accounts.link")}
                     </Button>
                   )}
                 </div>
@@ -201,7 +223,7 @@ export function ConnectedAccountsSection(props: {
                     <FacebookLoginButton
                       appId={authConfig.facebookAppId}
                       onAuth={handleLinkFacebook}
-                      text="Подключить Facebook"
+                      text={t("accounts.connectFacebook")}
                     />
                   ) : null}
                   <button
@@ -209,7 +231,7 @@ export function ConnectedAccountsSection(props: {
                     className="text-xs text-muted-foreground hover:text-foreground"
                     onClick={() => setOpenLinkUi(null)}
                   >
-                    Отмена
+                    {t("accounts.cancel")}
                   </button>
                 </div>
               ) : null}

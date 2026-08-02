@@ -34,6 +34,82 @@ import {
   X,
   XCircle,
 } from "lucide-react";
+import { Dict, plural, useI18n } from "@/lib/i18n";
+
+const TR = {
+  "common.loading": { ru: "Загрузка…", en: "Loading…" },
+  "common.error": { ru: "Ошибка", en: "Error" },
+  "common.loadFailed": { ru: "Не удалось загрузить: {error}", en: "Failed to load: {error}" },
+  "common.accept": { ru: "Принять", en: "Accept" },
+  "page.title": { ru: "Профиль", en: "Profile" },
+  "auth.required": { ru: "Нужно войти", en: "Sign in required" },
+  "auth.login": { ru: "Войти", en: "Sign in" },
+  "auth.register": { ru: "Регистрация", en: "Sign up" },
+  "auth.hint": { ru: "Профиль доступен после авторизации.", en: "The profile is available after signing in." },
+  "header.editProfile": { ru: "Редактировать профиль", en: "Edit profile" },
+  "header.avatarAlt": { ru: "Аватар", en: "Avatar" },
+  "header.statusCalibration": { ru: "на калибровке", en: "in calibration" },
+  "header.statusActive": { ru: "Активен", en: "Active" },
+  "header.genderM": { ru: "М", en: "M" },
+  "header.genderF": { ru: "Ж", en: "F" },
+  "header.copyId": { ru: "Скопировать ID", en: "Copy ID" },
+  "header.copied": { ru: "Скопировано", en: "Copied" },
+  "stats.rating": { ru: "Рейтинг", en: "Rating" },
+  "stats.matches": { ru: "Матчей", en: "Matches" },
+  "stats.ratingHidden": {
+    ru: "Рейтинг скрыт с лидерборда — ты не играл больше полугода. Сыграй матч, чтобы вернуть его.",
+    en: "Your rating is hidden from the leaderboard — you haven't played for over six months. Play a match to bring it back.",
+  },
+  "ntrp.max": { ru: "Максимальный уровень NTRP", en: "Maximum NTRP level" },
+  "ntrp.toNext": { ru: "ещё {remaining} до {next}", en: "{remaining} more to {next}" },
+  "ntrp.progressAria": { ru: "Прогресс до следующего уровня NTRP", en: "Progress to the next NTRP level" },
+  "calibration.label": { ru: "Калибровка", en: "Calibration" },
+  "calibration.matchesPlayed": { ru: "матчей сыграно", en: "matches played" },
+  "calibration.progressAria": { ru: "Прогресс калибровки", en: "Calibration progress" },
+  "tabs.graph": { ru: "График", en: "Graph" },
+  "tabs.history": { ru: "История", en: "History" },
+  "tabs.friends": { ru: "Друзья", en: "Friends" },
+  "tabs.invites": { ru: "Приглашения", en: "Invites" },
+  "tabs.partners": { ru: "Напарники", en: "Partners" },
+  "history.title": { ru: "История матчей", en: "Game history" },
+  "history.description": { ru: "История ваших игр и изменение рейтинга", en: "Your game history and rating changes" },
+  "history.colDate": { ru: "Дата", en: "Date" },
+  "history.colEvent": { ru: "Событие", en: "Event" },
+  "history.colRating": { ru: "Рейтинг", en: "Rating" },
+  "history.empty": { ru: "История пуста — сыграй первый матч.", en: "No games yet — play your first match." },
+  "history.tournament": { ru: "Турнир", en: "Tournament" },
+  "invites.title": { ru: "Приглашения в игры", en: "Game invites" },
+  "invites.empty": { ru: "Пока приглашений нет.", en: "No invites yet." },
+  "invites.organizer": { ru: "Организатор", en: "Organizer" },
+  "invites.accepted": { ru: "Принято", en: "Accepted" },
+  "invites.open": { ru: "Открыть", en: "Open" },
+  "friends.title": { ru: "Друзья", en: "Friends" },
+  "friends.hint": { ru: "Добавьте друзей по их ID", en: "Add friends by their ID" },
+  "friends.requestSent": { ru: "Заявка отправлена", en: "Request sent" },
+  "friends.requestExists": { ru: "Заявка уже отправлена", en: "Request already sent" },
+  "friends.sendError": { ru: "Ошибка отправки", en: "Failed to send request" },
+  "friends.loadError": { ru: "Ошибка друзей", en: "Failed to load friends" },
+  "friends.yours": { ru: "Ваши друзья", en: "Your friends" },
+  "friends.empty": { ru: "Пока нет друзей.", en: "No friends yet." },
+  "friends.incoming": { ru: "Входящие заявки", en: "Incoming requests" },
+  "friends.decline": { ru: "Отклонить", en: "Decline" },
+  "graph.title": { ru: "График рейтинга", en: "Rating graph" },
+  "partners.title": { ru: "Лучшие напарники", en: "Best partners" },
+  "partners.description": { ru: "С кем ты чаще всего побеждаешь", en: "Who you win with most often" },
+  "partners.empty": { ru: "Пока недостаточно игр.", en: "Not enough games yet." },
+  "partners.winRateSuffix": { ru: "побед", en: "wr" },
+  "details.editScore": { ru: "Редактировать счет", en: "Edit score" },
+  "details.close": { ru: "Закрыть", en: "Close" },
+  "details.stats": { ru: "Статистика", en: "Statistics" },
+  "details.colRound": { ru: "Раунд", en: "Round" },
+  "details.roundShort": { ru: "Р{n}", en: "R{n}" },
+  "details.colCourt": { ru: "Корт", en: "Court" },
+  "details.colPair": { ru: "Пара", en: "Pair" },
+  "details.colOpponents": { ru: "Соперники", en: "Opponents" },
+  "details.colScore": { ru: "Счёт", en: "Score" },
+  "details.colResult": { ru: "Исход", en: "Result" },
+  "details.colRating": { ru: "Рейтинг", en: "Rating" },
+} satisfies Dict;
 
 const NTRP_BOUNDS: { level: string; lo: number; hi: number }[] = [
   { level: "1.0", lo: 0, hi: 900 },
@@ -69,6 +145,7 @@ function sortMatchesByRound(matches: EventHistoryMatch[]): EventHistoryMatch[] {
 
 export function V0ProfilePage(props: { me: any; meLoaded?: boolean; onMeUpdate?: (me: any) => void }) {
   const nav = useNavigate();
+  const { t, lang } = useI18n(TR);
   const [meLive, setMeLive] = useState<any | null>(null);
   const [friends, setFriends] = useState<FriendsSnapshot | null>(null);
   const [friendInput, setFriendInput] = useState("");
@@ -146,7 +223,7 @@ export function V0ProfilePage(props: { me: any; meLoaded?: boolean; onMeUpdate?:
     api
       .getFriends()
       .then(setFriends)
-      .catch((e: any) => setFriendError(e?.message ?? "Ошибка друзей"));
+      .catch((e: any) => setFriendError(e?.message ?? t("friends.loadError")));
     api
       .getInvites()
       .then(setInvites)
@@ -200,7 +277,7 @@ export function V0ProfilePage(props: { me: any; meLoaded?: boolean; onMeUpdate?:
       })
       .catch((e: any) => {
         if (cancelled) return;
-        setHistoryError(e?.message ?? "Ошибка");
+        setHistoryError(e?.message ?? t("common.error"));
       })
       .finally(() => {
         if (cancelled) return;
@@ -234,20 +311,20 @@ export function V0ProfilePage(props: { me: any; meLoaded?: boolean; onMeUpdate?:
     api
       .topPartners(props.me.playerId, 3)
       .then((d) => { if (!cancelled) setPartners(d); })
-      .catch((e: any) => { if (!cancelled) setPartnersError(e?.message ?? "Ошибка"); })
+      .catch((e: any) => { if (!cancelled) setPartnersError(e?.message ?? t("common.error")); })
       .finally(() => { if (!cancelled) setPartnersLoading(false); });
     return () => { cancelled = true; };
   }, [profileTab, partners, props.me?.playerId]);
 
   const historyContent = useMemo(() => {
-    if (historyLoading) return <div className="text-sm text-muted-foreground">Загрузка…</div>;
+    if (historyLoading) return <div className="text-sm text-muted-foreground">{t("common.loading")}</div>;
     if (historyError)
       return (
         <div className="rounded-lg border border-destructive/30 bg-destructive/10 p-4 text-sm">
-          Не удалось загрузить: {historyError}
+          {t("common.loadFailed", { error: historyError })}
         </div>
       );
-    if (!history?.length) return <div className="text-sm text-muted-foreground">История пуста — сыграй первый матч.</div>;
+    if (!history?.length) return <div className="text-sm text-muted-foreground">{t("history.empty")}</div>;
 
     const items = history.slice(0, 5);
     return (
@@ -260,9 +337,9 @@ export function V0ProfilePage(props: { me: any; meLoaded?: boolean; onMeUpdate?:
           </colgroup>
           <thead>
             <tr className="border-b border-border text-xs uppercase tracking-wider text-muted-foreground">
-              <th className="pb-3 pr-2 text-left font-semibold">Дата</th>
-              <th className="pb-3 px-2 text-left font-semibold">Событие</th>
-              <th className="pb-3 pl-2 text-center font-semibold">Рейтинг</th>
+              <th className="pb-3 pr-2 text-left font-semibold">{t("history.colDate")}</th>
+              <th className="pb-3 px-2 text-left font-semibold">{t("history.colEvent")}</th>
+              <th className="pb-3 pl-2 text-center font-semibold">{t("history.colRating")}</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-border">
@@ -279,7 +356,7 @@ export function V0ProfilePage(props: { me: any; meLoaded?: boolean; onMeUpdate?:
                     setDetailsRounds([]);
                     setDetailsTitle(it.eventTitle);
                   } catch (err: any) {
-                    setHistoryError(err?.message ?? "Ошибка");
+                    setHistoryError(err?.message ?? t("common.error"));
                   }
                 }}
               >
@@ -293,7 +370,14 @@ export function V0ProfilePage(props: { me: any; meLoaded?: boolean; onMeUpdate?:
                   ) : null}
                 </td>
                 <td className="py-4 px-2 overflow-hidden align-middle">
-                  <div className="font-semibold truncate" title={it.eventTitle}>{it.eventTitle}</div>
+                  <div className="font-semibold truncate" title={it.eventTitle}>
+                    {it.eventTitle}
+                    {it.kind === "TOURNAMENT" ? (
+                      <span className="ml-1.5 inline-flex items-center rounded border border-emerald-500/40 bg-emerald-500/10 px-1.5 py-0.5 text-[10px] font-medium text-emerald-700 dark:text-emerald-300 align-middle">
+                        {t("history.tournament")}
+                      </span>
+                    ) : null}
+                  </div>
                   {it.participants?.length ? (
                     <div className="text-xs text-muted-foreground mt-0.5 truncate" title={it.participants.join(", ")}>
                       {it.participants.join(", ")}
@@ -326,25 +410,25 @@ export function V0ProfilePage(props: { me: any; meLoaded?: boolean; onMeUpdate?:
         </table>
       </div>
     );
-  }, [history, historyError, historyLoading]);
+  }, [history, historyError, historyLoading, lang, t]);
 
   if (!props.me) {
     if (!props.meLoaded) {
-      return <div className="text-sm text-muted-foreground">Загрузка…</div>;
+      return <div className="text-sm text-muted-foreground">{t("common.loading")}</div>;
     }
     return (
       <div className="space-y-8">
-        <h1 className="text-4xl font-bold tracking-tight">Профиль</h1>
+        <h1 className="text-4xl font-bold tracking-tight">{t("page.title")}</h1>
         <Card className="border-border/50">
           <CardContent className="p-6">
-            <div className="text-lg font-semibold">Нужно войти</div>
+            <div className="text-lg font-semibold">{t("auth.required")}</div>
             <div className="mt-4 flex gap-2">
-              <Button onClick={() => nav("/login")}>Войти</Button>
+              <Button onClick={() => nav("/login")}>{t("auth.login")}</Button>
               <Button variant="outline" onClick={() => nav("/register")}>
-                Регистрация
+                {t("auth.register")}
               </Button>
             </div>
-            <div className="mt-3 text-sm text-muted-foreground">Профиль доступен после авторизации.</div>
+            <div className="mt-3 text-sm text-muted-foreground">{t("auth.hint")}</div>
           </CardContent>
         </Card>
       </div>
@@ -365,9 +449,9 @@ export function V0ProfilePage(props: { me: any; meLoaded?: boolean; onMeUpdate?:
   if (pageLoading) {
     return (
       <div className="space-y-8">
-        <h1 className="text-4xl font-bold tracking-tight">Профиль</h1>
+        <h1 className="text-4xl font-bold tracking-tight">{t("page.title")}</h1>
         <div className="flex items-center justify-center py-20 text-sm text-muted-foreground">
-          Загрузка…
+          {t("common.loading")}
         </div>
       </div>
     );
@@ -411,7 +495,7 @@ export function V0ProfilePage(props: { me: any; meLoaded?: boolean; onMeUpdate?:
               <div className="flex items-end gap-4">
                 <div className="flex h-24 w-24 -mt-7 items-center justify-center rounded-2xl border-4 border-background bg-gradient-to-br from-primary/20 to-primary/5 shadow-xl overflow-hidden">
                   {avatar ? (
-                    <img src={avatar} alt="Avatar" className="h-full w-full object-cover" />
+                    <img src={avatar} alt={t("header.avatarAlt")} className="h-full w-full object-cover" />
                   ) : (
                     <User className="h-12 w-12 text-primary" />
                   )}
@@ -424,8 +508,8 @@ export function V0ProfilePage(props: { me: any; meLoaded?: boolean; onMeUpdate?:
                       size="icon"
                       className="h-8 w-8 text-muted-foreground hover:text-foreground"
                       onClick={() => setEditProfileOpen(true)}
-                      aria-label="Редактировать профиль"
-                      title="Редактировать профиль"
+                      aria-label={t("header.editProfile")}
+                      title={t("header.editProfile")}
                     >
                       <Pencil className="h-4 w-4" />
                     </Button>
@@ -441,11 +525,11 @@ export function V0ProfilePage(props: { me: any; meLoaded?: boolean; onMeUpdate?:
             <div className="mt-4 flex flex-wrap items-center gap-2">
               <Badge className="h-8 gap-1.5 px-3 py-0 bg-primary/10 text-primary border border-primary/20 text-sm font-medium">
                 <Trophy className="h-3.5 w-3.5" />
-                {calibration ? "на калибровке" : "Активен"}
+                {calibration ? t("header.statusCalibration") : t("header.statusActive")}
               </Badge>
               {viewMe.gender ? (
                 <Badge variant="secondary" className="h-8 gap-1.5 px-3 py-0 text-sm font-medium">
-                  {viewMe.gender === "M" ? "М" : "Ж"}
+                  {viewMe.gender === "M" ? t("header.genderM") : t("header.genderF")}
                 </Badge>
               ) : null}
               <div className="relative">
@@ -462,8 +546,8 @@ export function V0ProfilePage(props: { me: any; meLoaded?: boolean; onMeUpdate?:
                       setInfo(pid);
                     }
                   }}
-                  aria-label="Скопировать ID"
-                  title="Скопировать ID"
+                  aria-label={t("header.copyId")}
+                  title={t("header.copyId")}
                 >
                   <Badge variant="secondary" className="h-8 gap-1.5 px-3 py-0 text-sm font-medium">
                     <span className="text-[10px] uppercase text-muted-foreground">ID</span>
@@ -476,7 +560,7 @@ export function V0ProfilePage(props: { me: any; meLoaded?: boolean; onMeUpdate?:
                     idCopied ? "opacity-100 translate-y-[-110%]" : "opacity-0 translate-y-[-80%]",
                   )}
                 >
-                  Скопировано
+                  {t("header.copied")}
                 </span>
               </div>
             </div>
@@ -487,7 +571,7 @@ export function V0ProfilePage(props: { me: any; meLoaded?: boolean; onMeUpdate?:
                 <p className="font-display text-3xl sm:text-4xl font-bold leading-none tabular-nums">
                   {calibration ? "—" : viewMe.rating}
                 </p>
-                <p className="mt-1 text-xs font-medium uppercase tracking-wide text-muted-foreground">Рейтинг</p>
+                <p className="mt-1 text-xs font-medium uppercase tracking-wide text-muted-foreground">{t("stats.rating")}</p>
               </div>
               <div className="rounded-xl border border-border bg-secondary/30 px-3 py-2.5 text-center">
                 <p className="font-display text-3xl sm:text-4xl font-bold leading-none tabular-nums text-primary">
@@ -499,13 +583,13 @@ export function V0ProfilePage(props: { me: any; meLoaded?: boolean; onMeUpdate?:
                 <p className="font-display text-3xl sm:text-4xl font-bold leading-none tabular-nums">
                   {viewMe.gamesPlayed}
                 </p>
-                <p className="mt-1 text-xs font-medium uppercase tracking-wide text-muted-foreground">Матчей</p>
+                <p className="mt-1 text-xs font-medium uppercase tracking-wide text-muted-foreground">{t("stats.matches")}</p>
               </div>
             </div>
 
             {viewMe.ratingHidden && (
               <p className="mt-2 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-700 dark:text-amber-400">
-                Рейтинг скрыт с лидерборда — ты не играл больше полугода. Сыграй матч, чтобы вернуть его.
+                {t("stats.ratingHidden")}
               </p>
             )}
 
@@ -519,7 +603,7 @@ export function V0ProfilePage(props: { me: any; meLoaded?: boolean; onMeUpdate?:
               const idx = NTRP_BOUNDS.findIndex((b) => rating >= b.lo && rating < b.hi);
               const current = idx >= 0 ? NTRP_BOUNDS[idx] : NTRP_BOUNDS[NTRP_BOUNDS.length - 1];
               if (current.hi === Infinity) {
-                return <div className="mt-4 text-xs text-muted-foreground">Максимальный уровень NTRP</div>;
+                return <div className="mt-4 text-xs text-muted-foreground">{t("ntrp.max")}</div>;
               }
               const next = NTRP_BOUNDS[idx + 1];
               const nextLevel = next ? next.level : current.level;
@@ -531,7 +615,7 @@ export function V0ProfilePage(props: { me: any; meLoaded?: boolean; onMeUpdate?:
                     <span className="font-display font-bold tabular-nums text-foreground">
                       NTRP {current.level} <span className="text-muted-foreground">▸ {nextLevel}</span>
                     </span>
-                    <span className="text-muted-foreground tabular-nums">ещё {remaining} до {nextLevel}</span>
+                    <span className="text-muted-foreground tabular-nums">{t("ntrp.toNext", { remaining, next: nextLevel })}</span>
                   </div>
                   <div
                     className="h-2 rounded-full bg-primary/15 overflow-hidden"
@@ -539,7 +623,7 @@ export function V0ProfilePage(props: { me: any; meLoaded?: boolean; onMeUpdate?:
                     aria-valuenow={pct}
                     aria-valuemin={0}
                     aria-valuemax={100}
-                    aria-label="Прогресс до следующего уровня NTRP"
+                    aria-label={t("ntrp.progressAria")}
                   >
                     <div className="h-full rounded-full bg-primary transition-all duration-500" style={{ width: `${pct}%` }} />
                   </div>
@@ -552,7 +636,7 @@ export function V0ProfilePage(props: { me: any; meLoaded?: boolean; onMeUpdate?:
                 <div className="flex items-center gap-3">
                   <Clock className="h-5 w-5 text-amber-600 dark:text-amber-500 shrink-0" />
                   <p className="text-sm text-amber-800 dark:text-amber-200">
-                    Калибровка: <strong>{calibrationPlayed}/30</strong> матчей сыграно
+                    {t("calibration.label")}: <strong>{calibrationPlayed}/30</strong> {t("calibration.matchesPlayed")}
                   </p>
                 </div>
                 {/*
@@ -566,7 +650,7 @@ export function V0ProfilePage(props: { me: any; meLoaded?: boolean; onMeUpdate?:
                   aria-valuenow={calibrationPlayed}
                   aria-valuemin={0}
                   aria-valuemax={30}
-                  aria-label="Прогресс калибровки"
+                  aria-label={t("calibration.progressAria")}
                 >
                   <div
                     className="h-full rounded-full bg-amber-500 transition-all duration-300"
@@ -603,7 +687,7 @@ export function V0ProfilePage(props: { me: any; meLoaded?: boolean; onMeUpdate?:
                   className={tabBtn(profileTab === "graph")}
                 >
                   <TrendingUp className="h-4 w-4 shrink-0" />
-                  <span>График</span>
+                  <span>{t("tabs.graph")}</span>
                 </button>
               )}
               <button
@@ -612,7 +696,7 @@ export function V0ProfilePage(props: { me: any; meLoaded?: boolean; onMeUpdate?:
                 className={tabBtn(profileTab === "history")}
               >
                 <Calendar className="h-4 w-4 shrink-0" />
-                <span>История</span>
+                <span>{t("tabs.history")}</span>
               </button>
               <button
                 type="button"
@@ -620,7 +704,7 @@ export function V0ProfilePage(props: { me: any; meLoaded?: boolean; onMeUpdate?:
                 className={tabBtn(profileTab === "friends")}
               >
                 <Users className="h-4 w-4 shrink-0" />
-                <span>Друзья</span>
+                <span>{t("tabs.friends")}</span>
                 {friendsCount > 0 && <span className="hidden tabular-nums sm:inline">({friendsCount})</span>}
               </button>
               <button
@@ -629,7 +713,7 @@ export function V0ProfilePage(props: { me: any; meLoaded?: boolean; onMeUpdate?:
                 className={tabBtn(profileTab === "invites")}
               >
                 <Gamepad2 className="h-4 w-4 shrink-0" />
-                <span>Приглашения</span>
+                <span>{t("tabs.invites")}</span>
                 {invitesCount > 0 && <span className="hidden tabular-nums sm:inline">({invitesCount})</span>}
               </button>
               <button
@@ -638,7 +722,7 @@ export function V0ProfilePage(props: { me: any; meLoaded?: boolean; onMeUpdate?:
                 className={tabBtn(profileTab === "partners")}
               >
                 <Users2 className="h-4 w-4 shrink-0" />
-                <span>Напарники</span>
+                <span>{t("tabs.partners")}</span>
               </button>
             </div>
           );
@@ -649,20 +733,22 @@ export function V0ProfilePage(props: { me: any; meLoaded?: boolean; onMeUpdate?:
             <CardHeader className="pb-4">
               <CardTitle className="flex items-center gap-2">
                 <Gamepad2 className="h-6 w-6 text-primary" />
-                Приглашения в игры
+                {t("invites.title")}
               </CardTitle>
               <CardDescription>
-                {(invites ?? [])
-                  .filter((inv) => !isPastDate(inv.eventDate))
-                  .filter((inv) => !inviteEventJoined.has(inv.eventId)).length}{" "}
-                новых приглашений
+                {(() => {
+                  const n = (invites ?? [])
+                    .filter((inv) => !isPastDate(inv.eventDate))
+                    .filter((inv) => !inviteEventJoined.has(inv.eventId)).length;
+                  return `${n} ${plural(lang, n, ["новое приглашение", "новых приглашения", "новых приглашений"], ["new invite", "new invites"])}`;
+                })()}
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-3 flex-1">
               {(invites ?? [])
                 .filter((inv) => !isPastDate(inv.eventDate))
                 .filter((inv) => !inviteEventJoined.has(inv.eventId)).length === 0 ? (
-                <div className="text-sm text-muted-foreground">Пока приглашений нет.</div>
+                <div className="text-sm text-muted-foreground">{t("invites.empty")}</div>
               ) : (
                 (invites ?? [])
                   .filter((inv) => !isPastDate(inv.eventDate))
@@ -679,13 +765,13 @@ export function V0ProfilePage(props: { me: any; meLoaded?: boolean; onMeUpdate?:
                               <div>
                                 <h3 className="font-semibold text-lg">{invite.eventTitle}</h3>
                                 <p className="text-sm text-muted-foreground">
-                                  Организатор: <strong>{invite.fromName}</strong>
+                                  {t("invites.organizer")}: <strong>{invite.fromName}</strong>
                                 </p>
                               </div>
                               {accepted ? (
                                 <Badge className="gap-1 bg-primary/20 text-primary border-primary/30 border">
                                   <CheckCircle className="h-3 w-3" />
-                                  Принято
+                                  {t("invites.accepted")}
                                 </Badge>
                               ) : null}
                             </div>
@@ -716,7 +802,7 @@ export function V0ProfilePage(props: { me: any; meLoaded?: boolean; onMeUpdate?:
                                   const refreshed = await api.getInvites();
                                   setInvites(refreshed ?? []);
                                 } catch (e: any) {
-                                  setHistoryError(e?.message ?? "Ошибка");
+                                  setHistoryError(e?.message ?? t("common.error"));
                                 } finally {
                                   setInviteActionId(null);
                                 }
@@ -729,7 +815,7 @@ export function V0ProfilePage(props: { me: any; meLoaded?: boolean; onMeUpdate?:
                               }
                             >
                               <CheckCircle className="h-4 w-4" />
-                              <span>{accepted ? "Принято" : "Принять"}</span>
+                              <span>{accepted ? t("invites.accepted") : t("common.accept")}</span>
                             </Button>
                             <Button
                               variant="outline"
@@ -741,7 +827,7 @@ export function V0ProfilePage(props: { me: any; meLoaded?: boolean; onMeUpdate?:
                                   const refreshed = await api.getInvites();
                                   setInvites(refreshed ?? []);
                                 } catch (e: any) {
-                                  setHistoryError(e?.message ?? "Ошибка");
+                                  setHistoryError(e?.message ?? t("common.error"));
                                 } finally {
                                   setInviteActionId(null);
                                 }
@@ -750,7 +836,7 @@ export function V0ProfilePage(props: { me: any; meLoaded?: boolean; onMeUpdate?:
                               <XCircle className="h-4 w-4" />
                             </Button>
                             <Button variant="ghost" onClick={() => nav(`/events/${invite.eventId}`)}>
-                              Открыть
+                              {t("invites.open")}
                             </Button>
                           </div>
                         </div>
@@ -769,7 +855,7 @@ export function V0ProfilePage(props: { me: any; meLoaded?: boolean; onMeUpdate?:
               <div className="flex items-center justify-between gap-2">
                 <CardTitle className="flex items-center gap-2">
                   <Users className="h-5 w-5 text-primary" />
-                  Друзья
+                  {t("friends.title")}
                   {(friends?.friends ?? []).length > 0 && (
                     <span className="text-sm font-normal text-muted-foreground">
                       ({(friends?.friends ?? []).length})
@@ -777,7 +863,7 @@ export function V0ProfilePage(props: { me: any; meLoaded?: boolean; onMeUpdate?:
                   )}
                 </CardTitle>
               </div>
-              <CardDescription>Добавьте друзей по их ID</CardDescription>
+              <CardDescription>{t("friends.hint")}</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4 flex-1">
               <div className="flex gap-2">
@@ -799,11 +885,11 @@ export function V0ProfilePage(props: { me: any; meLoaded?: boolean; onMeUpdate?:
                       setFriendInput("");
                       const updated = await api.getFriends();
                       setFriends(updated);
-                      setInfo("Заявка отправлена");
+                      setInfo(t("friends.requestSent"));
                     } catch (err: any) {
-                      const msg = err?.message ?? "Ошибка отправки";
+                      const msg = err?.message ?? t("friends.sendError");
                       if (typeof msg === "string" && msg.toLowerCase().includes("already")) {
-                        setFriendError("Заявка уже отправлена");
+                        setFriendError(t("friends.requestExists"));
                       } else {
                         setFriendError(msg);
                       }
@@ -827,7 +913,7 @@ export function V0ProfilePage(props: { me: any; meLoaded?: boolean; onMeUpdate?:
 
               {(friends?.friends ?? []).length > 0 ? (
                 <div className="space-y-2 pt-2 border-t border-border">
-                  <p className="text-xs font-medium text-muted-foreground uppercase">Ваши друзья</p>
+                  <p className="text-xs font-medium text-muted-foreground uppercase">{t("friends.yours")}</p>
                   <div className="space-y-2 max-h-[280px] overflow-y-auto pr-1">
                   {(friends?.friends ?? []).map((friend) => (
                     <PlayerTooltip
@@ -862,12 +948,12 @@ export function V0ProfilePage(props: { me: any; meLoaded?: boolean; onMeUpdate?:
                   </div>
                 </div>
               ) : (
-                <div className="text-sm text-muted-foreground">Пока нет друзей.</div>
+                <div className="text-sm text-muted-foreground">{t("friends.empty")}</div>
               )}
 
               {(friends?.incoming ?? []).length > 0 ? (
                 <div className="space-y-2 pt-2 border-t border-border">
-                  <p className="text-xs font-medium text-muted-foreground uppercase">Входящие заявки</p>
+                  <p className="text-xs font-medium text-muted-foreground uppercase">{t("friends.incoming")}</p>
                   {(friends?.incoming ?? []).map((r) => (
                     <div key={r.publicId} className="flex items-center justify-between gap-2 rounded-lg bg-secondary/50 p-2 px-3">
                       <div className="flex items-center gap-3 min-w-0">
@@ -889,7 +975,7 @@ export function V0ProfilePage(props: { me: any; meLoaded?: boolean; onMeUpdate?:
                             setFriends(updated);
                           }}
                         >
-                          Принять
+                          {t("common.accept")}
                         </Button>
                         <Button
                           size="sm"
@@ -900,7 +986,7 @@ export function V0ProfilePage(props: { me: any; meLoaded?: boolean; onMeUpdate?:
                             setFriends(updated);
                           }}
                         >
-                          Отклонить
+                          {t("friends.decline")}
                         </Button>
                       </div>
                     </div>
@@ -917,7 +1003,7 @@ export function V0ProfilePage(props: { me: any; meLoaded?: boolean; onMeUpdate?:
               <div className="flex items-center justify-between gap-2">
                 <CardTitle className="flex items-center gap-2">
                   <TrendingUp className="h-5 w-5 text-primary" />
-                  График рейтинга
+                  {t("graph.title")}
                 </CardTitle>
               </div>
             </CardHeader>
@@ -933,10 +1019,10 @@ export function V0ProfilePage(props: { me: any; meLoaded?: boolean; onMeUpdate?:
               <div className="flex items-center justify-between gap-2">
                 <CardTitle className="flex items-center gap-2">
                   <Calendar className="h-5 w-5 text-primary" />
-                  История матчей
+                  {t("history.title")}
                 </CardTitle>
               </div>
-              <CardDescription>История ваших игр и изменение рейтинга</CardDescription>
+              <CardDescription>{t("history.description")}</CardDescription>
             </CardHeader>
             <CardContent>{historyContent}</CardContent>
           </>
@@ -947,19 +1033,19 @@ export function V0ProfilePage(props: { me: any; meLoaded?: boolean; onMeUpdate?:
             <CardHeader className="pb-4">
               <CardTitle className="flex items-center gap-2">
                 <Users2 className="h-5 w-5 text-primary" />
-                Лучшие напарники
+                {t("partners.title")}
               </CardTitle>
-              <CardDescription>С кем ты чаще всего побеждаешь</CardDescription>
+              <CardDescription>{t("partners.description")}</CardDescription>
             </CardHeader>
             <CardContent className="space-y-2">
             {partnersLoading ? (
-              <div className="text-sm text-muted-foreground">Загрузка…</div>
+              <div className="text-sm text-muted-foreground">{t("common.loading")}</div>
             ) : partnersError ? (
               <div className="rounded-lg border border-destructive/30 bg-destructive/10 p-3 text-sm">
-                Не удалось загрузить: {partnersError}
+                {t("common.loadFailed", { error: partnersError })}
               </div>
             ) : !partners?.length ? (
-              <div className="text-sm text-muted-foreground">Пока недостаточно игр.</div>
+              <div className="text-sm text-muted-foreground">{t("partners.empty")}</div>
             ) : (
               partners.map((p, i) => (
                 <div
@@ -979,7 +1065,9 @@ export function V0ProfilePage(props: { me: any; meLoaded?: boolean; onMeUpdate?:
                   <div className="min-w-0 flex-1">
                     <p className="text-sm font-medium truncate">{p.player.name}</p>
                     <p className="text-xs text-muted-foreground">
-                      {p.gamesTogether} игр, {p.winsTogether} побед, {Math.round(p.winRate * 100)}% wr
+                      {p.gamesTogether} {plural(lang, p.gamesTogether, ["игра", "игры", "игр"], ["game", "games"])},{" "}
+                      {p.winsTogether} {plural(lang, p.winsTogether, ["победа", "победы", "побед"], ["win", "wins"])},{" "}
+                      {Math.round(p.winRate * 100)}% {t("partners.winRateSuffix")}
                     </p>
                   </div>
                 </div>
@@ -1020,12 +1108,12 @@ export function V0ProfilePage(props: { me: any; meLoaded?: boolean; onMeUpdate?:
                       }}
                     >
                       <Pencil className="h-4 w-4 sm:mr-1.5" />
-                      <span className="hidden sm:inline">Редактировать счет</span>
+                      <span className="hidden sm:inline">{t("details.editScore")}</span>
                     </Button>
                     <Button
                       variant="outline"
                       size="icon"
-                      aria-label="Закрыть"
+                      aria-label={t("details.close")}
                       onClick={() => { setDetails(null); setDetailsStatsOpen(false); }}
                     >
                       <X className="h-4 w-4" />
@@ -1055,7 +1143,7 @@ export function V0ProfilePage(props: { me: any; meLoaded?: boolean; onMeUpdate?:
                 }}
               >
                 <Trophy className="h-4 w-4 mr-1.5" />
-                Статистика
+                {t("details.stats")}
               </Button>
 
               {detailsStatsOpen && detailsRounds.length > 0 ? (
@@ -1066,13 +1154,13 @@ export function V0ProfilePage(props: { me: any; meLoaded?: boolean; onMeUpdate?:
                 <table className="w-full">
                   <thead>
                     <tr className="border-b border-border text-left text-sm uppercase tracking-wider text-muted-foreground">
-                      <th className="pb-3 pr-4 font-medium">Раунд</th>
-                      <th className="pb-3 pr-4 font-medium">Корт</th>
-                      <th className="pb-3 pr-4 font-medium">Пара</th>
-                      <th className="pb-3 pr-4 font-medium">Соперники</th>
-                      <th className="pb-3 pr-4 font-medium">Счёт</th>
-                      <th className="pb-3 pr-4 font-medium">Исход</th>
-                      <th className="pb-3 font-medium">Рейтинг</th>
+                      <th className="pb-3 pr-4 font-medium">{t("details.colRound")}</th>
+                      <th className="pb-3 pr-4 font-medium">{t("details.colCourt")}</th>
+                      <th className="pb-3 pr-4 font-medium">{t("details.colPair")}</th>
+                      <th className="pb-3 pr-4 font-medium">{t("details.colOpponents")}</th>
+                      <th className="pb-3 pr-4 font-medium">{t("details.colScore")}</th>
+                      <th className="pb-3 pr-4 font-medium">{t("details.colResult")}</th>
+                      <th className="pb-3 font-medium">{t("details.colRating")}</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-border">
@@ -1132,7 +1220,7 @@ export function V0ProfilePage(props: { me: any; meLoaded?: boolean; onMeUpdate?:
                     )}>
                       <div className="flex items-center justify-between">
                         <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
-                          <span>R{it.roundNumber}</span>
+                          <span>{t("details.roundShort", { n: it.roundNumber })}</span>
                         </div>
                         {it.ratingDelta == null ? null : it.ratingDelta >= 0 ? (
                           <Badge className="gap-1 bg-primary/20 text-primary border-primary/30 border text-[11px] py-0 px-1.5">

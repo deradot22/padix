@@ -1,12 +1,21 @@
 import { NavLink } from "react-router-dom";
 import { TrendingUp, Gamepad2, Plus, User } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { Dict, useI18n } from "@/lib/i18n";
+
+const TR = {
+  "nav.rating": { ru: "Рейтинг", en: "Rating" },
+  "nav.games": { ru: "Игры", en: "Games" },
+  "nav.create": { ru: "Создать", en: "Create" },
+  "nav.profile": { ru: "Профиль", en: "Profile" },
+  "nav.main": { ru: "Основная навигация", en: "Main navigation" },
+} satisfies Dict;
 
 const items = [
-  { name: "Рейтинг", href: "/rating", icon: TrendingUp },
-  { name: "Игры", href: "/games", icon: Gamepad2 },
-  { name: "Создать", href: "/create", icon: Plus },
-  { name: "Профиль", href: "/profile", icon: User },
+  { nameKey: "nav.rating" as const, href: "/rating", icon: TrendingUp },
+  { nameKey: "nav.games" as const, href: "/games", icon: Gamepad2 },
+  { nameKey: "nav.create" as const, href: "/create", icon: Plus },
+  { nameKey: "nav.profile" as const, href: "/profile", icon: User },
 ];
 
 /**
@@ -22,6 +31,7 @@ const items = [
  * жирная подпись + верхняя точка-индикатор — активность не только цветом.
  */
 export function BottomNav() {
+  const { t } = useI18n(TR);
   return (
     <nav
       // iOS safe-area: на жестовых iPhone (viewport-fit=cover в index.html)
@@ -32,7 +42,7 @@ export function BottomNav() {
       // навбар перекрывал низ inline-модалок (кнопки «Отмена/Сохранить» в диалоге счёта
       // уезжали под меню). Модалки inset-0 z-50 теперь корректно накрывают навбар.
       className="fixed inset-x-0 bottom-0 z-40 md:hidden [padding-bottom:env(safe-area-inset-bottom)]"
-      aria-label="Основная навигация"
+      aria-label={t("nav.main")}
     >
       {/* Плавающая панель: отступы от краёв + скругление + контрастный surface
           + рамка + плотная тень (4-уровневый elevation) отделяют её от фона. */}
@@ -68,7 +78,7 @@ export function BottomNav() {
                       )}
                       strokeWidth={isActive ? 2.5 : 2}
                     />
-                    {item.name}
+                    {t(item.nameKey)}
                   </>
                 )}
               </NavLink>

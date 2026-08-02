@@ -1,6 +1,17 @@
 import { useEffect, useRef } from "react";
 import { ArrowDown, ArrowUp, Minus } from "lucide-react";
 import { ntrpLevel } from "../lib/rating";
+import { Dict, useI18n } from "@/lib/i18n";
+
+const TR = {
+  "title.up": { ru: "Рейтинг вырос! 🎉", en: "Rating up! 🎉" },
+  "title.down": { ru: "Рейтинг изменился", en: "Rating changed" },
+  "title.flat": { ru: "Рейтинг не изменился", en: "Rating unchanged" },
+  "title.new": { ru: "У вас новый рейтинг!", en: "You have a new rating!" },
+  "was": { ru: "было {n}", en: "was {n}" },
+  "updatedAfterGame": { ru: "Рейтинг обновлён после последней игры", en: "Rating updated after your last game" },
+  "gotIt": { ru: "Понятно", en: "Got it" },
+} satisfies Dict;
 
 const BALL_COUNT = 24;
 
@@ -28,6 +39,7 @@ export function RatingNotificationModal({
   delta?: number;
   onClose: () => void;
 }) {
+  const { t } = useI18n(TR);
   const containerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -74,12 +86,12 @@ export function RatingNotificationModal({
   const previousRating = hasDelta ? newRating - delta! : null;
 
   const title = isUp
-    ? "Рейтинг вырос! 🎉"
+    ? t("title.up")
     : isDown
-    ? "Рейтинг изменился"
+    ? t("title.down")
     : isFlat
-    ? "Рейтинг не изменился"
-    : "У вас новый рейтинг!";
+    ? t("title.flat")
+    : t("title.new");
 
   const deltaColor = isUp
     ? "text-emerald-700 dark:text-emerald-400"
@@ -112,7 +124,7 @@ export function RatingNotificationModal({
         <div className="mt-6 flex flex-col items-center">
           {hasDelta && previousRating !== null && delta !== 0 && (
             <div className="text-sm text-muted-foreground tabular-nums">
-              было {previousRating}
+              {t("was", { n: previousRating })}
             </div>
           )}
           <div className="mt-1 text-6xl font-bold tabular-nums text-foreground">
@@ -137,14 +149,14 @@ export function RatingNotificationModal({
         </div>
 
         <p className="mt-6 text-center text-sm text-muted-foreground">
-          Рейтинг обновлён после последней игры
+          {t("updatedAfterGame")}
         </p>
         <button
           type="button"
           className="mt-8 w-full rounded-lg bg-primary px-4 py-3 text-base font-medium text-primary-foreground hover:bg-primary/90 transition-colors"
           onClick={onClose}
         >
-          Понятно
+          {t("gotIt")}
         </button>
       </div>
     </div>

@@ -48,7 +48,10 @@ data class PlayerResponse(
     val avatarUrl: String? = null,
 
     @Schema(description = "true — игрок не играл больше полугода, рейтинг скрыт из публичных мест (UI показывает «—»)")
-    val ratingHidden: Boolean = false
+    val ratingHidden: Boolean = false,
+
+    @Schema(description = "true — гость, вписанный организатором турнира вручную (без аккаунта)")
+    val isGuest: Boolean = false
 ) {
     companion object {
         fun from(p: Player, calibrationEventsRemaining: Int? = null, publicId: String? = null) = PlayerResponse(
@@ -60,7 +63,8 @@ data class PlayerResponse(
             calibrationEventsRemaining = calibrationEventsRemaining,
             publicId = publicId,
             avatarUrl = AvatarLinks.publicUrl(p.id, p.avatarUrl),
-            ratingHidden = com.padelgo.service.RatingDecay.isRatingHidden(p.lastMatchAt, java.time.Instant.now())
+            ratingHidden = com.padelgo.service.RatingDecay.isRatingHidden(p.lastMatchAt, java.time.Instant.now()),
+            isGuest = p.isGuest
         )
     }
 }
@@ -179,7 +183,10 @@ data class CreateEventRequest(
 
     @field:Min(0)
     @Schema(description = "Максимальный рейтинг для регистрации (включительно). null — без верхней границы.", example = "1400")
-    val maxRating: Int? = null
+    val maxRating: Int? = null,
+
+    @Schema(description = "Вид события: REGULAR — обычная игра (влияет на рейтинг), TOURNAMENT — турнир (рейтинг не пересчитывается, можно вписывать гостей)")
+    val kind: com.padelgo.domain.EventKind = com.padelgo.domain.EventKind.REGULAR
 )
 
 @Schema(description = "Запрос на обновление игры")
@@ -296,7 +303,10 @@ data class EventResponse(
     val minRating: Int? = null,
 
     @Schema(description = "Максимальный рейтинг для регистрации (включительно). null — без верхней границы.")
-    val maxRating: Int? = null
+    val maxRating: Int? = null,
+
+    @Schema(description = "Вид события: REGULAR — обычная игра, TOURNAMENT — турнир (не влияет на рейтинг)")
+    val kind: com.padelgo.domain.EventKind = com.padelgo.domain.EventKind.REGULAR
 ) {
     companion object {
         fun from(e: Event, registeredCount: Int = 0, seriesTitle: String? = null) = EventResponse(
@@ -321,7 +331,8 @@ data class EventResponse(
             seriesId = e.seriesId,
             seriesTitle = seriesTitle,
             minRating = e.minRating,
-            maxRating = e.maxRating
+            maxRating = e.maxRating,
+            kind = e.kind
         )
     }
 }
@@ -331,6 +342,13 @@ data class RegisterRequest(
     @field:NotNull
     @Schema(description = "UUID игрока (из PlayerResponse.id)")
     val playerId: UUID
+)
+
+@Schema(description = "Запрос на добавление гостя в турнир (участник без аккаунта, вписанный вручную)")
+data class AddGuestRequest(
+    @field:NotBlank
+    @Schema(description = "Имя гостя", example = "Дима Т.")
+    val name: String
 )
 
 @Schema(description = "Запрос на регистрацию пары (формат «Фиксированные пары»)")

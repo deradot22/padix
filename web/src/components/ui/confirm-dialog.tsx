@@ -1,6 +1,12 @@
 import { createContext, useCallback, useContext, useState, type ReactNode } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "./dialog";
 import { Button } from "./button";
+import { Dict, useI18n } from "@/lib/i18n";
+
+const TR = {
+  "cancel": { ru: "Отмена", en: "Cancel" },
+  "confirm": { ru: "Подтвердить", en: "Confirm" },
+} satisfies Dict;
 
 /** Одна из нескольких кнопок выбора (для confirm с 3+ вариантами). */
 export type ConfirmChoice = {
@@ -32,6 +38,7 @@ type ConfirmFn = (options: ConfirmOptions) => Promise<boolean | string>;
 const ConfirmContext = createContext<ConfirmFn | null>(null);
 
 export function ConfirmProvider({ children }: { children: ReactNode }) {
+  const { t } = useI18n(TR);
   const [opts, setOpts] = useState<ConfirmOptions | null>(null);
   const [resolver, setResolver] = useState<((value: boolean | string) => void) | null>(null);
 
@@ -84,19 +91,19 @@ export function ConfirmProvider({ children }: { children: ReactNode }) {
                 onClick={() => close(false)}
                 className="mt-1 self-end text-sm text-muted-foreground hover:text-foreground transition-colors"
               >
-                {opts.cancelLabel ?? "Отмена"}
+                {opts.cancelLabel ?? t("cancel")}
               </button>
             </div>
           ) : (
             <div className="mt-4 flex items-center gap-2 justify-end">
               <Button variant="outline" className="bg-transparent" onClick={() => close(false)}>
-                {opts?.cancelLabel ?? "Отмена"}
+                {opts?.cancelLabel ?? t("cancel")}
               </Button>
               <Button
                 variant={opts?.confirmVariant ?? "default"}
                 onClick={() => close(true)}
               >
-                {opts?.confirmLabel ?? "Подтвердить"}
+                {opts?.confirmLabel ?? t("confirm")}
               </Button>
             </div>
           )}

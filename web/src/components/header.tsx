@@ -1,30 +1,63 @@
 "use client";
 
 import { Link, NavLink, useLocation, useNavigate } from "react-router-dom";
-import { Bell, Check, Gamepad2, LogOut, Menu, MessageSquare, Moon, Plus, Settings, Sun, TrendingUp, User, UserPlus, X } from "lucide-react";
+import { Bell, Check, Gamepad2, Languages, LogOut, Menu, MessageSquare, Moon, Plus, Settings, Sun, TrendingUp, User, UserPlus, X } from "lucide-react";
 import { motion, AnimatePresence, useReducedMotion } from "motion/react";
 import { createPortal } from "react-dom";
 import { Button } from "@/components/ui/button";
 import { useConfirm } from "@/components/ui/confirm-dialog";
 import { cn } from "@/lib/utils";
+import { Dict, useI18n, useLang } from "@/lib/i18n";
 import { useEffect, useMemo, useState } from "react";
 import { useRef } from "react";
 import { api, EventInviteItem, FriendRequestItem } from "@/lib/api";
 
 import type { LucideIcon } from "lucide-react";
 
+const TR = {
+  "nav.rating": { ru: "Рейтинг", en: "Rating" },
+  "nav.games": { ru: "Игры", en: "Games" },
+  "nav.profile": { ru: "Профиль", en: "Profile" },
+  "notifications": { ru: "Уведомления", en: "Notifications" },
+  "notifications.needLogin": { ru: "Нужно войти, чтобы видеть уведомления.", en: "Sign in to see notifications." },
+  "notifications.counts": { ru: "Инвайтов: {invites}, заявок в друзья: {friends}", en: "Invites: {invites}, friend requests: {friends}" },
+  "notifications.loading": { ru: "Загрузка…", en: "Loading…" },
+  "notifications.empty": { ru: "Нет уведомлений.", en: "No notifications." },
+  "notifications.gameInvites": { ru: "Приглашения в игры", en: "Game invites" },
+  "notifications.friendRequests": { ru: "Заявки в друзья", en: "Friend requests" },
+  "notifications.loadError": { ru: "Не удалось загрузить уведомления", en: "Failed to load notifications" },
+  "action.accept": { ru: "Принять", en: "Accept" },
+  "action.openGame": { ru: "Открыть игру", en: "Open game" },
+  "action.error": { ru: "Ошибка", en: "Error" },
+  "auth.login": { ru: "Войти", en: "Sign in" },
+  "auth.register": { ru: "Регистрация", en: "Sign up" },
+  "auth.logout": { ru: "Выйти", en: "Sign out" },
+  "auth.logoutConfirmTitle": { ru: "Выйти из аккаунта?", en: "Sign out?" },
+  "auth.logoutConfirmText": { ru: "Вы уверены, что хотите выйти?", en: "Are you sure you want to sign out?" },
+  "action.cancel": { ru: "Отмена", en: "Cancel" },
+  "menu": { ru: "Меню", en: "Menu" },
+  "settings": { ru: "Настройки", en: "Settings" },
+  "feedback": { ru: "Обратная связь", en: "Feedback" },
+  "theme.toLight": { ru: "Переключить на светлую тему", en: "Switch to light theme" },
+  "theme.toDark": { ru: "Переключить на тёмную тему", en: "Switch to dark theme" },
+  "theme.light": { ru: "Светлая тема", en: "Light theme" },
+  "theme.dark": { ru: "Тёмная тема", en: "Dark theme" },
+  "lang.switch": { ru: "Switch to English", en: "Переключить на русский" },
+  "lang.label": { ru: "Язык", en: "Language" },
+} satisfies Dict;
+
 // Десктоп: "Создать игру" не дублируем — есть hero CTA на / и FAB-кнопка на /games.
 const desktopNavigation = [
-  { name: "Рейтинг", href: "/rating" },
-  { name: "Игры", href: "/games" },
-  { name: "Профиль", href: "/profile" },
+  { nameKey: "nav.rating" as const, href: "/rating" },
+  { nameKey: "nav.games" as const, href: "/games" },
+  { nameKey: "nav.profile" as const, href: "/profile" },
 ];
 // Мобильный drawer: главный хаб навигации с иконками.
 // "Создать игру" больше не отдельный пункт — это кнопка "+" рядом с "Игры".
-const mobileNavigation: { name: string; href: string; icon: LucideIcon }[] = [
-  { name: "Рейтинг", href: "/rating", icon: TrendingUp },
-  { name: "Игры", href: "/games", icon: Gamepad2 },
-  { name: "Профиль", href: "/profile", icon: User },
+const mobileNavigation: { nameKey: keyof typeof TR; href: string; icon: LucideIcon }[] = [
+  { nameKey: "nav.rating", href: "/rating", icon: TrendingUp },
+  { nameKey: "nav.games", href: "/games", icon: Gamepad2 },
+  { nameKey: "nav.profile", href: "/profile", icon: User },
 ];
 // Совместимость со старым кодом, который ещё может ссылаться на navigation.
 const navigation = mobileNavigation;
@@ -39,6 +72,9 @@ export function Header(props: {
   const nav = useNavigate();
   const confirm = useConfirm();
   const reduceMotion = useReducedMotion();
+  const { t, lang } = useI18n(TR);
+  const { setLang } = useLang();
+  const toggleLang = () => setLang(lang === "ru" ? "en" : "ru");
   const [isDark, setIsDark] = useState(() => document.documentElement.classList.contains("dark"));
   const [notificationsOpen, setNotificationsOpen] = useState(false);
   const [loadingNotifications, setLoadingNotifications] = useState(false);
@@ -92,7 +128,7 @@ export function Header(props: {
       setInvites(inv ?? []);
       setIncomingFriends(friends.incoming ?? []);
     } catch (e: any) {
-      setNotificationsError(e?.message ?? "Не удалось загрузить уведомления");
+      setNotificationsError(e?.message ?? t("notifications.loadError"));
     } finally {
       setLoadingNotifications(false);
     }
@@ -150,7 +186,7 @@ export function Header(props: {
         <nav className="hidden items-center gap-1 md:flex">
           {desktopNavigation.map((item) => (
             <NavLink
-              key={item.name}
+              key={item.nameKey}
               to={item.href}
               className={({ isActive }) =>
                 cn(
@@ -161,7 +197,7 @@ export function Header(props: {
                 )
               }
             >
-              {item.name}
+              {t(item.nameKey)}
             </NavLink>
           ))}
         </nav>
@@ -178,8 +214,8 @@ export function Header(props: {
                 setMobileOpen(false); // открытие уведомлений закрывает меню
                 setNotificationsOpen((v) => !v);
               }}
-              aria-label="Уведомления"
-              title="Уведомления"
+              aria-label={t("notifications")}
+              title={t("notifications")}
             >
               <Bell className="h-5 w-5" />
               {totalNotifications > 0 ? (
@@ -204,23 +240,23 @@ export function Header(props: {
               onClick={(e) => e.stopPropagation()}
             >
                 <div className="flex items-center justify-between gap-3">
-                  <div className="text-sm font-medium">Уведомления</div>
+                  <div className="text-sm font-medium">{t("notifications")}</div>
                 </div>
 
                 {!props.authed ? (
                   <div className="mt-3 space-y-3">
-                    <div className="text-sm text-muted-foreground">Нужно войти, чтобы видеть уведомления.</div>
+                    <div className="text-sm text-muted-foreground">{t("notifications.needLogin")}</div>
                     <div className="flex gap-2">
-                      <Button onClick={() => nav("/login")}>Войти</Button>
+                      <Button onClick={() => nav("/login")}>{t("auth.login")}</Button>
                       <Button variant="outline" onClick={() => nav("/register")}>
-                        Регистрация
+                        {t("auth.register")}
                       </Button>
                     </div>
                   </div>
                 ) : (
                   <div className="mt-3 space-y-5">
                     <div className="text-xs text-muted-foreground">
-                      Инвайтов: <b>{invites.length}</b>, заявок в друзья: <b>{incomingFriends.length}</b>
+                      {t("notifications.counts", { invites: invites.length, friends: incomingFriends.length })}
                     </div>
 
                     {notificationsError ? (
@@ -230,16 +266,16 @@ export function Header(props: {
                     ) : null}
 
                     {loadingNotifications ? (
-                      <div className="text-sm text-muted-foreground">Загрузка…</div>
+                      <div className="text-sm text-muted-foreground">{t("notifications.loading")}</div>
                     ) : null}
 
                     {!loadingNotifications && !hasInvites && !hasFriendRequests ? (
-                      <div className="text-sm text-muted-foreground">Нет уведомлений.</div>
+                      <div className="text-sm text-muted-foreground">{t("notifications.empty")}</div>
                     ) : null}
 
                     {hasInvites ? (
                       <div className="space-y-2">
-                        <div className="text-xs font-medium text-muted-foreground uppercase">Приглашения в игры</div>
+                        <div className="text-xs font-medium text-muted-foreground uppercase">{t("notifications.gameInvites")}</div>
                         <div className="space-y-2">
                           {invites.map((inv) => {
                             const key = `invite:${inv.eventId}`;
@@ -265,7 +301,7 @@ export function Header(props: {
                                           await loadNotifications();
                                           await props.onRefreshNotifications();
                                         } catch (e: any) {
-                                          setNotificationsError(e?.message ?? "Ошибка");
+                                          setNotificationsError(e?.message ?? t("action.error"));
                                         } finally {
                                           setActionKey(null);
                                         }
@@ -273,7 +309,7 @@ export function Header(props: {
                                       disabled={actionKey === key}
                                     >
                                       <Check className="h-4 w-4 mr-1" />
-                                      Принять
+                                      {t("action.accept")}
                                     </Button>
                                     <Button
                                       size="sm"
@@ -286,7 +322,7 @@ export function Header(props: {
                                           await loadNotifications();
                                           await props.onRefreshNotifications();
                                         } catch (e: any) {
-                                          setNotificationsError(e?.message ?? "Ошибка");
+                                          setNotificationsError(e?.message ?? t("action.error"));
                                         } finally {
                                           setActionKey(null);
                                         }
@@ -306,7 +342,7 @@ export function Header(props: {
                                       nav(`/events/${inv.eventId}`);
                                     }}
                                   >
-                                    Открыть игру
+                                    {t("action.openGame")}
                                   </Button>
                                 </div>
                               </div>
@@ -318,7 +354,7 @@ export function Header(props: {
 
                     {hasFriendRequests ? (
                       <div className="space-y-2">
-                        <div className="text-xs font-medium text-muted-foreground uppercase">Заявки в друзья</div>
+                        <div className="text-xs font-medium text-muted-foreground uppercase">{t("notifications.friendRequests")}</div>
                         <div className="space-y-2">
                           {incomingFriends.map((req) => {
                             const key = `friend:${req.publicId}`;
@@ -347,7 +383,7 @@ export function Header(props: {
                                         await loadNotifications();
                                         await props.onRefreshNotifications();
                                       } catch (e: any) {
-                                        setNotificationsError(e?.message ?? "Ошибка");
+                                        setNotificationsError(e?.message ?? t("action.error"));
                                       } finally {
                                         setActionKey(null);
                                       }
@@ -355,7 +391,7 @@ export function Header(props: {
                                     disabled={actionKey === key}
                                   >
                                     <UserPlus className="h-4 w-4 mr-1" />
-                                    Принять
+                                    {t("action.accept")}
                                   </Button>
                                   <Button
                                     size="sm"
@@ -368,7 +404,7 @@ export function Header(props: {
                                         await loadNotifications();
                                         await props.onRefreshNotifications();
                                       } catch (e: any) {
-                                        setNotificationsError(e?.message ?? "Ошибка");
+                                        setNotificationsError(e?.message ?? t("action.error"));
                                       } finally {
                                         setActionKey(null);
                                       }
@@ -392,10 +428,21 @@ export function Header(props: {
 
           <button
             type="button"
+            onClick={toggleLang}
+            className="hidden md:inline-flex items-center gap-1.5 rounded-full border border-border bg-secondary px-3 min-h-9 text-xs font-semibold uppercase text-muted-foreground cursor-pointer hover:bg-secondary/80 hover:text-foreground transition-colors"
+            aria-label={t("lang.switch")}
+            title={t("lang.switch")}
+          >
+            <Languages className="h-4 w-4" />
+            {lang.toUpperCase()}
+          </button>
+
+          <button
+            type="button"
             onClick={() => toggleTheme(!isDark)}
             className="hidden md:flex items-center rounded-full border border-border bg-secondary p-1 cursor-pointer hover:bg-secondary/80 transition-colors min-h-9"
-            aria-label={isDark ? "Переключить на светлую тему" : "Переключить на тёмную тему"}
-            title={isDark ? "Светлая тема" : "Тёмная тема"}
+            aria-label={isDark ? t("theme.toLight") : t("theme.toDark")}
+            title={isDark ? t("theme.light") : t("theme.dark")}
           >
             <span
               className={cn("rounded-full p-2 md:p-1.5 transition-colors flex items-center justify-center", !isDark ? "bg-background text-foreground shadow-sm" : "text-muted-foreground")}
@@ -414,8 +461,8 @@ export function Header(props: {
             size="icon"
             className="md:hidden size-11"
             onClick={() => { setNotificationsOpen(false); setMobileOpen((v) => !v); }}
-            aria-label="Меню"
-            title="Меню"
+            aria-label={t("menu")}
+            title={t("menu")}
           >
             <Menu className="h-5 w-5" />
           </Button>
@@ -431,9 +478,9 @@ export function Header(props: {
                   e.stopPropagation();
                   setSettingsOpen((v) => !v);
                 }}
-                aria-label="Настройки"
+                aria-label={t("settings")}
                 aria-expanded={settingsOpen}
-                title="Настройки"
+                title={t("settings")}
               >
                 <Settings className="h-5 w-5" />
               </Button>
@@ -454,7 +501,7 @@ export function Header(props: {
                   className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm font-medium text-muted-foreground hover:bg-secondary/50 hover:text-foreground transition-colors"
                 >
                   <Settings className="h-4 w-4" />
-                  Настройки
+                  {t("settings")}
                 </button>
                 <button
                   type="button"
@@ -465,7 +512,7 @@ export function Header(props: {
                   className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm font-medium text-muted-foreground hover:bg-secondary/50 hover:text-foreground transition-colors"
                 >
                   <MessageSquare className="h-4 w-4" />
-                  Обратная связь
+                  {t("feedback")}
                 </button>
                 <button
                   type="button"
@@ -476,13 +523,13 @@ export function Header(props: {
                   className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm font-medium text-muted-foreground hover:bg-secondary/50 hover:text-foreground transition-colors"
                 >
                   <LogOut className="h-4 w-4" />
-                  Выйти
+                  {t("auth.logout")}
                 </button>
               </div>
             </div>
           ) : (
             <Button variant="outline" size="sm" className="ml-2 bg-transparent hidden md:inline-flex" onClick={() => nav("/login")}>
-              Войти
+              {t("auth.login")}
             </Button>
           )}
         </div>
@@ -536,7 +583,7 @@ export function Header(props: {
                     }
                   >
                     <Settings className="h-4 w-4" />
-                    Настройки
+                    {t("settings")}
                   </NavLink>
                   <NavLink
                     to="/feedback"
@@ -551,7 +598,7 @@ export function Header(props: {
                     }
                   >
                     <MessageSquare className="h-4 w-4" />
-                    Обратная связь
+                    {t("feedback")}
                   </NavLink>
                 </>
               )}
@@ -564,10 +611,10 @@ export function Header(props: {
                     onClick={async () => {
                       if (
                         await confirm({
-                          title: "Выйти из аккаунта?",
-                          description: "Вы уверены, что хотите выйти?",
-                          confirmLabel: "Выйти",
-                          cancelLabel: "Отмена",
+                          title: t("auth.logoutConfirmTitle"),
+                          description: t("auth.logoutConfirmText"),
+                          confirmLabel: t("auth.logout"),
+                          cancelLabel: t("action.cancel"),
                           confirmVariant: "destructive",
                         })
                       ) {
@@ -578,7 +625,7 @@ export function Header(props: {
                     className="flex items-center gap-2 rounded-lg px-3 py-2 text-left text-sm font-medium text-muted-foreground hover:bg-foreground/5 hover:text-foreground transition-colors"
                   >
                     <LogOut className="h-4 w-4" />
-                    Выйти
+                    {t("auth.logout")}
                   </button>
                 ) : (
                   <button
@@ -586,16 +633,28 @@ export function Header(props: {
                     onClick={() => { setMobileOpen(false); nav("/login"); }}
                     className="rounded-lg px-3 py-2 text-left text-sm font-medium text-muted-foreground hover:bg-foreground/5 hover:text-foreground transition-colors"
                   >
-                    Войти
+                    {t("auth.login")}
                   </button>
                 )}
+                <div className="flex items-center gap-1">
+                {/* Переключатель языка: RU ↔ EN. Меню не закрываем — видно смену языка. */}
+                <button
+                  type="button"
+                  onClick={toggleLang}
+                  aria-label={t("lang.switch")}
+                  title={t("lang.switch")}
+                  className="flex shrink-0 items-center gap-1.5 rounded-lg px-2 py-2 text-xs font-semibold uppercase text-muted-foreground hover:text-foreground transition-colors"
+                >
+                  <Languages className="h-4 w-4" />
+                  {lang.toUpperCase()}
+                </button>
                 {/* Свитч темы справа от кнопки выхода. Меню не закрываем — видно смену темы. */}
                 <button
                   type="button"
                   role="switch"
                   aria-checked={isDark}
-                  aria-label={isDark ? "Переключить на светлую тему" : "Переключить на тёмную тему"}
-                  title={isDark ? "Светлая тема" : "Тёмная тема"}
+                  aria-label={isDark ? t("theme.toLight") : t("theme.toDark")}
+                  title={isDark ? t("theme.light") : t("theme.dark")}
                   onClick={() => toggleTheme(!isDark)}
                   className="flex shrink-0 items-center gap-2 rounded-lg px-2 py-2"
                 >
@@ -616,6 +675,7 @@ export function Header(props: {
                     />
                   </span>
                 </button>
+                </div>
               </div>
             </div>
           </motion.div>

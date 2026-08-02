@@ -44,7 +44,11 @@ class Player(
     var createdAt: Instant? = null,
 
     @Column(name = "last_match_at")
-    var lastMatchAt: Instant? = null
+    var lastMatchAt: Instant? = null,
+
+    // Гость: вписан вручную в турнир, без аккаунта; вне общего рейтинга и decay.
+    @Column(name = "is_guest", nullable = false)
+    var isGuest: Boolean = false
 )
 
 @Entity
@@ -127,7 +131,11 @@ class Event(
     var minRating: Int? = null,
 
     @Column(name = "max_rating")
-    var maxRating: Int? = null
+    var maxRating: Int? = null,
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "kind", nullable = false)
+    var kind: EventKind = EventKind.REGULAR
 )
 
 @Entity
