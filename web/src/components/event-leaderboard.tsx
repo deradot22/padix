@@ -2,6 +2,21 @@ import { useMemo } from "react";
 import { Scale } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { Round } from "../lib/api";
+import { Dict, useI18n } from "@/lib/i18n";
+
+const TR = {
+  "empty": { ru: "Нет данных по очкам.", en: "No points data yet." },
+  "normalizedNote.before": { ru: "Игроки сыграли разное число матчей — поэтому места по ", en: "Players have played a different number of matches — so ranking is by " },
+  "normalizedNote.bold": { ru: "среднему счёту за матч", en: "average points per match" },
+  "normalizedNote.after": { ru: " (честно при разной наигранности). Всего очков — рядом.", en: " (fair with uneven play). Total points shown next to it." },
+  "matchesShort": { ru: "матч.", en: "played" },
+  "wdlAria": { ru: "{w} побед, {d} ничьих, {l} поражений", en: "{w} wins, {d} draws, {l} losses" },
+  "perMatch": { ru: "/матч", en: "/match" },
+  "pointsShort": { ru: "{n} очк.", en: "{n} pts" },
+  "legend.wins": { ru: "победы", en: "wins" },
+  "legend.draws": { ru: "ничьи", en: "draws" },
+  "legend.losses": { ru: "поражения", en: "losses" },
+} satisfies Dict;
 
 export type LeaderRow = {
   id: string;
@@ -84,10 +99,11 @@ const medalClass = (rank: number) =>
  * Используется и на странице игры, и в истории матчей профиля.
  */
 export function EventLeaderboard({ rounds, className }: { rounds: Round[]; className?: string }) {
+  const { t } = useI18n(TR);
   const { rows, normalized } = useMemo(() => buildLeaderboard(rounds), [rounds]);
 
   if (rows.length === 0) {
-    return <div className="text-sm text-muted-foreground">Нет данных по очкам.</div>;
+    return <div className="text-sm text-muted-foreground">{t("empty")}</div>;
   }
 
   return (
@@ -96,9 +112,9 @@ export function EventLeaderboard({ rounds, className }: { rounds: Round[]; class
         <p className="mb-2 flex items-start gap-1.5 text-left text-xs text-muted-foreground">
           <Scale className="mt-0.5 h-3.5 w-3.5 shrink-0" />
           <span>
-            Игроки сыграли разное число матчей — поэтому места по{" "}
-            <b className="font-medium text-foreground">среднему счёту за матч</b> (честно при разной
-            наигранности). Всего очков — рядом.
+            {t("normalizedNote.before")}
+            <b className="font-medium text-foreground">{t("normalizedNote.bold")}</b>
+            {t("normalizedNote.after")}
           </span>
         </p>
       )}
@@ -134,11 +150,11 @@ export function EventLeaderboard({ rounds, className }: { rounds: Round[]; class
               <div className="min-w-0 flex-1">
                 <div className="truncate text-sm font-medium leading-tight">{row.name}</div>
                 <div className="mt-0.5 flex items-center gap-1.5 text-[11px] leading-none text-muted-foreground">
-                  <span className="tabular-nums">{row.played} матч.</span>
+                  <span className="tabular-nums">{row.played} {t("matchesShort")}</span>
                   <span aria-hidden="true">·</span>
                   <span
                     className="tabular-nums"
-                    aria-label={`${row.wins} побед, ${row.draws} ничьих, ${row.losses} поражений`}
+                    aria-label={t("wdlAria", { w: row.wins, d: row.draws, l: row.losses })}
                   >
                     <span className="font-semibold text-emerald-500">{row.wins}</span>
                     <span className="opacity-40">–</span>
@@ -151,10 +167,10 @@ export function EventLeaderboard({ rounds, className }: { rounds: Round[]; class
               <div className="shrink-0 text-right">
                 <div className="text-lg font-bold leading-none tabular-nums">
                   {perMatch.toFixed(1)}
-                  <span className="ml-0.5 text-[10px] font-normal text-muted-foreground">/матч</span>
+                  <span className="ml-0.5 text-[10px] font-normal text-muted-foreground">{t("perMatch")}</span>
                 </div>
                 <div className="mt-1 text-[11px] leading-none text-muted-foreground tabular-nums">
-                  {row.points} очк.
+                  {t("pointsShort", { n: row.points })}
                 </div>
               </div>
             </li>
@@ -165,15 +181,15 @@ export function EventLeaderboard({ rounds, className }: { rounds: Round[]; class
       <div className="mt-2 flex items-center gap-3 text-[11px] text-muted-foreground">
         <span className="inline-flex items-center gap-1">
           <span className="h-2 w-2 rounded-full bg-emerald-500" aria-hidden="true" />
-          победы
+          {t("legend.wins")}
         </span>
         <span className="inline-flex items-center gap-1">
           <span className="h-2 w-2 rounded-full bg-muted-foreground/60" aria-hidden="true" />
-          ничьи
+          {t("legend.draws")}
         </span>
         <span className="inline-flex items-center gap-1">
           <span className="h-2 w-2 rounded-full bg-red-500" aria-hidden="true" />
-          поражения
+          {t("legend.losses")}
         </span>
       </div>
     </div>

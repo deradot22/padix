@@ -5,6 +5,17 @@ import { createPortal } from "react-dom";
 import { Check, Gamepad2, Trophy, UserPlus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ntrpLevel } from "@/lib/rating";
+import { Dict, useI18n } from "@/lib/i18n";
+
+const TR = {
+  "rating": { ru: "Рейтинг", en: "Rating" },
+  "matches": { ru: "Матчей", en: "Matches" },
+  "addFriend": { ru: "Добавить в друзья", en: "Add friend" },
+  "requestSent": { ru: "Заявка отправлена", en: "Request sent" },
+  "requestAlreadySent": { ru: "Заявка уже отправлена", en: "Request already sent" },
+  "isFriend": { ru: "В друзьях", en: "Friends" },
+  "error": { ru: "Ошибка", en: "Error" },
+} satisfies Dict;
 
 export interface PlayerTooltipPlayer {
   id: number | string;
@@ -39,6 +50,7 @@ export function PlayerTooltip({
   addFriendStatus = "none",
   onAddFriend,
 }: PlayerTooltipProps) {
+  const { t } = useI18n(TR);
   const publicId = formatPublicId(player.odid);
   const [open, setOpen] = useState(false);
   const [actionMsg, setActionMsg] = useState<string | null>(null);
@@ -172,7 +184,7 @@ export function PlayerTooltip({
               <div className="flex items-center justify-between">
                 <span className="flex items-center gap-1.5 text-muted-foreground">
                   <Trophy className="h-3.5 w-3.5" />
-                  Рейтинг
+                  {t("rating")}
                 </span>
                 <span className="font-medium text-foreground">{player.rating ?? "—"}</span>
               </div>
@@ -187,7 +199,7 @@ export function PlayerTooltip({
               <div className="flex items-center justify-between">
                 <span className="flex items-center gap-1.5 text-muted-foreground">
                   <Gamepad2 className="h-3.5 w-3.5" />
-                  Матчей
+                  {t("matches")}
                 </span>
                 <span className="font-medium text-foreground">{player.matches ?? 0}</span>
               </div>
@@ -199,7 +211,7 @@ export function PlayerTooltip({
                   size="icon-sm"
                   variant="outline"
                   className="h-8 w-8 bg-transparent"
-                  aria-label={addFriendStatus === "friend" ? "В друзьях" : addFriendStatus === "requested" ? "Заявка отправлена" : "Добавить в друзья"}
+                  aria-label={addFriendStatus === "friend" ? t("isFriend") : addFriendStatus === "requested" ? t("requestSent") : t("addFriend")}
                   disabled={addFriendStatus !== "none"}
                   onClick={async (e) => {
                     e.stopPropagation();
@@ -210,10 +222,10 @@ export function PlayerTooltip({
                       const result = await onAddFriend(player.id);
                       if (typeof result === "string") setActionMsg(result);
                     } catch (err: any) {
-                      const raw = err?.message ?? "Ошибка";
+                      const raw = err?.message ?? t("error");
                       const lower = String(raw).toLowerCase();
                       if (lower.includes("already") || lower.includes("sent request")) {
-                        setActionMsg("Заявка уже отправлена");
+                        setActionMsg(t("requestAlreadySent"));
                       } else {
                         setActionMsg(raw);
                       }
@@ -223,9 +235,9 @@ export function PlayerTooltip({
                   {addFriendStatus === "none" ? <UserPlus className="h-3.5 w-3.5" /> : <Check className="h-3.5 w-3.5" />}
                 </Button>
                 {addFriendStatus === "requested" ? (
-                  <div className="text-xs text-muted-foreground">Заявка отправлена</div>
+                  <div className="text-xs text-muted-foreground">{t("requestSent")}</div>
                 ) : addFriendStatus === "friend" ? (
-                  <div className="text-xs text-muted-foreground">В друзьях</div>
+                  <div className="text-xs text-muted-foreground">{t("isFriend")}</div>
                 ) : actionMsg ? (
                   <div className="text-xs text-muted-foreground">{actionMsg}</div>
                 ) : null}

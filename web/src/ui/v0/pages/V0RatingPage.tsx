@@ -8,7 +8,43 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
+import { Dict, useI18n, plural } from "@/lib/i18n";
 import { PlayerTooltip } from "@/components/player-tooltip";
+
+const TR = {
+  "header.title": { ru: "Рейтинг", en: "Rating" },
+  "header.subtitle": { ru: "Таблица лидеров падел-игроков", en: "Padel players leaderboard" },
+  "stats.calibrated": { ru: "{n} откалибровано", en: "{n} calibrated" },
+  "stats.inCalibration": { ru: "{n} в калибровке", en: "{n} in calibration" },
+  "search.placeholder": { ru: "Поиск по имени...", en: "Search by name..." },
+  "filter.button": { ru: "Фильтр", en: "Filter" },
+  "filter.calibratedOnly": { ru: "Только откалиброванные", en: "Calibrated only" },
+  "filter.inCalibration": { ru: "В калибровке", en: "In calibration" },
+  "filter.all": { ru: "Все", en: "All" },
+  "filter.from": { ru: "от", en: "from" },
+  "filter.to": { ru: "до", en: "to" },
+  "toMyRank": { ru: "К моему рейтингу (#{rank})", en: "To my rank (#{rank})" },
+  "common.loading": { ru: "Загрузка…", en: "Loading…" },
+  "error.loadFallback": { ru: "Ошибка загрузки", en: "Failed to load" },
+  "loadFailed": { ru: "Не удалось загрузить: {error}", en: "Failed to load: {error}" },
+  "empty.filtered": {
+    ru: "По выбранному фильтру нет игроков. Попробуйте изменить условия.",
+    en: "No players match the filter. Try changing it.",
+  },
+  "empty.none": { ru: "Пока нет участников.", en: "No players yet." },
+  "table.title": { ru: "Полный рейтинг", en: "Full rating" },
+  "table.player": { ru: "Игрок", en: "Player" },
+  "table.rating": { ru: "Рейтинг", en: "Rating" },
+  "table.matches": { ru: "Матчей", en: "Matches" },
+  "table.youAreHere": { ru: "Вы здесь", en: "You are here" },
+  "hint.ratingHidden": {
+    ru: "Рейтинг скрыт — не играл больше полугода",
+    en: "Rating hidden — no games for over six months",
+  },
+  "hint.inCalibration": { ru: "В калибровке", en: "In calibration" },
+  "friend.requestSent": { ru: "Заявка отправлена", en: "Request sent" },
+  "friend.noPublicId": { ru: "Не удалось определить публичный ID", en: "Couldn't determine public ID" },
+} satisfies Dict;
 
 const NTRP_LEVELS = ["1.0", "1.5", "2.0", "2.5", "3.0", "3.5", "4.0", "4.5", "5.0+"];
 
@@ -25,6 +61,7 @@ const NTRP_COLORS: Record<string, string> = {
 };
 
 export function V0RatingPage(props: { authed: boolean; me?: { playerId?: string } | null }) {
+  const { t, lang } = useI18n(TR);
   const [data, setData] = useState<Player[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -56,7 +93,7 @@ export function V0RatingPage(props: { authed: boolean; me?: { playerId?: string 
       })
       .catch((e: unknown) => {
         if (cancelled) return;
-        setError(e instanceof Error ? e.message : "Ошибка загрузки");
+        setError(e instanceof Error ? e.message : t("error.loadFallback"));
       })
       .finally(() => {
         if (cancelled) return;
@@ -160,7 +197,7 @@ export function V0RatingPage(props: { authed: boolean; me?: { playerId?: string 
       .join("");
 
   const addFriendHandler = (player: Player) => async () => {
-    if (!player.publicId) throw new Error("Не удалось определить публичный ID");
+    if (!player.publicId) throw new Error(t("friend.noPublicId"));
     const publicId = player.publicId;
     await api.requestFriend(publicId);
     setFriends((prev) =>
@@ -173,7 +210,7 @@ export function V0RatingPage(props: { authed: boolean; me?: { playerId?: string 
           }
         : prev,
     );
-    return "Заявка отправлена";
+    return t("friend.requestSent");
   };
 
   const friendStatus = (player: Player) =>
@@ -240,10 +277,10 @@ export function V0RatingPage(props: { authed: boolean; me?: { playerId?: string 
             {player.ratingHidden || (isCalibrating(player) && isMe) ? "—" : player.rating}
           </span>
           {player.ratingHidden ? (
-            <span className="text-muted-foreground ml-0.5" title="Рейтинг скрыт — не играл больше полугода">?</span>
+            <span className="text-muted-foreground ml-0.5" title={t("hint.ratingHidden")}>?</span>
           ) : (
             isCalibrating(player) && !isMe && (
-              <span className="text-amber-600 dark:text-amber-500/80 ml-0.5" title="В калибровке">?</span>
+              <span className="text-amber-600 dark:text-amber-500/80 ml-0.5" title={t("hint.inCalibration")}>?</span>
             )
           )}
         </td>
@@ -340,7 +377,9 @@ export function V0RatingPage(props: { authed: boolean; me?: { playerId?: string 
               <span className="text-border hidden sm:inline">|</span>
               <span className="flex items-center gap-1">
                 <Gamepad2 className="h-3 w-3 sm:hidden" />
-                <span className="hidden sm:inline">{player.gamesPlayed} матчей</span>
+                <span className="hidden sm:inline">
+                  {player.gamesPlayed} {plural(lang, player.gamesPlayed, ["матч", "матча", "матчей"], ["match", "matches"])}
+                </span>
                 <span className="sm:hidden">{player.gamesPlayed}</span>
               </span>
             </div>
@@ -363,7 +402,7 @@ export function V0RatingPage(props: { authed: boolean; me?: { playerId?: string 
         <div>{renderTopCard(p3, r3)}</div>
       </div>
     );
-  }, [hasData, topPlayersLocal, globalRankMap, meId, friends, props.authed]);
+  }, [hasData, topPlayersLocal, globalRankMap, meId, friends, props.authed, lang, t]);
 
   const activeFiltersCount = [calibrationFilter !== "calibrated", ntrpMin, ntrpMax].filter(Boolean).length;
 
@@ -371,17 +410,17 @@ export function V0RatingPage(props: { authed: boolean; me?: { playerId?: string 
     <div className="space-y-4 sm:space-y-6">
       <div className="flex flex-col gap-3 sm:gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">Рейтинг</h1>
-          <p className="mt-0.5 sm:mt-1 text-sm sm:text-base text-muted-foreground">Таблица лидеров падел-игроков</p>
+          <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">{t("header.title")}</h1>
+          <p className="mt-0.5 sm:mt-1 text-sm sm:text-base text-muted-foreground">{t("header.subtitle")}</p>
         </div>
         <div className="flex items-center gap-3 sm:gap-4 text-xs sm:text-sm text-muted-foreground">
           <div className="flex items-center gap-1.5">
             <Users className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
-            <span>{ratingStats.calibrated} откалибровано</span>
+            <span>{t("stats.calibrated", { n: ratingStats.calibrated })}</span>
           </div>
           {ratingStats.notCalibrated > 0 && (
             <div className="flex items-center gap-1.5">
-              <span>{ratingStats.notCalibrated} в калибровке</span>
+              <span>{t("stats.inCalibration", { n: ratingStats.notCalibrated })}</span>
             </div>
           )}
         </div>
@@ -395,7 +434,7 @@ export function V0RatingPage(props: { authed: boolean; me?: { playerId?: string 
             <div className="relative flex-1 min-w-[180px]">
               <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
               <Input
-                placeholder="Поиск по имени..."
+                placeholder={t("search.placeholder")}
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
                 className="pl-9 h-9"
@@ -408,7 +447,7 @@ export function V0RatingPage(props: { authed: boolean; me?: { playerId?: string 
               onClick={() => setFilterOpen((o) => !o)}
             >
               <Filter className="h-4 w-4" />
-              Фильтр
+              {t("filter.button")}
               {activeFiltersCount > 0 && (
                 <span className="rounded-full bg-primary/20 px-1.5 py-0.5 text-xs font-medium text-primary">
                   {activeFiltersCount}
@@ -418,7 +457,7 @@ export function V0RatingPage(props: { authed: boolean; me?: { playerId?: string 
             </Button>
             {meId && myRank !== null && myRank > topCount && (
               <Button variant="outline" size="sm" className="h-9 shrink-0" onClick={scrollToMe}>
-                К моему рейтингу (#{myRank})
+                {t("toMyRank", { rank: myRank })}
               </Button>
             )}
           </div>
@@ -429,16 +468,16 @@ export function V0RatingPage(props: { authed: boolean; me?: { playerId?: string 
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="calibrated">Только откалиброванные</SelectItem>
-                  <SelectItem value="in_calibration">В калибровке</SelectItem>
-                  <SelectItem value="all">Все</SelectItem>
+                  <SelectItem value="calibrated">{t("filter.calibratedOnly")}</SelectItem>
+                  <SelectItem value="in_calibration">{t("filter.inCalibration")}</SelectItem>
+                  <SelectItem value="all">{t("filter.all")}</SelectItem>
                 </SelectContent>
               </Select>
               <div className="flex items-center gap-1.5">
                 <span className="text-muted-foreground text-xs shrink-0">NTRP</span>
                 <Select value={ntrpMin || "min"} onValueChange={(v) => setNtrpMin(v === "min" ? "" : v)}>
                   <SelectTrigger className="h-9 w-[88px] sm:w-[100px]">
-                    <SelectValue placeholder="от" />
+                    <SelectValue placeholder={t("filter.from")} />
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="min">—</SelectItem>
@@ -450,7 +489,7 @@ export function V0RatingPage(props: { authed: boolean; me?: { playerId?: string 
                 <span className="text-muted-foreground text-xs shrink-0">–</span>
                 <Select value={ntrpMax || "max"} onValueChange={(v) => setNtrpMax(v === "max" ? "" : v)}>
                   <SelectTrigger className="h-9 w-[88px] sm:w-[100px]">
-                    <SelectValue placeholder="до" />
+                    <SelectValue placeholder={t("filter.to")} />
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="max">—</SelectItem>
@@ -465,17 +504,15 @@ export function V0RatingPage(props: { authed: boolean; me?: { playerId?: string 
         </div>
       )}
 
-      {loading && <div className="text-sm text-muted-foreground py-8 text-center">Загрузка…</div>}
+      {loading && <div className="text-sm text-muted-foreground py-8 text-center">{t("common.loading")}</div>}
       {error && (
         <div className="rounded-lg border border-destructive/30 bg-destructive/10 p-4 text-sm">
-          Не удалось загрузить: {error}
+          {t("loadFailed", { error })}
         </div>
       )}
       {!loading && !error && !hasData && (
         <div className="text-sm text-muted-foreground py-8 text-center">
-          {hasAnyPlayer
-            ? "По выбранному фильтру нет игроков. Попробуйте изменить условия."
-            : "Пока нет участников."}
+          {hasAnyPlayer ? t("empty.filtered") : t("empty.none")}
         </div>
       )}
 
@@ -485,10 +522,10 @@ export function V0RatingPage(props: { authed: boolean; me?: { playerId?: string 
             <div className="flex items-center justify-between">
               <CardTitle className="flex items-center gap-2 text-base sm:text-lg">
                 <TrendingUp className="h-4 w-4 sm:h-5 sm:w-5 text-primary" />
-                Полный рейтинг
+                {t("table.title")}
               </CardTitle>
               <Badge variant="secondary" className="text-xs tabular-nums">
-                {filteredPlayers.length} игроков
+                {filteredPlayers.length} {plural(lang, filteredPlayers.length, ["игрок", "игрока", "игроков"], ["player", "players"])}
               </Badge>
             </div>
           </CardHeader>
@@ -498,10 +535,10 @@ export function V0RatingPage(props: { authed: boolean; me?: { playerId?: string 
                 <thead>
                   <tr className="border-b border-border text-muted-foreground text-xs sm:text-sm">
                     <th className="py-2 pl-2 sm:pl-3 pr-1 font-medium text-center w-10 sm:w-12">#</th>
-                    <th className="py-2 pr-1 sm:pr-2 font-medium text-left">Игрок</th>
-                    <th className="py-2 px-2 sm:px-3 font-medium text-center w-[22%] sm:w-[18%]">Рейтинг</th>
+                    <th className="py-2 pr-1 sm:pr-2 font-medium text-left">{t("table.player")}</th>
+                    <th className="py-2 px-2 sm:px-3 font-medium text-center w-[22%] sm:w-[18%]">{t("table.rating")}</th>
                     <th className="py-2 pl-2 pr-4 sm:pl-3 sm:pr-6 font-medium text-right w-[18%] sm:w-[14%]">NTRP</th>
-                    <th className="py-2 pl-2 pr-3 font-medium text-right hidden sm:table-cell w-[12%]">Матчей</th>
+                    <th className="py-2 pl-2 pr-3 font-medium text-right hidden sm:table-cell w-[12%]">{t("table.matches")}</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -520,7 +557,7 @@ export function V0RatingPage(props: { authed: boolean; me?: { playerId?: string 
                       )}
                       <tr className="bg-primary/5">
                         <td colSpan={5} className="py-1.5 text-center text-[11px] sm:text-xs font-medium text-primary">
-                          Вы здесь
+                          {t("table.youAreHere")}
                         </td>
                       </tr>
                       {renderPlayerRow(myPlayer, myRank!, true, topCount + playersAboveMe.length)}

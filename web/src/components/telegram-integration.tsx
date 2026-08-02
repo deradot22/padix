@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+﻿import { useCallback, useEffect, useRef, useState } from "react";
 import { api, TelegramChat, TelegramLinkToken, TelegramSettings, TelegramStatus } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -6,26 +6,130 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } f
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useConfirm } from "@/components/ui/confirm-dialog";
 import { cn } from "@/lib/utils";
+import { Dict, useI18n } from "@/lib/i18n";
 import { Send, X, ChevronDown, Copy, Check, ExternalLink, MessageCircle, Users as UsersIcon, Bell, Moon, Pin } from "lucide-react";
+
+const TR = {
+  "tg.reminder.1": { ru: "за 1 час", en: "1 hour before" },
+  "tg.reminder.2": { ru: "за 2 часа", en: "2 hours before" },
+  "tg.reminder.3": { ru: "за 3 часа", en: "3 hours before" },
+  "tg.reminder.4": { ru: "за 4 часа", en: "4 hours before" },
+  "tg.reminder.6": { ru: "за 6 часов", en: "6 hours before" },
+  "tg.reminder.12": { ru: "за 12 часов", en: "12 hours before" },
+  "tg.reminder.24": { ru: "за сутки", en: "a day before" },
+  "tg.reminder.none": { ru: "не отправлять", en: "don't send" },
+  "tg.chatType.private": { ru: "Личка", en: "Private" },
+  "tg.chatType.group": { ru: "Группа", en: "Group" },
+  "tg.chatType.channel": { ru: "Канал", en: "Channel" },
+  "tg.loadError": { ru: "Не удалось загрузить", en: "Failed to load" },
+  "tg.saveSettingsError": { ru: "Не удалось сохранить настройки", en: "Failed to save settings" },
+  "tg.saveChatError": { ru: "Не удалось сохранить настройки чата", en: "Failed to save chat settings" },
+  "tg.unlinkError": { ru: "Не удалось отвязать чат", en: "Failed to unlink chat" },
+  "tg.unlinkTitle": { ru: "Отвязать чат?", en: "Unlink chat?" },
+  "tg.unlinkDesc1": { ru: "Чат", en: "The chat" },
+  "tg.unlinkDesc2": {
+    ru: "больше не будет получать уведомления. Это не удаляет бота из чата.",
+    en: "will no longer receive notifications. This does not remove the bot from the chat.",
+  },
+  "tg.unlink": { ru: "Отвязать", en: "Unlink" },
+  "tg.off": { ru: "выключено", en: "off" },
+  "tg.cardDesc": {
+    ru: "Приглашения, изменения и результаты игр прилетают в выбранные чаты.",
+    en: "Invitations, updates and game results arrive in the chats you choose.",
+  },
+  "tg.master": { ru: "Получать уведомления в Telegram", en: "Receive notifications in Telegram" },
+  "tg.masterHint": {
+    ru: "Выключите, чтобы временно приостановить все сообщения без отвязывания чатов.",
+    en: "Turn this off to temporarily pause all messages without unlinking chats.",
+  },
+  "tg.whenTitle": { ru: "Когда уведомлять", en: "When to notify" },
+  "tg.whenHint": {
+    ru: "Для обычных одноразовых игр. У серий настройки задаются отдельно при создании серии.",
+    en: "For regular one-off games. Series have their own settings, chosen when the series is created.",
+  },
+  "tg.reminderLabel": { ru: "Напоминание о игре", en: "Game reminder" },
+  "tg.quiet": { ru: "Тихие часы — не слать напоминания ночью", en: "Quiet hours — don't send reminders at night" },
+  "tg.quietFrom": { ru: "с", en: "from" },
+  "tg.quietTo": { ru: "до", en: "to" },
+  "tg.timezone": { ru: "Часовой пояс: {tz}", en: "Time zone: {tz}" },
+  "tg.pin": { ru: "Закреплять анонс новой игры в групповых чатах", en: "Pin new game announcements in group chats" },
+  "tg.pinHint": {
+    ru: "При следующем анонсе предыдущий открепляется автоматически.",
+    en: "When the next announcement is posted, the previous one is unpinned automatically.",
+  },
+  "tg.privateChat": { ru: "Личный чат", en: "Private chat" },
+  "tg.privateChatHint": {
+    ru: "Сюда приходят персональные напоминания о ваших играх",
+    en: "Personal reminders about your games arrive here",
+  },
+  "tg.privateReminderToggle": {
+    ru: "получать напоминания за N часов до игры",
+    en: "receive reminders N hours before a game",
+  },
+  "tg.noPrivateChat": {
+    ru: "Личный чат не привязан — вы не будете получать персональные напоминания о играх, в которых зарегистрированы.",
+    en: "No private chat linked — you won't get personal reminders about games you are registered for.",
+  },
+  "tg.groups": { ru: "Группы и каналы", en: "Groups and channels" },
+  "tg.noGroups": {
+    ru: "Пока ни одной группы не привязано. Добавьте бота в групповой чат, чтобы отправлять туда анонсы новых игр, изменения и итоги.",
+    en: "No groups linked yet. Add the bot to a group chat to send announcements of new games, updates and results there.",
+  },
+  "tg.toggleUpdated": { ru: "изменения и набор", en: "updates and sign-ups" },
+  "tg.toggleFinished": { ru: "финал и результаты", en: "final and results" },
+  "tg.linkChat": { ru: "Привязать чат", en: "Link chat" },
+  "tg.modalTitle": { ru: "Привязка Telegram", en: "Link Telegram" },
+  "tg.modalDesc": { ru: "Выберите, куда вы хотите получать анонсы.", en: "Choose where you want to receive announcements." },
+  "tg.linkedOk": { ru: "Чат привязан", en: "Chat linked" },
+  "tg.done": { ru: "Готово", en: "Done" },
+  "tg.tabPrivate": { ru: "Личка", en: "Private" },
+  "tg.tabGroup": { ru: "Группа / канал", en: "Group / channel" },
+  "tg.tokenError": { ru: "Не удалось сгенерировать токен", en: "Failed to generate token" },
+  "tg.generating": { ru: "Генерируем токен…", en: "Generating token…" },
+  "tg.privateHint1": { ru: "Откройте бота", en: "Open the bot" },
+  "tg.privateHint2": {
+    ru: ", нажмите Start — этот чат привяжется к вашему профилю.",
+    en: ", press Start — this chat will be linked to your profile.",
+  },
+  "tg.openBot": { ru: "Открыть @{u}", en: "Open @{u}" },
+  "tg.autoRefresh": {
+    ru: "Окно автоматически обновится, когда привязка пройдёт.",
+    en: "This window will refresh automatically once linking completes.",
+  },
+  "tg.step1a": { ru: "Добавьте бота", en: "Add the bot" },
+  "tg.step1b": { ru: "в нужный чат или сделайте админом канала.", en: "to the chat you need, or make it a channel admin." },
+  "tg.step2": { ru: "Отправьте в этот чат команду:", en: "Send this command to that chat:" },
+  "tg.copy": { ru: "Скопировать", en: "Copy" },
+  "tg.step3": {
+    ru: "Бот ответит подтверждением — окно автоматически обновится.",
+    en: "The bot will reply with a confirmation — this window will refresh automatically.",
+  },
+  "tg.tokenTtl": {
+    ru: "Токен действует 15 минут. После привязки токен сгорает.",
+    en: "The token is valid for 15 minutes and expires once used.",
+  },
+  "tg.newToken": { ru: "Сгенерировать новый токен", en: "Generate a new token" },
+  "tg.close": { ru: "Закрыть", en: "Close" },
+} satisfies Dict;
 
 type LinkTab = "private" | "group";
 
 const REMINDER_OPTIONS = [
-  { value: 1, label: "за 1 час" },
-  { value: 2, label: "за 2 часа" },
-  { value: 3, label: "за 3 часа" },
-  { value: 4, label: "за 4 часа" },
-  { value: 6, label: "за 6 часов" },
-  { value: 12, label: "за 12 часов" },
-  { value: 24, label: "за сутки" },
+  { value: 1, key: "tg.reminder.1" },
+  { value: 2, key: "tg.reminder.2" },
+  { value: 3, key: "tg.reminder.3" },
+  { value: 4, key: "tg.reminder.4" },
+  { value: 6, key: "tg.reminder.6" },
+  { value: 12, key: "tg.reminder.12" },
+  { value: 24, key: "tg.reminder.24" },
 ] as const;
 
-function chatTypeLabel(type: TelegramChat["chatType"]): string {
+function chatTypeLabel(type: TelegramChat["chatType"], t: (key: keyof typeof TR & string) => string): string {
   switch (type) {
-    case "PRIVATE": return "Личка";
+    case "PRIVATE": return t("tg.chatType.private");
     case "GROUP":
-    case "SUPERGROUP": return "Группа";
-    case "CHANNEL": return "Канал";
+    case "SUPERGROUP": return t("tg.chatType.group");
+    case "CHANNEL": return t("tg.chatType.channel");
     default: return type;
   }
 }
@@ -52,6 +156,7 @@ function toTimeInput(value: string | null | undefined): string {
 }
 
 export function TelegramIntegrationCard() {
+  const { t } = useI18n(TR);
   const [status, setStatus] = useState<TelegramStatus | null>(null);
   const [chats, setChats] = useState<TelegramChat[]>([]);
   const [settings, setSettings] = useState<TelegramSettings | null>(null);
@@ -228,7 +333,7 @@ export function TelegramIntegrationCard() {
                   <SelectItem value="0">не отправлять</SelectItem>
                   {REMINDER_OPTIONS.map((opt) => (
                     <SelectItem key={opt.value} value={String(opt.value)}>
-                      {opt.label}
+                      {t(opt.key)}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -366,7 +471,7 @@ export function TelegramIntegrationCard() {
                           <ChatIcon type={chat.chatType} />
                           <div className="min-w-0 flex-1">
                             <div className="text-sm font-medium truncate">{chat.title}</div>
-                            <div className="text-xs text-muted-foreground">{chatTypeLabel(chat.chatType)}</div>
+                            <div className="text-xs text-muted-foreground">{chatTypeLabel(chat.chatType, t)}</div>
                           </div>
                           <Button
                             size="icon"
@@ -509,7 +614,7 @@ function TelegramLinkModal(props: {
                 Чат привязан
               </div>
               <div className="text-foreground">
-                <b>{linkedChat.title}</b> — {chatTypeLabel(linkedChat.chatType).toLowerCase()}
+                <b>{linkedChat.title}</b> — {chatTypeLabel(linkedChat.chatType, t).toLowerCase()}
               </div>
             </div>
             <div className="flex justify-end">

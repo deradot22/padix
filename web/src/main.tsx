@@ -6,6 +6,7 @@ import "./ui/base.css";
 import "./ui/v0/tailwind.css";
 import { installDevErrorOverlay } from "./ui/dev-error-overlay";
 import { ConfirmProvider } from "./components/ui/confirm-dialog";
+import { LanguageProvider } from "./lib/i18n";
 
 installDevErrorOverlay();
 
@@ -17,9 +18,11 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
         v7_relativeSplatPath: true,
       }}
     >
-      <ConfirmProvider>
-        <App />
-      </ConfirmProvider>
+      <LanguageProvider>
+        <ConfirmProvider>
+          <App />
+        </ConfirmProvider>
+      </LanguageProvider>
     </BrowserRouter>
   </React.StrictMode>,
 );

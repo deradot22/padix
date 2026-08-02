@@ -1,6 +1,28 @@
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { api } from "../../../lib/api";
+import { Dict, useI18n } from "@/lib/i18n";
+
+const TR = {
+  "survey.title": { ru: "Тест: предварительный рейтинг", en: "Survey: preliminary rating" },
+  "survey.intro": {
+    ru: "Это обязательный шаг (один раз), чтобы подобрать стартовый рейтинг. Вопросы идут по одному.",
+    en: "This is a required one-time step to set your starting rating. Questions come one at a time.",
+  },
+  "survey.loading": { ru: "Загрузка теста…", en: "Loading survey…" },
+  "survey.step": { ru: "Шаг {n} из {total}", en: "Step {n} of {total}" },
+  "survey.progress": { ru: "Прогресс: {p}%", en: "Progress: {p}%" },
+  "survey.answered": { ru: "ответ выбран", en: "answer selected" },
+  "survey.needAnswer": { ru: "нужно выбрать", en: "select an answer" },
+  "survey.noQuestions": { ru: "Нет вопросов", en: "No questions" },
+  "survey.back": { ru: "Назад", en: "Back" },
+  "survey.next": { ru: "Далее", en: "Next" },
+  "survey.saving": { ru: "Сохраняем…", en: "Saving…" },
+  "survey.finish": { ru: "Завершить тест", en: "Finish survey" },
+  "survey.answerAll": { ru: "Нужно ответить на все вопросы", en: "Please answer all the questions" },
+  "survey.errLoad": { ru: "Не удалось загрузить тест", en: "Couldn't load the survey" },
+  "survey.errGeneric": { ru: "Ошибка", en: "Error" },
+} satisfies Dict;
 
 export function V0SurveyPage(props: {
   me: any;
@@ -9,6 +31,7 @@ export function V0SurveyPage(props: {
 }) {
   const nav = useNavigate();
   const me = props.me;
+  const { t } = useI18n(TR);
   const [def, setDef] = useState<any | null>(null);
   const [answers, setAnswers] = useState<Record<string, string>>({});
   const [step, setStep] = useState(0);
@@ -32,7 +55,8 @@ export function V0SurveyPage(props: {
         });
         setAnswers(initial);
       })
-      .catch((e: any) => setError(e?.message ?? "Не удалось загрузить тест"));
+      .catch((e: any) => setError(e?.message ?? t("survey.errLoad")));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [me]);
 
   const questions: any[] = useMemo(() => def?.questions ?? [], [def]);
@@ -79,7 +103,7 @@ export function V0SurveyPage(props: {
       });
       nav("/profile");
     } catch (err: any) {
-      setError(err?.message ?? "Ошибка");
+      setError(err?.message ?? t("survey.errGeneric"));
     } finally {
       setLoading(false);
     }
@@ -88,22 +112,22 @@ export function V0SurveyPage(props: {
   return (
     <div className="mx-auto max-w-3xl space-y-6">
       <div>
-        <h1 className="text-3xl font-bold tracking-tight">Тест: предварительный рейтинг</h1>
+        <h1 className="text-3xl font-bold tracking-tight">{t("survey.title")}</h1>
         <p className="mt-2 text-sm text-muted-foreground">
-          Это обязательный шаг (один раз), чтобы подобрать стартовый рейтинг. Вопросы идут по одному.
+          {t("survey.intro")}
         </p>
       </div>
 
       {!def ? (
-        <div className="rounded-xl border border-border bg-card p-6 text-sm text-muted-foreground">Загрузка теста…</div>
+        <div className="rounded-xl border border-border bg-card p-6 text-sm text-muted-foreground">{t("survey.loading")}</div>
       ) : null}
 
       <div className="rounded-xl border border-border bg-card p-6">
         <div className="flex items-center justify-between gap-3">
           <div className="text-sm font-medium">
-            Шаг {Math.min(step + 1, Math.max(totalSteps, 1))} из {Math.max(totalSteps, 1)}
+            {t("survey.step", { n: Math.min(step + 1, Math.max(totalSteps, 1)), total: Math.max(totalSteps, 1) })}
           </div>
-          <div className="text-sm text-muted-foreground">Прогресс: {progress}%</div>
+          <div className="text-sm text-muted-foreground">{t("survey.progress", { p: progress })}</div>
         </div>
         <div className="mt-3 h-2 w-full rounded-full bg-secondary overflow-hidden">
           <div className="h-full bg-primary transition-all" style={{ width: `${progress}%` }} />
@@ -117,7 +141,7 @@ export function V0SurveyPage(props: {
               <div className="flex items-start justify-between gap-3">
                 <div className="text-lg font-semibold">{currentQuestion.title}</div>
                 <div className="text-xs text-muted-foreground">
-                  {answers[currentQuestion.id] ? "ответ выбран" : "нужно выбрать"}
+                  {answers[currentQuestion.id] ? t("survey.answered") : t("survey.needAnswer")}
                 </div>
               </div>
               <div className="mt-4 grid gap-2">
@@ -141,7 +165,7 @@ export function V0SurveyPage(props: {
               </div>
             </>
           ) : (
-            <div className="text-sm text-muted-foreground">Нет вопросов</div>
+            <div className="text-sm text-muted-foreground">{t("survey.noQuestions")}</div>
           )}
         </div>
 
@@ -152,7 +176,7 @@ export function V0SurveyPage(props: {
             onClick={back}
             disabled={loading || step === 0}
           >
-            Назад
+            {t("survey.back")}
           </button>
 
           {step < totalSteps - 1 ? (
@@ -162,20 +186,20 @@ export function V0SurveyPage(props: {
               onClick={next}
               disabled={loading || !canNext}
             >
-              Далее
+              {t("survey.next")}
             </button>
           ) : (
             <button
               className="h-11 rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground hover:bg-primary/90 transition-colors"
               disabled={loading || !readyToSubmit}
             >
-              {loading ? "Сохраняем…" : "Завершить тест"}
+              {loading ? t("survey.saving") : t("survey.finish")}
             </button>
           )}
         </div>
 
         {step === totalSteps - 1 && def && !readyToSubmit ? (
-          <div className="text-sm text-muted-foreground">Нужно ответить на все вопросы</div>
+          <div className="text-sm text-muted-foreground">{t("survey.answerAll")}</div>
         ) : null}
         {error ? (
           <div className="rounded-lg border border-destructive/30 bg-destructive/10 p-4 text-sm">{error}</div>
@@ -184,4 +208,3 @@ export function V0SurveyPage(props: {
     </div>
   );
 }
-

@@ -2,28 +2,50 @@ import { Link } from "react-router-dom";
 import { Gamepad2, TrendingUp, Trophy, Users, Zap, ArrowRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Dict, useI18n } from "@/lib/i18n";
+
+const TR = {
+  "features.organize.title": { ru: "Организовывайте игры", en: "Organize games" },
+  "features.organize.desc": { ru: "Создавайте и управляйте играми в падел с друзьями", en: "Create and manage padel games with friends" },
+  "features.rating.title": { ru: "Отслеживайте рейтинг", en: "Track your rating" },
+  "features.rating.desc": { ru: "Следите за своим прогрессом в деталях", en: "Follow your progress in detail" },
+  "features.partners.title": { ru: "Найдите партнёров", en: "Find partners" },
+  "features.partners.desc": { ru: "Познакомьтесь с другими игроками", en: "Meet other players" },
+  "features.compete.title": { ru: "Соревнуйтесь", en: "Compete" },
+  "features.compete.desc": { ru: "Достигайте вершин рейтинга", en: "Climb to the top of the rating" },
+  "hero.titleStart": { ru: "Играй в", en: "Play" },
+  "hero.titleAccent": { ru: "падел.", en: "padel." },
+  "hero.titleEnd": { ru: "Расти в рейтинге.", en: "Grow your rating." },
+  "hero.subtitle": {
+    ru: "Организуй игры, отслеживай рейтинг и найди партнёров для игры.",
+    en: "Organize games, track your rating and find partners to play with.",
+  },
+  "cta.login": { ru: "Войти", en: "Sign in" },
+  "cta.register": { ru: "Создать аккаунт", en: "Create account" },
+} satisfies Dict;
 
 export function V0LandingPage() {
+  const { t } = useI18n(TR);
   const features = [
     {
       icon: Gamepad2,
-      title: "Организовывайте игры",
-      description: "Создавайте и управляйте играми в падел с друзьями",
+      title: t("features.organize.title"),
+      description: t("features.organize.desc"),
     },
     {
       icon: TrendingUp,
-      title: "Отслеживайте рейтинг",
-      description: "Следите за своим прогрессом в деталях",
+      title: t("features.rating.title"),
+      description: t("features.rating.desc"),
     },
     {
       icon: Users,
-      title: "Найдите партнёров",
-      description: "Познакомьтесь с другими игроками",
+      title: t("features.partners.title"),
+      description: t("features.partners.desc"),
     },
     {
       icon: Trophy,
-      title: "Соревнуйтесь",
-      description: "Достигайте вершин рейтинга",
+      title: t("features.compete.title"),
+      description: t("features.compete.desc"),
     },
   ];
 
@@ -39,10 +61,10 @@ export function V0LandingPage() {
           </Badge>
 
           <h1 className="text-5xl md:text-6xl font-bold tracking-tight">
-            Играй в <span className="text-primary">падел.</span> Расти в рейтинге.
+            {t("hero.titleStart")} <span className="text-primary">{t("hero.titleAccent")}</span> {t("hero.titleEnd")}
           </h1>
           <p className="text-lg text-muted-foreground max-w-lg mx-auto">
-            Организуй игры, отслеживай рейтинг и найди партнёров для игры.
+            {t("hero.subtitle")}
           </p>
         </div>
 
@@ -68,13 +90,13 @@ export function V0LandingPage() {
         <div className="flex gap-4 items-center justify-center pt-6">
           <Button asChild size="lg" className="h-11 min-w-[160px]">
             <Link to="/login" className="justify-center">
-              Войти
+              {t("cta.login")}
               <ArrowRight className="ml-2 h-4 w-4" />
             </Link>
           </Button>
           <Button asChild variant="outline" size="lg" className="h-11 min-w-[160px]">
             <Link to="/register" className="justify-center">
-              Создать аккаунт
+              {t("cta.register")}
             </Link>
           </Button>
         </div>

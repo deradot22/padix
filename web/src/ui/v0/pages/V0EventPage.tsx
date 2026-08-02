@@ -1,6 +1,6 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+﻿import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useParams, useLocation } from "react-router-dom";
-import { AlertTriangle, ArrowLeft, Check, ChevronDown, Clock, Globe, Lock, MapPin, Pencil, Repeat, Scale, Share2, Target, Trash2, Trophy, UserPlus, Users, Zap, X } from "lucide-react";
+import { AlertTriangle, ArrowLeft, Check, ChevronDown, Clock, Globe, Lock, MapPin, Pencil, Repeat, Scale, Share2, Target, Trash2, Trophy, Tv, UserPlus, Users, Zap, X } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { api, BalancePreview, EventDetails, FriendItem, FriendsSnapshot, Match, Player } from "../../../lib/api";
 import { PlayerTooltip } from "@/components/player-tooltip";
@@ -12,40 +12,341 @@ import { EditGameScoresDialog } from "@/components/edit-game-scores-dialog";
 import { useConfirm } from "@/components/ui/confirm-dialog";
 import { DatePicker, TimePicker } from "@/components/ui/date-picker";
 import { cn, formatEventDate, timeRange } from "../utils";
+import { Dict, Lang, plural, useI18n } from "@/lib/i18n";
 
-function statusLabel(status: string): string {
+const TR = {
+  // Статусы события
+  "status.draft": { ru: "Черновик", en: "Draft" },
+  "status.registration": { ru: "Регистрация", en: "Registration" },
+  "status.registrationClosed": { ru: "Регистрация закрыта", en: "Registration closed" },
+  "status.inProgress": { ru: "Идёт", en: "Live" },
+  "status.finished": { ru: "Завершено", en: "Finished" },
+  "status.cancelled": { ru: "Отменено", en: "Cancelled" },
+  "status.label": { ru: "Статус", en: "Status" },
+  "status.gameInProgress": { ru: "Игра идёт", en: "Game in progress" },
+  "status.gameFinished": { ru: "Игра завершена", en: "Game finished" },
+  // Режим составления пар
+  "pairing.balanced": { ru: "Равный бой", en: "Balanced" },
+  "pairing.roundRobin": { ru: "Каждый с каждым", en: "Round robin" },
+  // Общие
+  "common.loading": { ru: "Загрузка…", en: "Loading…" },
+  "common.loadFailed": { ru: "Не удалось загрузить", en: "Failed to load" },
+  "common.loadError": { ru: "Ошибка загрузки", en: "Failed to load" },
+  "common.notFound": { ru: "Событие не найдено.", en: "Event not found." },
+  "common.backToGames": { ru: "Назад к играм", en: "Back to games" },
+  "common.toGamesList": { ru: "К списку игр", en: "To games list" },
+  "common.game": { ru: "Игра", en: "Game" },
+  "common.cancel": { ru: "Отмена", en: "Cancel" },
+  "common.save": { ru: "Сохранить", en: "Save" },
+  "common.saving": { ru: "Сохраняем…", en: "Saving…" },
+  "common.adding": { ru: "Добавляем…", en: "Adding…" },
+  "common.delete": { ru: "Удалить", en: "Delete" },
+  "common.add": { ru: "Добавить", en: "Add" },
+  "common.later": { ru: "Позже", en: "Later" },
+  "common.continue": { ru: "Продолжить", en: "Continue" },
+  "common.cannotUndo": { ru: "Действие нельзя отменить.", en: "This action cannot be undone." },
+  "common.rating": { ru: "Рейтинг", en: "Rating" },
+  "common.loginToParticipate": { ru: "Войдите, чтобы участвовать и вводить счёт.", en: "Sign in to participate and enter scores." },
+  // Заглушка приватной игры
+  "private.title": { ru: "Приватная игра", en: "Private game" },
+  "private.organizer": { ru: "Организатор", en: "Organizer" },
+  "private.registered": { ru: "Записано", en: "Registered" },
+  "private.accessNote": {
+    ru: "Состав, раунды и счёт доступны только участникам игры и приглашённым. Попроси организатора пригласить тебя — приглашение придёт в раздел уведомлений.",
+    en: "Players, rounds and scores are visible only to participants and invited players. Ask the organizer to invite you — the invitation will arrive in your notifications.",
+  },
+  // Шапка события
+  "header.youAreAuthor": { ru: "Вы автор", en: "You're the author" },
+  "header.author": { ru: "Автор", en: "Author" },
+  "header.tournamentUnrated": { ru: "Турнир — вне рейтинга", en: "Tournament — unrated" },
+  "header.mexicano": { ru: "Мексикано", en: "Mexicano" },
+  "header.fixedPairs": { ru: "Фиксированные пары", en: "Fixed pairs" },
+  "header.bySubscription": { ru: "По подписке", en: "By subscription" },
+  "header.recurring": { ru: "Регулярная", en: "Recurring" },
+  // Диапазон рейтинга
+  "rating.from": { ru: "от {n}", en: "from {n}" },
+  "rating.to": { ru: "до {n}", en: "up to {n}" },
+  // Запись на игру
+  "join.join": { ru: "Записаться", en: "Join" },
+  "join.joining": { ru: "Запись…", en: "Joining…" },
+  "join.youAreIn": { ru: "Вы записаны (отменить)", en: "You're in (cancel)" },
+  "join.cancelling": { ru: "Отмена…", en: "Cancelling…" },
+  "join.registered": { ru: "Вы записаны", en: "You're in" },
+  "join.cancelled": { ru: "Регистрация отменена", en: "Registration cancelled" },
+  "join.cancelError": { ru: "Ошибка отмены", en: "Failed to cancel" },
+  "join.registerError": { ru: "Ошибка регистрации", en: "Failed to register" },
+  "join.ratingMismatch": { ru: "Рейтинг не подходит", en: "Rating out of range" },
+  "join.ratingOutOfRange": {
+    ru: "Твой рейтинг {rating} вне диапазона {range}. Попроси организатора добавить тебя вручную.",
+    en: "Your rating {rating} is outside the {range} range. Ask the organizer to add you manually.",
+  },
+  // Закрытие регистрации
+  "close.closeRegistration": { ru: "Закрыть регистрацию", en: "Close registration" },
+  "close.closing": { ru: "Закрываем…", en: "Closing…" },
+  "close.error": { ru: "Ошибка закрытия", en: "Failed to close registration" },
+  "close.confirmTitle": { ru: "Закрыть регистрацию?", en: "Close registration?" },
+  "close.confirmDesc": {
+    ru: "Новые игроки не смогут присоединиться к игре. После закрытия можно будет начать игру.",
+    en: "New players won't be able to join. After closing you can start the game.",
+  },
+  "close.confirmLabel": { ru: "Закрыть", en: "Close" },
+  // Старт игры
+  "start.startGame": { ru: "Начать игру", en: "Start game" },
+  "start.starting": { ru: "Стартуем…", en: "Starting…" },
+  "start.error": { ru: "Ошибка старта", en: "Failed to start" },
+  "start.readyTitle": { ru: "Готовы начать?", en: "Ready to start?" },
+  "start.readyPrefix": { ru: "Игра", en: "The game" },
+  "start.readySuffix": { ru: "готова к началу. Все участники зарегистрированы.", en: "is ready to start. All participants are registered." },
+  // Действия в шапке
+  "actions.enterScore": { ru: "Ввести счёт", en: "Enter score" },
+  "actions.leaderboard": { ru: "Таблица лидеров", en: "Leaderboard" },
+  "actions.onTv": { ru: "На ТВ", en: "On TV" },
+  "actions.tvTitle": { ru: "Открыть табло для телевизора в новой вкладке", en: "Open the TV scoreboard in a new tab" },
+  "actions.editScores": { ru: "Редактировать счет", en: "Edit scores" },
+  "actions.invite": { ru: "Пригласить", en: "Invite" },
+  "actions.editGame": { ru: "Редактировать игру", en: "Edit game" },
+  "actions.deleteGame": { ru: "Удалить игру", en: "Delete game" },
+  "actions.share": { ru: "Поделиться", en: "Share" },
+  "share.copied": { ru: "Ссылка скопирована", en: "Link copied" },
+  // Удаление игры
+  "delete.confirmTitle": { ru: "Удалить игру?", en: "Delete game?" },
+  "delete.gamePrefix": { ru: "Игра", en: "The game" },
+  "delete.gameSuffix": { ru: "будет удалена со всеми регистрациями.", en: "will be deleted along with all registrations." },
+  "delete.error": { ru: "Не удалось удалить игру", en: "Failed to delete game" },
+  // Правка игры
+  "edit.name": { ru: "Название", en: "Name" },
+  "edit.date": { ru: "Дата", en: "Date" },
+  "edit.start": { ru: "Начало", en: "Start" },
+  "edit.end": { ru: "Окончание", en: "End" },
+  "edit.scoringSystem": { ru: "Система счёта", en: "Scoring system" },
+  "edit.points": { ru: "Очки", en: "Points" },
+  "edit.sets": { ru: "Сеты", en: "Sets" },
+  "edit.pointsPerPlayer": { ru: "Очков на игрока", en: "Points per player" },
+  "edit.gamesPerSet": { ru: "Геймов в сете", en: "Games per set" },
+  "edit.setsPerMatch": { ru: "Сетов в матче", en: "Sets per match" },
+  "edit.courts": { ru: "Кортов", en: "Courts" },
+  "edit.startedNote": {
+    ru: "Игра уже стартовала — можно редактировать только название, дату, время и видимость.",
+    en: "The game has already started — only the name, date, time and visibility can be edited.",
+  },
+  "edit.visibility": { ru: "Видимость", en: "Visibility" },
+  "edit.public": { ru: "Открытая", en: "Public" },
+  "edit.publicDesc": { ru: "Видна всем, любой может записаться", en: "Visible to everyone, anyone can join" },
+  "edit.private": { ru: "Приватная", en: "Private" },
+  "edit.privateDesc": { ru: "В /games видна, детали — только участникам", en: "Listed in /games, details for participants only" },
+  "edit.updated": { ru: "Игра обновлена.", en: "Game updated." },
+  "edit.saveError": { ru: "Не удалось сохранить", en: "Failed to save" },
+  // Приглашение друзей
+  "invite.title": { ru: "Пригласить друзей", en: "Invite friends" },
+  "invite.noFriends": { ru: "Пока нет друзей для приглашения.", en: "No friends to invite yet." },
+  "invite.addDirectTitle": { ru: "Добавить в игру сразу, без согласия друга", en: "Add to the game right away, without the friend's confirmation" },
+  "invite.sendInviteTitle": { ru: "Отправить приглашение — друг сам решит присоединиться", en: "Send an invitation — the friend decides whether to join" },
+  "invite.added": { ru: "Добавлен", en: "Added" },
+  "invite.invited": { ru: "Приглашён", en: "Invited" },
+  "invite.addError": { ru: "Не удалось добавить", en: "Failed to add" },
+  "invite.inviteError": { ru: "Ошибка приглашения", en: "Failed to invite" },
+  // Друзья
+  "friends.loadError": { ru: "Ошибка загрузки друзей", en: "Failed to load friends" },
+  "friends.noPublicId": { ru: "Не удалось определить публичный ID", en: "Couldn't determine the public ID" },
+  "friends.requestSent": { ru: "Заявка отправлена", en: "Request sent" },
+  // Модал баланса
+  "balance.noEqualRounds": { ru: "Нет равных раундов", en: "No balanced rounds" },
+  "balance.upTo": { ru: "Возможно", en: "Up to" },
+  "balance.tooDiverse": {
+    ru: "Состав слишком разнородный (разброс {spread}) — нет варианта, где команды получились бы равны по силе.",
+    en: "The lineup is too uneven (spread {spread}) — there is no option where the teams would be equal in strength.",
+  },
+  "balance.maxReached": {
+    ru: "Разброс рейтингов {spread}. С таким составом это максимум — больше равных раундов не получится. Запрошено {req}.",
+    en: "Rating spread {spread}. This is the maximum for this lineup — more balanced rounds are not possible. Requested: {req}.",
+  },
+  "balance.allBalanced": {
+    ru: "Разброс рейтингов {spread}, но команды получится сбалансировать во всех раундах.",
+    en: "Rating spread {spread}, but the teams can be balanced in every round.",
+  },
+  "balance.switchedToRR": {
+    ru: "Режим переключён на «Каждый с каждым». Теперь можно закрыть регистрацию.",
+    en: "Mode switched to Round robin. You can close registration now.",
+  },
+  "balance.switchError": { ru: "Не удалось сменить режим", en: "Failed to switch mode" },
+  "balance.switching": { ru: "Переключаем…", en: "Switching…" },
+  // Карточки-сводка
+  "stats.courts": { ru: "Корты", en: "Courts" },
+  "stats.mode": { ru: "Режим", en: "Mode" },
+  "stats.servesPerPlayer": { ru: "Подач на игрока", en: "Serves per player" },
+  "stats.setsCount": { ru: "Сетов", en: "Sets" },
+  "stats.players": { ru: "Игроков", en: "Players" },
+  "stats.balance": { ru: "Баланс", en: "Balance" },
+  "stats.spread": { ru: "разброс", en: "spread" },
+  // Участники
+  "participants.title": { ru: "Участники", en: "Participants" },
+  "participants.minRequired": { ru: "Для старта нужно минимум {n} игроков", en: "At least {n} players are required to start" },
+  "participants.count": { ru: "{a} из {b}", en: "{a} of {b}" },
+  "participants.remove": { ru: "Исключить", en: "Remove" },
+  "participants.removeConfirmTitle": { ru: "Исключить игрока?", en: "Remove player?" },
+  "participants.removePrefix": { ru: "Игрок", en: "Player" },
+  "participants.removeSuffix": { ru: "будет удалён из регистрации.", en: "will be removed from the registration." },
+  "participants.removed": { ru: "Игрок исключен", en: "Player removed" },
+  "participants.removeError": { ru: "Ошибка исключения", en: "Failed to remove player" },
+  "participants.openSpot": { ru: "Свободно", en: "Open spot" },
+  "participants.guest": { ru: "гость", en: "guest" },
+  // Турнир: добавление участников
+  "tournament.addParticipants": { ru: "Добавить участников турнира", en: "Add tournament participants" },
+  "tournament.searchPlaceholder": { ru: "Найти зарегистрированного игрока по имени…", en: "Find a registered player by name…" },
+  "tournament.nobodyFound": {
+    ru: "Никого не нашли. Если человека нет в приложении — впишите его гостем ниже.",
+    en: "Nobody found. If the person isn't in the app, add them as a guest below.",
+  },
+  "tournament.playerAdded": { ru: "{name} добавлен(а)", en: "{name} added" },
+  "tournament.addPlayerError": { ru: "Ошибка добавления игрока", en: "Failed to add player" },
+  "tournament.addBtn": { ru: "+ Добавить", en: "+ Add" },
+  "tournament.guestPlaceholder": { ru: "Или впишите имя вручную (гость без аккаунта)…", en: "Or type a name manually (guest without an account)…" },
+  "tournament.addGuest": { ru: "Вписать гостя", en: "Add guest" },
+  "tournament.guestAdded": { ru: "Гость вписан", en: "Guest added" },
+  "tournament.guestError": { ru: "Ошибка добавления гостя", en: "Failed to add guest" },
+  "tournament.noRatingNote": {
+    ru: "Турнир не влияет на рейтинг: итоговая таблица считается только по очкам.",
+    en: "A tournament doesn't affect ratings: the final table is based on points only.",
+  },
+  // Фиксированные пары
+  "pairs.addPair": { ru: "Добавить пару", en: "Add pair" },
+  "pairs.player1": { ru: "Игрок 1…", en: "Player 1…" },
+  "pairs.player2": { ru: "Игрок 2…", en: "Player 2…" },
+  "pairs.pairAdded": { ru: "Пара добавлена", en: "Pair added" },
+  "pairs.pairError": { ru: "Ошибка регистрации пары", en: "Failed to register the pair" },
+  "pairs.note": {
+    ru: "Пары играют круговую (каждая с каждой). Для {courts} кортов нужно {pairs} пар.",
+    en: "Pairs play a round robin (each vs each). {courts} courts require {pairs} pairs.",
+  },
+  // Запросы на отмену
+  "cancelRequests.title": { ru: "Запросы на отмену", en: "Cancellation requests" },
+  "cancelRequests.subtitle": { ru: "Игроки хотят выйти из игры", en: "Players want to leave the game" },
+  "cancelRequests.approve": { ru: "Подтвердить", en: "Approve" },
+  "cancelRequests.approveError": { ru: "Ошибка подтверждения", en: "Failed to approve" },
+  // Раунды
+  "rounds.title": { ru: "Раунды", en: "Rounds" },
+  "rounds.round": { ru: "Раунд", en: "Round" },
+  "rounds.final": { ru: "Финальный", en: "Final" },
+  "rounds.matches": { ru: "Матчей", en: "Matches" },
+  "rounds.played": { ru: "Сыгран", en: "Played" },
+  "rounds.deleteRound": { ru: "Удалить раунд", en: "Delete round" },
+  "rounds.deleteConfirmTitle": { ru: "Удалить раунд?", en: "Delete round?" },
+  "rounds.deleteWithMatches": { ru: "и его {n} {word} будут удалены.", en: "and its {n} {word} will be deleted." },
+  "rounds.deleteAlone": { ru: "будет удалён.", en: "will be deleted." },
+  "rounds.warnPlayedPrefix": { ru: "Из них", en: "Of these," },
+  "rounds.playedOne": { ru: "сыгран", en: "played" },
+  "rounds.playedMany": { ru: "сыграно", en: "played" },
+  "rounds.warnPlayedSuffix": {
+    ru: "— счёт будет потерян. Рейтинги ещё не применены (применяются только при завершении игры).",
+    en: "— the score will be lost. Ratings are not applied yet (they apply only when the game is finished).",
+  },
+  "rounds.roundDeleted": { ru: "Раунд удалён.", en: "Round deleted." },
+  "rounds.deleteError": { ru: "Не удалось удалить раунд", en: "Failed to delete round" },
+  "rounds.roundAdded": { ru: "Раунд добавлен.", en: "Round added." },
+  "rounds.seriesAdded": { ru: "Серия из {n} раундов добавлена.", en: "Series of {n} rounds added." },
+  "rounds.addError": { ru: "Ошибка добавления раунда", en: "Failed to add round" },
+  "rounds.nextRound": { ru: "Следующий раунд", en: "Next round" },
+  "rounds.addRoundsTitle": { ru: "Добавить раунды", en: "Add rounds" },
+  "rounds.oneRound": { ru: "Один раунд", en: "One round" },
+  "rounds.oneRoundDesc": {
+    ru: "Планировщик продолжит ротацию с учётом сыгранного",
+    en: "The scheduler continues the rotation based on what's been played",
+  },
+  "rounds.seriesOf": { ru: "Серия из {n} раундов", en: "Series of {n} rounds" },
+  "rounds.seriesDesc": { ru: "Ещё один полный цикл, как при старте игры", en: "Another full cycle, like at the game start" },
+  "rounds.addRoundMexicano": { ru: "+ Раунд по таблице", en: "+ Round by standings" },
+  "rounds.addRoundBtn": { ru: "+ Раунд", en: "+ Round" },
+  "rounds.finalConfirmTitle": { ru: "Добавить финальный раунд?", en: "Add final round?" },
+  "rounds.finalConfirmDesc": {
+    ru: "Пары будут расставлены по турнирной таблице. После добавления финального раунда новые обычные раунды создавать нельзя.",
+    en: "Pairs are seeded by the standings. After the final round is added, new regular rounds can't be created.",
+  },
+  "rounds.finalAdded": { ru: "Финальный раунд добавлен.", en: "Final round added." },
+  "rounds.finalError": { ru: "Ошибка финального раунда", en: "Failed to add final round" },
+  "rounds.finalRoundBtn": { ru: "Финальный раунд", en: "Final round" },
+  // Ввод счёта
+  "score.enteredPrefix": { ru: "Введён", en: "Entered" },
+  "score.onlyOrganizerCanChange": { ru: "Изменить может только организатор.", en: "Only the organizer can change it." },
+  "score.participantWillEnter": { ru: "Этот матч введёт его участник или организатор.", en: "This match will be entered by its participant or the organizer." },
+  "score.enteredByYou": { ru: "Счёт введён вами — нажмите, чтобы исправить.", en: "You entered this score — tap to fix it." },
+  "score.alreadyEnteredByOther": { ru: "Счёт уже введён другим участником", en: "The score was already entered by another participant" },
+  "score.court": { ru: "Корт", en: "Court" },
+  "score.set": { ru: "Сет", en: "Set" },
+  "score.gamesHint": { ru: "Геймы слева : справа", en: "Games left : right" },
+  "score.saved": { ru: "Счёт сохранён", en: "Score saved" },
+  "score.saveError": { ru: "Не удалось сохранить счёт", en: "Failed to save score" },
+  "score.saveScore": { ru: "Сохранить счёт", en: "Save score" },
+  "score.pickValue": { ru: "Выберите значение для команды {side}", en: "Pick a value for the {side} team" },
+  "score.sideLeft": { ru: "слева", en: "left" },
+  "score.sideRight": { ru: "справа", en: "right" },
+  "score.tapTeamHint": { ru: "Нажмите на счёт команды, чтобы выбрать очки.", en: "Tap a team's score to pick points." },
+  // Завершение игры
+  "finish.confirmTitleTournament": { ru: "Завершить турнир?", en: "Finish tournament?" },
+  "finish.confirmTitleGame": { ru: "Завершить игру?", en: "Finish game?" },
+  "finish.descTournament": {
+    ru: "Турнир будет завершён. Рейтинг не пересчитывается — итоговая таблица считается по очкам.",
+    en: "The tournament will be finished. Ratings are not recalculated — the final table is based on points.",
+  },
+  "finish.descGame": {
+    ru: "Игра будет завершена, рейтинги участников пересчитаны. Дальше изменить счёт нельзя.",
+    en: "The game will be finished and participants' ratings recalculated. Scores can't be changed afterwards.",
+  },
+  "finish.unevenMatches": { ru: "У игроков разное число сыгранных матчей", en: "Players have a different number of played matches" },
+  "finish.ratingsWillBe": { ru: "Рейтинги будут", en: "Ratings will be" },
+  "finish.normalized": { ru: "нормализованы", en: "normalized" },
+  "finish.unevenTail": {
+    ru: "у тех, кто сыграл больше, движения слегка уменьшатся; у тех, кто меньше — увеличатся.",
+    en: "those who played more get slightly smaller rating moves; those who played less — slightly bigger.",
+  },
+  "finish.confirmLabel": { ru: "Завершить", en: "Finish" },
+  "finish.doneTournament": { ru: "Турнир завершён.", en: "Tournament finished." },
+  "finish.doneGame": { ru: "Игра завершена. Рейтинг обновится автоматически.", en: "Game finished. Ratings will update automatically." },
+  "finish.error": { ru: "Ошибка завершения", en: "Failed to finish" },
+  "finish.finishing": { ru: "Завершаем…", en: "Finishing…" },
+  "finish.finishTournament": { ru: "Завершить турнир", en: "Finish tournament" },
+  "finish.finishGame": { ru: "Завершить игру", en: "Finish game" },
+  // Таблица лидеров
+  "leaderboard.includesFinal": { ru: "Включает финальный раунд", en: "Includes the final round" },
+  // Шансы на победу
+  "prob.even": { ru: "Равные шансы ⚖️", en: "Even odds ⚖️" },
+  "prob.slightFavorite": { ru: "Лёгкий фаворит", en: "Slight favorite" },
+  "prob.favorite": { ru: "Фаворит", en: "Favorite" },
+  "prob.strongFavorite": { ru: "Сильный фаворит", en: "Strong favorite" },
+  "prob.davidGoliath": { ru: "Битва Давида и Голиафа 🎭", en: "David vs Goliath 🎭" },
+} satisfies Dict;
+
+type TFn = (key: keyof typeof TR & string, vars?: Record<string, string | number>) => string;
+
+function statusLabel(status: string, t: TFn): string {
   switch (status) {
     case "DRAFT":
-      return "Черновик";
+      return t("status.draft");
     case "OPEN_FOR_REGISTRATION":
-      return "Регистрация";
+      return t("status.registration");
     case "REGISTRATION_CLOSED":
-      return "Регистрация закрыта";
+      return t("status.registrationClosed");
     case "IN_PROGRESS":
-      return "Идёт";
+      return t("status.inProgress");
     case "FINISHED":
-      return "Завершено";
+      return t("status.finished");
     case "CANCELLED":
-      return "Отменено";
+      return t("status.cancelled");
     default:
       return status;
   }
 }
 
-function roundWord(n: number): string {
-  const mod10 = n % 10;
-  const mod100 = n % 100;
-  if (mod10 === 1 && mod100 !== 11) return "равный раунд";
-  if (mod10 >= 2 && mod10 <= 4 && (mod100 < 10 || mod100 >= 20)) return "равных раунда";
-  return "равных раундов";
+function roundWord(n: number, lang: Lang): string {
+  return plural(lang, n, ["равный раунд", "равных раунда", "равных раундов"], ["balanced round", "balanced rounds"]);
 }
 
-function pairingLabel(mode?: string): string {
-  if (mode === "BALANCED") return "Равный бой";
-  return "Каждый с каждым";
+function pairingLabel(mode: string | undefined, t: TFn): string {
+  if (mode === "BALANCED") return t("pairing.balanced");
+  return t("pairing.roundRobin");
 }
 
 export function V0EventPage(props: { me: any; meLoaded?: boolean }) {
+  const { t, lang } = useI18n(TR);
   const { eventId } = useParams();
   const location = useLocation();
   const confirm = useConfirm();
@@ -639,7 +940,7 @@ export function V0EventPage(props: { me: any; meLoaded?: boolean }) {
                 <div className="space-y-5">
                   <div className="flex items-center gap-3 flex-wrap">
                     <span className="inline-flex items-center rounded-md bg-primary px-3 py-1 text-sm font-medium text-primary-foreground">
-                      {statusLabel(e.status)}
+                      {statusLabel(e.status, t)}
                     </span>
                   </div>
 
@@ -777,7 +1078,7 @@ export function V0EventPage(props: { me: any; meLoaded?: boolean }) {
               <div className="space-y-5">
                 <div className="flex items-center gap-3 flex-wrap">
                   <span className="inline-flex items-center rounded-md bg-primary px-3 py-1 text-sm font-medium text-primary-foreground">
-                    {statusLabel(e.status)}
+                    {statusLabel(e.status, t)}
                   </span>
                   {isAuthor ? (
                     <span className="inline-flex items-center rounded-md border border-primary/50 bg-primary/10 px-3 py-1 text-sm font-medium text-primary">
@@ -1039,6 +1340,15 @@ export function V0EventPage(props: { me: any; meLoaded?: boolean }) {
                       >
                         Таблица лидеров
                       </button>
+                      <button
+                        type="button"
+                        className="h-11 w-full sm:w-auto px-6 rounded-md border border-border bg-secondary text-sm font-medium hover:bg-secondary/80 transition-colors inline-flex items-center justify-center gap-2"
+                        title="Открыть табло для телевизора в новой вкладке"
+                        onClick={() => window.open(`/events/${eventId}/board`, "_blank")}
+                      >
+                        <Tv className="h-4 w-4" />
+                        На ТВ
+                      </button>
                     </div>
 
                     {info ? <div className="text-sm text-muted-foreground">{info}</div> : null}
@@ -1067,9 +1377,18 @@ export function V0EventPage(props: { me: any; meLoaded?: boolean }) {
                     >
                       Таблица лидеров
                     </button>
+                    <button
+                      type="button"
+                      className="h-11 w-full sm:w-auto px-6 rounded-md border border-border bg-secondary text-sm font-medium hover:bg-secondary/80 transition-colors inline-flex items-center justify-center gap-2"
+                      title="Открыть табло для телевизора в новой вкладке"
+                      onClick={() => window.open(`/events/${eventId}/board`, "_blank")}
+                    >
+                      <Tv className="h-4 w-4" />
+                      На ТВ
+                    </button>
                   </div>
                 ) : (
-                  <div className="text-sm text-muted-foreground">Статус: {statusLabel(e.status)}</div>
+                  <div className="text-sm text-muted-foreground">Статус: {statusLabel(e.status, t)}</div>
                 )}
 
                 <div className="flex items-center gap-2 self-start sm:self-end justify-start sm:justify-end flex-wrap">
@@ -1470,7 +1789,7 @@ export function V0EventPage(props: { me: any; meLoaded?: boolean }) {
                         )}>
                           {balancePreview.maxGoodRounds}
                         </span>{" "}
-                        {roundWord(balancePreview.maxGoodRounds)}
+                        {roundWord(balancePreview.maxGoodRounds, lang)}
                       </>
                     )}
                   </DialogTitle>
@@ -1600,7 +1919,7 @@ export function V0EventPage(props: { me: any; meLoaded?: boolean }) {
             <div className="flex items-center gap-3 text-sm text-muted-foreground flex-wrap text-left">
               <span className="flex items-center gap-1"><MapPin className="h-3.5 w-3.5" />{e.courtsCount}</span>
               <span className="text-border">·</span>
-              <span className="flex items-center gap-1"><Zap className="h-3.5 w-3.5" />{pairingLabel(e.pairingMode)}</span>
+              <span className="flex items-center gap-1"><Zap className="h-3.5 w-3.5" />{pairingLabel(e.pairingMode, t)}</span>
               <span className="text-border">·</span>
               <span className="flex items-center gap-1"><Users className="h-3.5 w-3.5" />{registered.length}/{e.courtsCount * 4}</span>
               {balancePreview && balancePreview.severity !== "NONE" ? (
@@ -1613,7 +1932,7 @@ export function V0EventPage(props: { me: any; meLoaded?: boolean }) {
                     balancePreview.severity === "SMALL" && "text-emerald-700 dark:text-emerald-300",
                   )}>
                     <Scale className="h-3.5 w-3.5" />
-                    {balancePreview.maxGoodRounds} {roundWord(balancePreview.maxGoodRounds)}
+                    {balancePreview.maxGoodRounds} {roundWord(balancePreview.maxGoodRounds, lang)}
                   </span>
                 </>
               ) : null}
@@ -1640,7 +1959,7 @@ export function V0EventPage(props: { me: any; meLoaded?: boolean }) {
                     <Zap className="h-4 w-4" />
                     <span className="text-sm">Режим</span>
                   </div>
-                  <p className="text-base font-bold leading-tight">{pairingLabel(e.pairingMode)}</p>
+                  <p className="text-base font-bold leading-tight">{pairingLabel(e.pairingMode, t)}</p>
                 </div>
                 <div className="p-4 rounded-xl bg-card border border-border/50 space-y-2">
                   <div className="flex items-center gap-2 text-muted-foreground">
@@ -1673,7 +1992,7 @@ export function V0EventPage(props: { me: any; meLoaded?: boolean }) {
                     <p className="text-2xl font-bold leading-none">
                       {balancePreview.maxGoodRounds}
                       <span className="text-sm font-normal text-muted-foreground ml-2">
-                        {roundWord(balancePreview.maxGoodRounds)}
+                        {roundWord(balancePreview.maxGoodRounds, lang)}
                       </span>
                     </p>
                     <p className="text-xs text-muted-foreground">
@@ -1704,7 +2023,7 @@ export function V0EventPage(props: { me: any; meLoaded?: boolean }) {
               <Zap className="h-4 w-4" />
               <span className="text-sm">Режим</span>
             </div>
-            <p className="text-lg font-bold">{pairingLabel(e.pairingMode)}</p>
+            <p className="text-lg font-bold">{pairingLabel(e.pairingMode, t)}</p>
           </div>
 
           <div className="p-5 rounded-xl bg-card border border-border/50 space-y-2">
@@ -1740,7 +2059,7 @@ export function V0EventPage(props: { me: any; meLoaded?: boolean }) {
               <p className="text-2xl font-bold leading-none">
                 {balancePreview.maxGoodRounds}
                 <span className="text-sm font-normal text-muted-foreground ml-2">
-                  {roundWord(balancePreview.maxGoodRounds)}
+                  {roundWord(balancePreview.maxGoodRounds, lang)}
                 </span>
               </p>
               <p className="text-xs text-muted-foreground">

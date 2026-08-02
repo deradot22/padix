@@ -5,6 +5,7 @@ import { RatingNotificationModal } from "@/components/rating-notification-modal"
 import { V0HomePage } from "./v0/pages/V0HomePage";
 import { V0GamesPage } from "./v0/pages/V0GamesPage";
 import { V0EventPage } from "./v0/pages/V0EventPage";
+import { V0EventBoardPage } from "./v0/pages/V0EventBoardPage";
 import { V0CreateEventPage } from "./v0/pages/V0CreateEventPage";
 import { V0CreateEventPageV2 } from "./v0/pages/V0CreateEventPageV2";
 import { V0ProfilePage } from "./v0/pages/V0ProfilePage";
@@ -25,10 +26,23 @@ import { V0TelegramLinkConfirmPage } from "./v0/pages/V0TelegramLinkConfirmPage"
 import { V0PrivacyPage } from "./v0/pages/V0PrivacyPage";
 import { V0TermsPage } from "./v0/pages/V0TermsPage";
 import { MainLayout } from "@/components/main-layout";
+import { Dict, plural, useI18n } from "@/lib/i18n";
+
+const TR = {
+  "loading": { ru: "Загрузка…", en: "Loading…" },
+  "survey.done": { ru: "Опрос пройден!", en: "Survey completed!" },
+  "survey.close": { ru: "Закрыть", en: "Close" },
+  "survey.calibrationText": {
+    ru: "Опрос пройден! Теперь нужно сыграть {n} калибровочных {games}, чтобы определить ваш рейтинг.",
+    en: "Survey completed! Now play {n} calibration {games} to determine your rating.",
+  },
+  "survey.gotIt": { ru: "Понятно", en: "Got it" },
+} satisfies Dict;
 
 export function App() {
   const navigate = useNavigate();
   const location = useLocation();
+  const { t, lang } = useI18n(TR);
   const [me, setMe] = useState<MeResponse | null>(null);
   const [meLoaded, setMeLoaded] = useState(false);
   const [surveyResult, setSurveyResult] = useState<null | { rating: number; remaining: number }>(null);
@@ -204,7 +218,7 @@ export function App() {
   if (!meLoaded) {
     return (
       <div className="flex min-h-dvh items-center justify-center bg-background">
-        <div className="text-muted-foreground text-sm">Загрузка…</div>
+        <div className="text-muted-foreground text-sm">{t("loading")}</div>
       </div>
     );
   }
@@ -217,6 +231,9 @@ export function App() {
 
         {/* Landing page без header для неавторизованных */}
         {!authed && <Route index element={<V0LandingPage />} />}
+
+        {/* Табло для телевизора: полноэкранное, без шапки и навигации (кнопка «На ТВ» на странице игры) */}
+        <Route path="events/:eventId/board" element={<V0EventBoardPage />} />
 
         {/* Layout с header для всех */}
         <Route
@@ -278,18 +295,20 @@ export function App() {
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 p-6">
           <div className="w-full max-w-md rounded-xl border border-border bg-card p-6">
             <div className="flex items-center justify-between gap-3">
-              <div className="text-lg font-semibold">Опрос пройден!</div>
+              <div className="text-lg font-semibold">{t("survey.done")}</div>
               <button
                 type="button"
                 className="h-9 rounded-md border border-border bg-transparent px-3 text-sm font-medium hover:bg-secondary transition-colors"
                 onClick={() => setSurveyResult(null)}
               >
-                Закрыть
+                {t("survey.close")}
               </button>
             </div>
             <div className="mt-4 text-sm text-muted-foreground">
-              Опрос пройден! Теперь нужно сыграть <b>{surveyResult.remaining}</b> калибровочных{" "}
-              {surveyResult.remaining === 1 ? "игру" : surveyResult.remaining < 5 ? "игры" : "игр"}, чтобы определить ваш рейтинг.
+              {t("survey.calibrationText", {
+                n: surveyResult.remaining,
+                games: plural(lang, surveyResult.remaining, ["игру", "игры", "игр"], ["game", "games"]),
+              })}
             </div>
             <div className="mt-5 flex gap-2">
               <button
@@ -300,7 +319,7 @@ export function App() {
                   navigate("/profile");
                 }}
               >
-                Понятно
+                {t("survey.gotIt")}
               </button>
             </div>
           </div>

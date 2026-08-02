@@ -1,6 +1,17 @@
 import { useState } from "react";
 import { AlertCircle, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Dict, useI18n } from "@/lib/i18n";
+
+const TR = {
+  "title": { ru: "Подтвердите email", en: "Verify your email" },
+  "sentTo": { ru: " — письмо со ссылкой отправлено на ", en: " — a link has been sent to " },
+  "sent": { ru: "Письмо отправлено. Проверь почту.", en: "Email sent. Check your inbox." },
+  "sendFailed": { ru: "Не удалось отправить", en: "Failed to send" },
+  "sending": { ru: "Отправляю…", en: "Sending…" },
+  "resend": { ru: "Отправить ещё раз", en: "Resend" },
+  "hide": { ru: "Скрыть", en: "Dismiss" },
+} satisfies Dict;
 
 /**
  * Баннер «Подтвердите email» — показывается на всех страницах для залогиненных юзеров,
@@ -13,6 +24,7 @@ export function EmailVerificationBanner(props: {
   email: string;
   onResend: () => Promise<void>;
 }) {
+  const { t } = useI18n(TR);
   const [dismissed, setDismissed] = useState(() =>
     typeof window !== "undefined" && sessionStorage.getItem("email_verify_banner_dismissed") === "1",
   );
@@ -31,9 +43,9 @@ export function EmailVerificationBanner(props: {
       setSending(true);
       setStatus(null);
       await props.onResend();
-      setStatus({ kind: "ok", text: "Письмо отправлено. Проверь почту." });
+      setStatus({ kind: "ok", text: t("sent") });
     } catch (e: any) {
-      setStatus({ kind: "err", text: e?.message ?? "Не удалось отправить" });
+      setStatus({ kind: "err", text: e?.message ?? t("sendFailed") });
     } finally {
       setSending(false);
     }
@@ -45,9 +57,9 @@ export function EmailVerificationBanner(props: {
         <div className="flex items-start gap-2 text-xs sm:text-sm">
           <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-amber-700 dark:text-amber-400" />
           <div>
-            <span className="font-medium">Подтвердите email</span>
+            <span className="font-medium">{t("title")}</span>
             <span className="hidden sm:inline">
-              {" "}— письмо со ссылкой отправлено на <span className="font-mono">{props.email}</span>.
+              {t("sentTo")}<span className="font-mono">{props.email}</span>.
             </span>
             {status ? (
               <span className={status.kind === "ok" ? "ml-2 text-emerald-700 dark:text-emerald-300" : "ml-2 text-rose-700 dark:text-rose-300"}>
@@ -64,15 +76,15 @@ export function EmailVerificationBanner(props: {
             onClick={handleResend}
             disabled={sending}
           >
-            {sending ? "Отправляю…" : "Отправить ещё раз"}
+            {sending ? t("sending") : t("resend")}
           </Button>
           <Button
             variant="ghost"
             size="icon"
             className="h-7 w-7 text-amber-900 dark:text-amber-100 hover:bg-amber-500/20 hover:text-amber-950 dark:hover:text-amber-50"
             onClick={handleDismiss}
-            aria-label="Скрыть"
-            title="Скрыть"
+            aria-label={t("hide")}
+            title={t("hide")}
           >
             <X className="h-3.5 w-3.5" />
           </Button>
