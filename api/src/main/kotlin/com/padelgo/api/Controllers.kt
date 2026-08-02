@@ -147,7 +147,8 @@ class EventController(
                 tiebreakEnabled = req.tiebreakEnabled,
                 visibility = req.visibility,
                 minRating = req.minRating,
-                maxRating = req.maxRating
+                maxRating = req.maxRating,
+                kind = req.kind
             ),
             userId,
             req.courtNames
@@ -231,6 +232,15 @@ class EventController(
     fun registerPair(@PathVariable eventId: UUID, @Valid @RequestBody req: RegisterPairRequest) {
         service.registerPair(eventId, principalUserId(), req.player1Id, req.player2Id)
     }
+
+    @Operation(
+        summary = "Вписать гостя в турнир (только организатор)",
+        description = "Создаёт участника без аккаунта и регистрирует его. Только для kind=TOURNAMENT до старта. " +
+            "Гость не участвует в общем рейтинге."
+    )
+    @PostMapping("/{eventId}/add-guest")
+    fun addGuest(@PathVariable eventId: UUID, @Valid @RequestBody req: AddGuestRequest): PlayerResponse =
+        PlayerResponse.from(service.addGuest(eventId, principalUserId(), req.name))
 
     @Operation(
         summary = "Закрыть регистрацию",

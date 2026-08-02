@@ -293,7 +293,14 @@ export function V0ProfilePage(props: { me: any; meLoaded?: boolean; onMeUpdate?:
                   ) : null}
                 </td>
                 <td className="py-4 px-2 overflow-hidden align-middle">
-                  <div className="font-semibold truncate" title={it.eventTitle}>{it.eventTitle}</div>
+                  <div className="font-semibold truncate" title={it.eventTitle}>
+                    {it.eventTitle}
+                    {it.kind === "TOURNAMENT" ? (
+                      <span className="ml-1.5 inline-flex items-center rounded border border-emerald-500/40 bg-emerald-500/10 px-1.5 py-0.5 text-[10px] font-medium text-emerald-700 dark:text-emerald-300 align-middle">
+                        Турнир
+                      </span>
+                    ) : null}
+                  </div>
                   {it.participants?.length ? (
                     <div className="text-xs text-muted-foreground mt-0.5 truncate" title={it.participants.join(", ")}>
                       {it.participants.join(", ")}

@@ -4,6 +4,8 @@ export type EventFormat = "AMERICANA" | "MEXICANO" | "FIXED_PAIRS";
 export type PairingMode = "ROUND_ROBIN" | "BALANCED";
 export type EventStatus = "DRAFT" | "OPEN_FOR_REGISTRATION" | "REGISTRATION_CLOSED" | "IN_PROGRESS" | "FINISHED" | "CANCELLED";
 export type ScoringMode = "SETS" | "POINTS";
+/** REGULAR — обычная игра (влияет на рейтинг), TOURNAMENT — турнир (рейтинг не пересчитывается). */
+export type EventKind = "REGULAR" | "TOURNAMENT";
 
 export type Player = {
   id: string;
@@ -16,6 +18,8 @@ export type Player = {
   avatarUrl?: string | null;
   /** true — не играл больше полугода, рейтинг скрыт (показываем «—»). */
   ratingHidden?: boolean;
+  /** true — гость, вписанный организатором турнира вручную (без аккаунта). */
+  isGuest?: boolean;
 };
 
 export type EventVisibility = "PRIVATE" | "PUBLIC";
@@ -44,6 +48,8 @@ export type Event = {
   minRating?: number | null;
   /** Максимальный рейтинг для регистрации (включительно). null — без верхней границы. */
   maxRating?: number | null;
+  /** REGULAR — обычная игра, TOURNAMENT — турнир (не влияет на рейтинг, допускает гостей). */
+  kind?: EventKind;
 };
 
 export type EventSeries = {
@@ -238,6 +244,8 @@ export type EventHistoryItem = {
   matchesCount: number;
   totalPoints: number | null;
   ratingDelta: number;
+  /** TOURNAMENT — турнир (не влияет на рейтинг). */
+  kind?: EventKind;
 };
 
 export type MatchPlayerInfo = { name: string; avatarUrl?: string | null };
@@ -546,10 +554,18 @@ export const api = {
     visibility?: EventVisibility;
     minRating?: number | null;
     maxRating?: number | null;
+    /** TOURNAMENT — турнир: не влияет на рейтинг, можно вписывать гостей. */
+    kind?: EventKind;
   }) =>
     request<Event>("/api/events", {
       method: "POST",
       body: JSON.stringify(payload),
+    }),
+  /** Турнир: организатор вписывает участника без аккаунта («гость»). */
+  addGuestToEvent: (eventId: string, name: string) =>
+    request<Player>(`/api/events/${eventId}/add-guest`, {
+      method: "POST",
+      body: JSON.stringify({ name }),
     }),
 
   // ---------- Event series ----------

@@ -78,13 +78,23 @@ export function V0EventPage(props: { me: any; meLoaded?: boolean }) {
   const [pairP1, setPairP1] = useState("");
   const [pairP2, setPairP2] = useState("");
   const [pairBusy, setPairBusy] = useState(false);
-  // Для формата «Фиксированные пары» организатору нужен список всех игроков, чтобы собирать пары.
+  // Турнир: организатор добавляет зарегистрированных игроков (поиск по имени) и вписывает гостей.
+  const [tournamentQuery, setTournamentQuery] = useState("");
+  const [tournamentAddingId, setTournamentAddingId] = useState<string | null>(null);
+  const [guestName, setGuestName] = useState("");
+  const [guestBusy, setGuestBusy] = useState(false);
+  // Список всех игроков нужен организатору: для «Фиксированных пар» (собирать пары)
+  // и для турнира (добавлять любых зарегистрированных).
   useEffect(() => {
     const ev = data?.event;
-    if (ev?.format === "FIXED_PAIRS" && data?.isAuthor && ev.status === "OPEN_FOR_REGISTRATION") {
+    if (
+      (ev?.format === "FIXED_PAIRS" || ev?.kind === "TOURNAMENT") &&
+      data?.isAuthor &&
+      ev.status === "OPEN_FOR_REGISTRATION"
+    ) {
       api.getRating().then(setAllPlayers).catch(() => {});
     }
-  }, [data?.event?.format, data?.isAuthor, data?.event?.status]);
+  }, [data?.event?.format, data?.event?.kind, data?.isAuthor, data?.event?.status]);
   const [closing, setClosing] = useState(false);
   const [starting, setStarting] = useState(false);
   const [finishing, setFinishing] = useState(false);
@@ -714,6 +724,8 @@ export function V0EventPage(props: { me: any; meLoaded?: boolean }) {
     const myPublicId = props.me?.publicId;
     const isRegistered = !!meId && registered.some((p) => p.id === meId);
     const isAuthor = data.isAuthor;
+    // Турнир: не влияет на рейтинг, автор может добавлять любых игроков и вписывать гостей.
+    const isTournament = e.kind === "TOURNAMENT";
 
     // Ограничение по рейтингу (задача #9): применяется только к самозаписи не-автора.
     const meRating = props.me?.rating;
@@ -774,6 +786,12 @@ export function V0EventPage(props: { me: any; meLoaded?: boolean }) {
                   ) : (
                     <span className="inline-flex items-center rounded-md bg-secondary px-3 py-1 text-sm font-medium text-secondary-foreground">
                       Автор: {data.authorName}
+                    </span>
+                  )}
+                  {e.kind === "TOURNAMENT" && (
+                    <span className="inline-flex items-center gap-1 rounded-md border border-emerald-500/40 bg-emerald-500/10 px-3 py-1 text-sm font-medium text-emerald-700 dark:text-emerald-300">
+                      <Trophy className="h-3.5 w-3.5" />
+                      Турнир — вне рейтинга
                     </span>
                   )}
                   {e.format === "MEXICANO" && (
@@ -1764,6 +1782,113 @@ export function V0EventPage(props: { me: any; meLoaded?: boolean }) {
           </div>
 
           <div className="p-6">
+            {isAuthor && e.status === "OPEN_FOR_REGISTRATION" && isTournament && e.format !== "FIXED_PAIRS" && (
+              <div className="mb-5 rounded-xl border border-emerald-500/30 bg-emerald-500/5 p-4 space-y-3">
+                <div className="flex items-center gap-2 text-sm font-medium">
+                  <Trophy className="h-4 w-4 text-emerald-500" />
+                  Добавить участников турнира
+                </div>
+                <div className="space-y-2">
+                  <input
+                    value={tournamentQuery}
+                    onChange={(ev) => setTournamentQuery(ev.target.value)}
+                    placeholder="Найти зарегистрированного игрока по имени…"
+                    className="h-10 w-full rounded-md border border-border bg-background px-3 text-sm"
+                  />
+                  {tournamentQuery.trim() !== "" && (() => {
+                    const q = tournamentQuery.trim().toLowerCase();
+                    const found = allPlayers
+                      .filter((p) => !registered.some((r) => r.id === p.id))
+                      .filter((p) => p.name.toLowerCase().includes(q))
+                      .sort((a, b) => a.name.toLowerCase().localeCompare(b.name.toLowerCase()));
+                    if (found.length === 0) {
+                      return (
+                        <p className="px-1 text-xs text-muted-foreground">
+                          Никого не нашли. Если человека нет в приложении — впишите его гостем ниже.
+                        </p>
+                      );
+                    }
+                    return (
+                      <div className="max-h-56 overflow-y-auto rounded-md border border-border divide-y divide-border">
+                        {found.map((p) => (
+                          <button
+                            key={p.id}
+                            type="button"
+                            disabled={tournamentAddingId !== null}
+                            onClick={async () => {
+                              if (!eventId) return;
+                              setTournamentAddingId(p.id);
+                              setActionError(null);
+                              setInfo(null);
+                              try {
+                                await api.registerForEvent(eventId, p.id);
+                                const refreshed = await api.getEventDetails(eventId);
+                                setData(refreshed);
+                                setTournamentQuery("");
+                                setInfo(`${p.name} добавлен(а)`);
+                              } catch (err: any) {
+                                setActionError(err?.message ?? "Ошибка добавления игрока");
+                              } finally {
+                                setTournamentAddingId(null);
+                              }
+                            }}
+                            className="flex w-full items-center gap-3 bg-background px-3 py-2 text-left text-sm hover:bg-primary/10 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                          >
+                            <span className="flex h-7 w-7 shrink-0 items-center justify-center overflow-hidden rounded-full bg-secondary text-xs font-semibold">
+                              {p.avatarUrl ? (
+                                <img src={p.avatarUrl} alt="" className="h-full w-full object-cover" />
+                              ) : (
+                                p.name?.[0]?.toUpperCase?.() ?? "?"
+                              )}
+                            </span>
+                            <span className="flex-1 truncate">{p.name}</span>
+                            <span className="shrink-0 text-xs font-medium text-primary">
+                              {tournamentAddingId === p.id ? "Добавляем…" : "+ Добавить"}
+                            </span>
+                          </button>
+                        ))}
+                      </div>
+                    );
+                  })()}
+                </div>
+                <div className="flex flex-col gap-2 sm:flex-row">
+                  <input
+                    value={guestName}
+                    onChange={(ev) => setGuestName(ev.target.value)}
+                    placeholder="Или впишите имя вручную (гость без аккаунта)…"
+                    maxLength={60}
+                    className="h-10 flex-1 rounded-md border border-border bg-background px-3 text-sm"
+                  />
+                  <button
+                    type="button"
+                    disabled={!guestName.trim() || guestBusy}
+                    onClick={async () => {
+                      if (!eventId || !guestName.trim()) return;
+                      setGuestBusy(true);
+                      setActionError(null);
+                      setInfo(null);
+                      try {
+                        await api.addGuestToEvent(eventId, guestName.trim());
+                        const refreshed = await api.getEventDetails(eventId);
+                        setData(refreshed);
+                        setGuestName("");
+                        setInfo("Гость вписан");
+                      } catch (err: any) {
+                        setActionError(err?.message ?? "Ошибка добавления гостя");
+                      } finally {
+                        setGuestBusy(false);
+                      }
+                    }}
+                    className="h-10 px-5 rounded-md border border-emerald-500/50 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 text-sm font-medium hover:bg-emerald-500/20 transition-colors disabled:opacity-50 disabled:cursor-not-allowed shrink-0"
+                  >
+                    {guestBusy ? "…" : "Вписать гостя"}
+                  </button>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Турнир не влияет на рейтинг: итоговая таблица считается только по очкам.
+                </p>
+              </div>
+            )}
             {isAuthor && e.status === "OPEN_FOR_REGISTRATION" && e.format === "FIXED_PAIRS" && (
               <div className="mb-5 rounded-xl border border-violet-500/30 bg-violet-500/5 p-4 space-y-3">
                 <div className="flex items-center gap-2 text-sm font-medium">
@@ -1833,12 +1958,13 @@ export function V0EventPage(props: { me: any; meLoaded?: boolean }) {
                   player={{
                     id: p.id,
                     name: p.name,
-                    rating: p.rating,
+                    // Турнир вне рейтинга: рейтинг не показываем (у гостей его и нет).
+                    rating: isTournament || p.isGuest ? null : p.rating,
                     matches: p.gamesPlayed,
                     odid: p.publicId,
                     avatarUrl: p.avatarUrl,
                   }}
-                  showAddFriend={p.id !== meId}
+                  showAddFriend={p.id !== meId && !p.isGuest}
                   addFriendStatus={
                     !p.publicId
                       ? "none"
@@ -1912,7 +2038,9 @@ export function V0EventPage(props: { me: any; meLoaded?: boolean }) {
                       )}
                     </div>
                     <p className="text-sm font-medium text-center truncate">{p.name}</p>
-                    <p className="text-xs text-muted-foreground text-center">{p.rating}</p>
+                    <p className="text-xs text-muted-foreground text-center">
+                      {p.isGuest ? "гость" : isTournament ? " " : p.rating}
+                    </p>
                   </div>
                 </PlayerTooltip>
               ))}
@@ -2483,11 +2611,13 @@ export function V0EventPage(props: { me: any; meLoaded?: boolean }) {
                   const maxMatches = counts.length ? Math.max(...counts) : 0;
                   const uneven = maxMatches - minMatches > 0;
                   const ok = await confirm({
-                    title: "Завершить игру?",
-                    description: "Игра будет завершена, рейтинги участников пересчитаны. Дальше изменить счёт нельзя.",
+                    title: isTournament ? "Завершить турнир?" : "Завершить игру?",
+                    description: isTournament
+                      ? "Турнир будет завершён. Рейтинг не пересчитывается — итоговая таблица считается по очкам."
+                      : "Игра будет завершена, рейтинги участников пересчитаны. Дальше изменить счёт нельзя.",
                     warning: (
                       <>
-                        {uneven ? (
+                        {uneven && !isTournament ? (
                           <div>
                             У игроков разное число сыгранных матчей (<b>{minMatches}–{maxMatches}</b>).
                             Рейтинги будут <b>нормализованы</b>: у тех, кто сыграл больше, движения слегка уменьшатся; у тех, кто меньше — увеличатся.
@@ -2507,7 +2637,7 @@ export function V0EventPage(props: { me: any; meLoaded?: boolean }) {
                     await api.finishEvent(eventId);
                     const refreshed = await api.getEventDetails(eventId);
                     setData(refreshed);
-                    setInfo("Игра завершена. Рейтинг обновится автоматически.");
+                    setInfo(isTournament ? "Турнир завершён." : "Игра завершена. Рейтинг обновится автоматически.");
                     setRoundsOpen(false);
                   } catch (err: any) {
                     setActionError(err?.message ?? "Ошибка завершения");
@@ -2516,7 +2646,7 @@ export function V0EventPage(props: { me: any; meLoaded?: boolean }) {
                   }
                 }}
               >
-                {finishing ? "Завершаем…" : "Завершить игру"}
+                {finishing ? "Завершаем…" : isTournament ? "Завершить турнир" : "Завершить игру"}
               </Button>
             </div>
 
@@ -2608,6 +2738,15 @@ export function V0EventPage(props: { me: any; meLoaded?: boolean }) {
     balanceModalOpen,
     balancePreview,
     switchingMode,
+    // Добавление участников: пары (FIXED_PAIRS) и турнир (поиск игроков + гости).
+    allPlayers,
+    pairP1,
+    pairP2,
+    pairBusy,
+    tournamentQuery,
+    tournamentAddingId,
+    guestName,
+    guestBusy,
   ]);
 
   return <>{content}</>;

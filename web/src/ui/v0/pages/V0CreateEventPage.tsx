@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Gamepad2, Users, Clock, Calendar, Lightbulb, Users2, MapPin, Zap, Send, MessageCircle, Users as UsersIcon, Lock, Globe, Repeat } from "lucide-react";
+import { Gamepad2, Users, Clock, Calendar, Lightbulb, Users2, MapPin, Zap, Send, MessageCircle, Users as UsersIcon, Lock, Globe, Repeat, Trophy } from "lucide-react";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 import { api, EventFormat, EventVisibility, PairingMode, TelegramChat } from "../../../lib/api";
@@ -25,7 +25,10 @@ export function V0CreateEventPage(props: {
   const [searchParams] = useSearchParams();
   const editSeriesId = searchParams.get("editSeries");
   const isEditing = !!editSeriesId;
-  const [recurring, setRecurring] = useState(searchParams.get("recurring") === "1" || isEditing);
+  // Турнир (?kind=tournament): та же форма, но событие не влияет на рейтинг,
+  // всегда разовое, а на странице события можно вписывать гостей.
+  const isTournament = searchParams.get("kind") === "tournament";
+  const [recurring, setRecurring] = useState(!isTournament && (searchParams.get("recurring") === "1" || isEditing));
   const [daysOfWeek, setDaysOfWeek] = useState<Set<string>>(new Set());
   const [materializeHoursBefore, setMaterializeHoursBefore] = useState(168);
   const [materializeAtHour, setMaterializeAtHour] = useState(9);
@@ -34,7 +37,7 @@ export function V0CreateEventPage(props: {
   // null = использовать глобальные. Конкретное значение = переопределить для этой серии.
   const [seriesReminderHours, setSeriesReminderHours] = useState<number | null>(null);
   const [seriesPinAnnouncement, setSeriesPinAnnouncement] = useState<boolean | null>(null);
-  const [title, setTitle] = useState("Американка");
+  const [title, setTitle] = useState(isTournament ? "Турнир" : "Американка");
   const [date, setDate] = useState(todayIso());
   const [startHour, setStartHour] = useState("19");
   const [startMinute, setStartMinute] = useState("00");
@@ -270,6 +273,7 @@ export function V0CreateEventPage(props: {
         minRating,
         maxRating,
         telegramChatIds: selectedTgChatIds.size > 0 ? Array.from(selectedTgChatIds) : undefined,
+        ...(isTournament ? { kind: "TOURNAMENT" as const } : {}),
       });
       nav(`/events/${created.id}`);
     } catch (err: any) {
@@ -310,12 +314,18 @@ export function V0CreateEventPage(props: {
           <>
             <div className="space-y-4">
               <div className="inline-flex items-center gap-2 rounded-full border border-primary/20 bg-primary/5 px-4 py-2">
-                <Lightbulb className="h-4 w-4 text-primary" />
-                <span className="text-sm font-medium text-primary">Создание новой игры</span>
+                {isTournament ? <Trophy className="h-4 w-4 text-primary" /> : <Lightbulb className="h-4 w-4 text-primary" />}
+                <span className="text-sm font-medium text-primary">
+                  {isTournament ? "Создание турнира" : "Создание новой игры"}
+                </span>
               </div>
-              <h1 className="text-4xl font-bold tracking-tight">Организуйте игру в падел</h1>
+              <h1 className="text-4xl font-bold tracking-tight">
+                {isTournament ? "Организуйте турнир" : "Организуйте игру в падел"}
+              </h1>
               <p className="text-lg text-muted-foreground max-w-2xl">
-                Выберите время, место и параметры игры. Система автоматически подберёт оптимальные раунды и режим.
+                {isTournament
+                  ? "Турнир не влияет на рейтинг участников: итоговая таблица считается только по очкам. Кроме зарегистрированных игроков можно вписать участников вручную."
+                  : "Выберите время, место и параметры игры. Система автоматически подберёт оптимальные раунды и режим."}
               </p>
             </div>
 
@@ -326,8 +336,9 @@ export function V0CreateEventPage(props: {
             </div>
 
             {/* Тип: разовая или регулярная (подписка). От этого зависит, выбираем
-                ли мы конкретную дату или дни недели + горизонт материализации. */}
-            <div className="grid gap-3 sm:grid-cols-2">
+                ли мы конкретную дату или дни недели + горизонт материализации.
+                Турнир всегда разовый — переключатель не показываем. */}
+            <div className={cn("grid gap-3 sm:grid-cols-2", isTournament && "hidden")}>
               {[
                 { id: false, icon: Calendar, title: "Разовая", desc: "Игра на конкретную дату." },
                 { id: true, icon: Repeat, title: "Регулярная", desc: "Подписка: повторяется в выбранные дни недели." },
@@ -1025,8 +1036,8 @@ export function V0CreateEventPage(props: {
                   Отменить
                 </Button>
                 <Button className="flex-1 h-12 bg-primary text-primary-foreground" size="lg" disabled={loading}>
-                  <Gamepad2 className="mr-2 h-5 w-5" />
-                  {loading ? "Сохраняем…" : isEditing ? "Сохранить подписку" : "Создать игру"}
+                  {isTournament ? <Trophy className="mr-2 h-5 w-5" /> : <Gamepad2 className="mr-2 h-5 w-5" />}
+                  {loading ? "Сохраняем…" : isEditing ? "Сохранить подписку" : isTournament ? "Создать турнир" : "Создать игру"}
                 </Button>
               </div>
 

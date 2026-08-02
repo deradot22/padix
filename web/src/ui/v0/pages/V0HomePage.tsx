@@ -260,6 +260,12 @@ export function V0HomePage(props: { me: any }) {
                 <ArrowRight className="ml-2 h-4 w-4" />
               </Link>
             </Button>
+            <Button asChild variant="outline" size="lg">
+              <Link to={props.me ? "/create?kind=tournament" : "/register"}>
+                <Trophy className="mr-2 h-4 w-4" />
+                Создать турнир
+              </Link>
+            </Button>
           </motion.div>
         </div>
         <div className="absolute -right-20 -top-20 h-64 w-64 rounded-full bg-primary/10 blur-3xl" />

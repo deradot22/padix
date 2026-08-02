@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useLocation } from "react-router-dom";
-import { Calendar, CalendarDays, Clock, Globe, Info, List, Lock, Plus, Search, Users, X } from "lucide-react";
+import { Calendar, CalendarDays, Clock, Globe, Info, List, Lock, Plus, Search, Trophy, Users, X } from "lucide-react";
 import { api, Event } from "../../../lib/api";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -426,12 +426,20 @@ export function V0GamesPage(props: { me: any }) {
           <h1 className="text-3xl font-bold tracking-tight">Игры</h1>
           <p className="mt-1 text-muted-foreground">Выберите игру для участия</p>
         </div>
-        <Link to="/create" className="shrink-0">
-          <Button>
-            <Plus className="mr-2 h-4 w-4" />
-            Создать игру
-          </Button>
-        </Link>
+        <div className="flex shrink-0 flex-col gap-2 sm:flex-row">
+          <Link to="/create?kind=tournament">
+            <Button variant="outline" className="w-full">
+              <Trophy className="mr-2 h-4 w-4" />
+              Создать турнир
+            </Button>
+          </Link>
+          <Link to="/create">
+            <Button className="w-full">
+              <Plus className="mr-2 h-4 w-4" />
+              Создать игру
+            </Button>
+          </Link>
+        </div>
       </div>
 
       {/* Toggle: Игры / Календарь */}
