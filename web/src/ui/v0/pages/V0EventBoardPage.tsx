@@ -2,8 +2,6 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useParams } from "react-router-dom";
 import { Maximize, Minimize, Trophy } from "lucide-react";
 import { api, EventDetails, Match, Round } from "../../../lib/api";
-import { buildLeaderboard } from "@/components/event-leaderboard";
-import { cn } from "../utils";
 import { Dict, useI18n } from "@/lib/i18n";
 
 const TR = {
@@ -13,8 +11,6 @@ const TR = {
   "board.roundOf": { ru: "Раунд {n} из {total}", en: "Round {n} of {total}" },
   "board.court": { ru: "Корт", en: "Court" },
   "board.waitingScore": { ru: "идёт игра", en: "playing" },
-  "board.leaderboard": { ru: "Таблица", en: "Standings" },
-  "board.leaderboardPts": { ru: "очк.", en: "pts" },
   "board.prevRound": { ru: "Раунд {n}:", en: "Round {n}:" },
   "board.finished": { ru: "Итоги", en: "Final results" },
   "board.tournament": { ru: "Турнир", en: "Tournament" },
@@ -38,9 +34,9 @@ function hasScore(m: Match): boolean {
 
 /**
  * Табло для телевизора: /events/:eventId/board (открывается кнопкой «На ТВ»).
- * Показывает крупно, кто с кем играет в текущем раунде (по кортам) и счёт,
- * рядом — таблицу лидеров; обновляется само каждые 5 секунд, пока организатор
- * вводит счёт с телефона. Тёмная всегда, без шапки и навигации.
+ * Показывает крупно, кто с кем играет в текущем раунде (по кортам) и счёт —
+ * только противостояния, без таблицы лидеров. Обновляется само каждые 5 секунд,
+ * пока организатор вводит счёт с телефона. Тёмная всегда, без шапки и навигации.
  */
 export function V0EventBoardPage() {
   const { eventId } = useParams();
@@ -97,7 +93,6 @@ export function V0EventBoardPage() {
     if (!activeRound) return [];
     return rounds.filter((r) => r.roundNumber < activeRound.roundNumber);
   }, [rounds, activeRound]);
-  const { rows } = useMemo(() => buildLeaderboard(rounds), [rounds]);
   const finished = data?.event.status === "FINISHED";
 
   if (error) {
@@ -116,8 +111,6 @@ export function V0EventBoardPage() {
   }
 
   const e = data.event;
-  const medal = (rank: number) =>
-    rank === 1 ? "text-amber-400" : rank === 2 ? "text-slate-300" : rank === 3 ? "text-orange-400" : "text-zinc-500";
 
   const teamNames = (team: Match["teamA"]) => team.map((p) => p.name);
 
@@ -156,9 +149,9 @@ export function V0EventBoardPage() {
         </button>
       </div>
 
-      {/* Основная зона: матчи + таблица */}
-      <div className="mt-[2.5vh] grid flex-1 gap-[2vw] lg:grid-cols-[1fr_minmax(300px,26vw)]">
-        <div className="flex flex-col justify-center gap-[2vh]">
+      {/* Основная зона: только матчи текущего раунда, на всю ширину экрана */}
+      <div className="mt-[2.5vh] flex flex-1">
+        <div className="flex flex-1 flex-col justify-center gap-[2vh]">
           {activeRound ? (
             activeRound.matches
               .slice()
@@ -241,38 +234,6 @@ export function V0EventBoardPage() {
           )}
         </div>
 
-        {/* Таблица лидеров */}
-        {rows.length > 0 && (
-          <aside className="flex flex-col rounded-3xl border border-zinc-800 bg-zinc-900/60 px-[1.5vw] py-[2vh] shadow-xl">
-            <div className="mb-[1.5vh] flex items-center gap-2 text-[clamp(1rem,1.5vw,1.5rem)] font-semibold uppercase tracking-widest text-zinc-400">
-              <Trophy className="h-[1.1em] w-[1.1em] text-amber-400" />
-              {t("board.leaderboard")}
-            </div>
-            <ol className="flex-1 space-y-[0.8vh]">
-              {rows.slice(0, 10).map((row, i) => (
-                <li key={row.id} className="flex items-center gap-[0.8vw]">
-                  <span
-                    className={cn(
-                      "w-[2ch] shrink-0 text-right text-[clamp(1rem,1.6vw,1.7rem)] font-bold tabular-nums",
-                      medal(i + 1),
-                    )}
-                  >
-                    {i + 1}
-                  </span>
-                  <span className="min-w-0 flex-1 truncate text-[clamp(1rem,1.7vw,1.8rem)] font-medium">
-                    {row.name}
-                  </span>
-                  <span className="shrink-0 text-[clamp(1rem,1.7vw,1.8rem)] font-bold tabular-nums text-primary">
-                    {row.points}
-                  </span>
-                  <span className="shrink-0 text-[clamp(0.7rem,1vw,1rem)] text-zinc-500">
-                    {t("board.leaderboardPts")}
-                  </span>
-                </li>
-              ))}
-            </ol>
-          </aside>
-        )}
       </div>
     </div>
   );
