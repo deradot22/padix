@@ -39,7 +39,7 @@ const TR = {
   },
   "notif.hours1": { ru: "за 1 час", en: "1 hour" },
   "notif.hours24": { ru: "за сутки", en: "a day" },
-  "notif.hoursN": { ru: "за {n} часов", en: "{n} hours" },
+  "notif.hoursN": { ru: "за {n} {word}", en: "{n} hours" },
   "notif.remindersOnTitle": { ru: "Личные напоминания включены", en: "Personal reminders are on" },
   "notif.remindersOnDesc": {
     ru: "Бот пришлёт в личный чат напоминание {when} до старта каждой игры, в которую вы зарегистрированы.",
@@ -356,13 +356,18 @@ function PersonalRemindersCard(props: {
   reminderHours: number;
   onConfigure: () => void;
 }) {
-  const { t } = useI18n(TR);
+  const { t, lang } = useI18n(TR);
   if (!props.loaded || !props.tgEnabled) return null;
 
   if (props.on) {
     const hours = props.reminderHours;
+    // Форма слова обязательна: без неё выходило «за 2 часов».
     const hoursLabel =
-      hours === 1 ? t("notif.hours1") : hours === 24 ? t("notif.hours24") : t("notif.hoursN", { n: hours });
+      hours === 1
+        ? t("notif.hours1")
+        : hours === 24
+          ? t("notif.hours24")
+          : t("notif.hoursN", { n: hours, word: plural(lang, hours, ["час", "часа", "часов"], ["hours", "hours"]) });
     return (
       <div className="rounded-lg border border-emerald-500/40 dark:border-emerald-500/30 bg-emerald-500/10 p-4">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-start">
