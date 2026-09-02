@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { ChevronDown, Filter, Gamepad2, Search, Trophy, TrendingUp, Users } from "lucide-react";
-import { api, hasToken, Player } from "../../../lib/api";
+import { api, hasToken, isUnauthorizedError, Player } from "../../../lib/api";
 import { ntrpLevel } from "../../../lib/rating";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -9,6 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
 import { Dict, useI18n, plural } from "@/lib/i18n";
+import { AuthRequiredCard } from "@/components/auth-required-card";
 import { PlayerTooltip } from "@/components/player-tooltip";
 
 const TR = {
@@ -27,6 +28,10 @@ const TR = {
   "common.loading": { ru: "Загрузка…", en: "Loading…" },
   "error.loadFallback": { ru: "Ошибка загрузки", en: "Failed to load" },
   "loadFailed": { ru: "Не удалось загрузить: {error}", en: "Failed to load: {error}" },
+  "auth.ratingHint": {
+    ru: "Рейтинг доступен участникам Padix. Войдите в аккаунт или зарегистрируйтесь — это займёт минуту.",
+    en: "The rating is available to Padix members. Sign in or create an account — it takes a minute.",
+  },
   "empty.filtered": {
     ru: "По выбранному фильтру нет игроков. Попробуйте изменить условия.",
     en: "No players match the filter. Try changing it.",
@@ -64,6 +69,8 @@ export function V0RatingPage(props: { authed: boolean; me?: { playerId?: string 
   const { t, lang } = useI18n(TR);
   const [data, setData] = useState<Player[] | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // 401 от API: вместо технической ошибки предлагаем войти или зарегистрироваться.
+  const [unauthorized, setUnauthorized] = useState(false);
   const [loading, setLoading] = useState(true);
   const [friends, setFriends] = useState<import("../../../lib/api").FriendsSnapshot | null>(null);
   const [search, setSearch] = useState("");
@@ -85,6 +92,7 @@ export function V0RatingPage(props: { authed: boolean; me?: { playerId?: string 
     let cancelled = false;
     setLoading(true);
     setError(null);
+    setUnauthorized(false);
     api
       .getRating()
       .then((d) => {
@@ -93,6 +101,7 @@ export function V0RatingPage(props: { authed: boolean; me?: { playerId?: string 
       })
       .catch((e: unknown) => {
         if (cancelled) return;
+        setUnauthorized(isUnauthorizedError(e));
         setError(e instanceof Error ? e.message : t("error.loadFallback"));
       })
       .finally(() => {
@@ -505,7 +514,8 @@ export function V0RatingPage(props: { authed: boolean; me?: { playerId?: string 
       )}
 
       {loading && <div className="text-sm text-muted-foreground py-8 text-center">{t("common.loading")}</div>}
-      {error && (
+      {unauthorized && <AuthRequiredCard description={t("auth.ratingHint")} />}
+      {error && !unauthorized && (
         <div className="rounded-lg border border-destructive/30 bg-destructive/10 p-4 text-sm">
           {t("loadFailed", { error })}
         </div>
