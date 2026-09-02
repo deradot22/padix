@@ -16,19 +16,27 @@ class SurveyService(
     private val players: PlayerRepository,
     private val objectMapper: ObjectMapper
 ) {
-    fun currentDefinition(): SurveyDefinitionResponse =
-        SurveyDefinitionResponse(
+    /**
+     * Определение теста на языке клиента. lang: "en" — английский, всё остальное
+     * (включая null) — русский, чтобы старые клиенты без параметра ничего не заметили.
+     */
+    fun currentDefinition(lang: String? = null): SurveyDefinitionResponse {
+        val en = lang?.trim()?.lowercase()?.startsWith("en") == true
+        return SurveyDefinitionResponse(
             id = SurveyDefinitionV2.id,
             version = SurveyDefinitionV2.version,
             levelCards = emptyList(),
             questions = SurveyDefinitionV2.questions.map { q ->
                 SurveyDefinitionV1Question(
                     id = q.id,
-                    title = q.title,
-                    options = q.options.map { SurveyDefinitionV1Option(it.id, it.label) }
+                    title = if (en) q.titleEn else q.title,
+                    options = q.options.map {
+                        SurveyDefinitionV1Option(it.id, if (en) it.labelEn else it.label)
+                    }
                 )
             }
         )
+    }
 
     @Transactional
     fun submit(principal: JwtPrincipal, req: SurveySubmitRequest) {

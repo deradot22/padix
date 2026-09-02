@@ -174,12 +174,16 @@ object SurveyDefinitionV2 {
     data class Option(
         val id: String,
         val label: String,
+        /** Английский вариант label — отдаётся клиенту при lang=en. */
+        val labelEn: String,
         val delta: Double
     )
 
     data class Question(
         val id: String,
         val title: String,
+        /** Английский вариант title — отдаётся клиенту при lang=en. */
+        val titleEn: String,
         val options: List<Option>
     )
 
@@ -188,51 +192,56 @@ object SurveyDefinitionV2 {
         Question(
             id = "q_wall",
             title = "Игра со стенами",
+            titleEn = "Playing off the walls",
             options = listOf(
-                Option("q_wall_0", "Почти не использую", -0.5),
-                Option("q_wall_1", "Иногда, но нестабильно", 0.0),
-                Option("q_wall_2", "Стабильно в защите", 0.4),
-                Option("q_wall_3", "И в защите, и в атаке (по стеклу/углам)", 0.7)
+                Option("q_wall_0", "Почти не использую", "I barely use them", -0.5),
+                Option("q_wall_1", "Иногда, но нестабильно", "Sometimes, but inconsistently", 0.0),
+                Option("q_wall_2", "Стабильно в защите", "Consistently on defence", 0.4),
+                Option("q_wall_3", "И в защите, и в атаке (по стеклу/углам)", "On defence and attack (off the glass and corners)", 0.7)
             )
         ),
         Question(
             id = "q_net",
             title = "Игра у сетки",
+            titleEn = "Play at the net",
             options = listOf(
-                Option("q_net_0", "У сетки теряюсь", -0.4),
-                Option("q_net_1", "Стою, но часто ловлю лоб/прострел", 0.0),
-                Option("q_net_2", "Стабильный воллей/смэш по ситуации", 0.4),
-                Option("q_net_3", "Управляю сеткой и темпом розыгрыша", 0.6)
+                Option("q_net_0", "У сетки теряюсь", "I feel lost at the net", -0.4),
+                Option("q_net_1", "Стою, но часто ловлю лоб/прострел", "I hold position but often get lobbed or passed", 0.0),
+                Option("q_net_2", "Стабильный воллей/смэш по ситуации", "Solid volley/smash depending on the situation", 0.4),
+                Option("q_net_3", "Управляю сеткой и темпом розыгрыша", "I control the net and the pace of the point", 0.6)
             )
         ),
         Question(
             id = "q_lob",
             title = "Лоб как инструмент",
+            titleEn = "The lob as a tool",
             options = listOf(
-                Option("q_lob_0", "Редко/случайно", -0.3),
-                Option("q_lob_1", "Иногда спасаюсь лобом", 0.0),
-                Option("q_lob_2", "Лоб точный, часто помогает выйти к сетке", 0.4),
-                Option("q_lob_3", "Лоб тактический: под руку/в зону, контролирую глубину", 0.6)
+                Option("q_lob_0", "Редко/случайно", "Rarely, and only by accident", -0.3),
+                Option("q_lob_1", "Иногда спасаюсь лобом", "I sometimes bail myself out with a lob", 0.0),
+                Option("q_lob_2", "Лоб точный, часто помогает выйти к сетке", "Accurate lob, it often gets me to the net", 0.4),
+                Option("q_lob_3", "Лоб тактический: под руку/в зону, контролирую глубину", "Tactical lob: to the backhand or a chosen zone, with depth control", 0.6)
             )
         ),
         Question(
             id = "q_consistency",
             title = "Стабильность",
+            titleEn = "Consistency",
             options = listOf(
-                Option("q_consistency_0", "Много простых ошибок", -0.6),
-                Option("q_consistency_1", "Ошибаюсь, когда ускоряюсь", 0.0),
-                Option("q_consistency_2", "Стабилен под давлением", 0.4),
-                Option("q_consistency_3", "Очень стабилен, почти без “подарков”", 0.7)
+                Option("q_consistency_0", "Много простых ошибок", "Lots of unforced errors", -0.6),
+                Option("q_consistency_1", "Ошибаюсь, когда ускоряюсь", "I make errors when I speed the ball up", 0.0),
+                Option("q_consistency_2", "Стабилен под давлением", "Steady under pressure", 0.4),
+                Option("q_consistency_3", "Очень стабилен, почти без “подарков”", "Very steady, I hardly ever give points away", 0.7)
             )
         ),
         Question(
             id = "q_tactics",
             title = "Тактика",
+            titleEn = "Tactics",
             options = listOf(
-                Option("q_tactics_0", "Играю “куда попало”", -0.3),
-                Option("q_tactics_1", "Иногда вижу слабого игрока", 0.0),
-                Option("q_tactics_2", "Регулярно играю в ноги/центр/под слабого", 0.4),
-                Option("q_tactics_3", "План на очко + чтение соперника", 0.6)
+                Option("q_tactics_0", "Играю “куда попало”", "I just hit it anywhere", -0.3),
+                Option("q_tactics_1", "Иногда вижу слабого игрока", "I sometimes spot the weaker opponent", 0.0),
+                Option("q_tactics_2", "Регулярно играю в ноги/центр/под слабого", "I regularly play at the feet, down the middle or at the weaker player", 0.4),
+                Option("q_tactics_3", "План на очко + чтение соперника", "A plan for the point plus reading the opponent", 0.6)
             )
         )
     )
