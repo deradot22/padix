@@ -795,13 +795,14 @@ export const api = {
     request(`/api/events/${eventId}/invites/decline`, { method: "POST" }),
   getEventInvites: (eventId: string) =>
     request<EventInviteStatusItem[]>(`/api/events/${eventId}/invites`),
-  getSurvey: () =>
+  /** lang — язык текстов теста ("ru" | "en"); бэк отдаёт русский, если не передать. */
+  getSurvey: (lang?: string) =>
     request<{
       id: string;
       version: number;
       levelCards: { id: string; title: string; level: number; bullets: string[] }[];
       questions: { id: string; title: string; options: { id: string; label: string }[] }[];
-    }>("/api/survey/current"),
+    }>(`/api/survey/current${lang ? `?lang=${encodeURIComponent(lang)}` : ""}`),
   submitSurvey: (payload: { version: number; answers: Record<string, string> }) =>
     request("/api/survey/submit", { method: "POST", body: JSON.stringify(payload) }),
   topPartners: (playerId: string, limit = 3) =>

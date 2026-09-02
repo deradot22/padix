@@ -10,6 +10,7 @@ import org.springframework.web.bind.annotation.GetMapping
 import org.springframework.web.bind.annotation.PostMapping
 import org.springframework.web.bind.annotation.RequestBody
 import org.springframework.web.bind.annotation.RequestMapping
+import org.springframework.web.bind.annotation.RequestParam
 import org.springframework.web.bind.annotation.RestController
 
 @RestController
@@ -19,7 +20,8 @@ class SurveyController(
     private val auth: AuthService
 ) {
     @GetMapping("/current")
-    fun current(): SurveyDefinitionResponse = survey.currentDefinition()
+    fun current(@RequestParam(required = false) lang: String?): SurveyDefinitionResponse =
+        survey.currentDefinition(lang)
 
     @PostMapping("/submit")
     fun submit(@Valid @RequestBody req: SurveySubmitRequest): com.padelgo.auth.MeResponse {

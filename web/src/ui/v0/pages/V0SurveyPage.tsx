@@ -31,7 +31,7 @@ export function V0SurveyPage(props: {
 }) {
   const nav = useNavigate();
   const me = props.me;
-  const { t } = useI18n(TR);
+  const { t, lang } = useI18n(TR);
   const [def, setDef] = useState<any | null>(null);
   const [answers, setAnswers] = useState<Record<string, string>>({});
   const [step, setStep] = useState(0);
@@ -43,21 +43,26 @@ export function V0SurveyPage(props: {
     else if (me.surveyCompleted) nav("/");
   }, [me, nav]);
 
+  // Тексты вопросов живут на бэке (их же читает мобильное приложение), поэтому
+  // при смене языка перезапрашиваем определение теста. Ответы не сбрасываем:
+  // id вопросов и вариантов от языка не зависят.
   useEffect(() => {
     if (!me) return;
     api
-      .getSurvey()
+      .getSurvey(lang)
       .then((d) => {
         setDef(d);
-        const initial: Record<string, string> = {};
-        (d.questions ?? []).forEach((q: any) => {
-          initial[q.id] = "";
+        setAnswers((prev) => {
+          const initial: Record<string, string> = {};
+          (d.questions ?? []).forEach((q: any) => {
+            initial[q.id] = prev[q.id] ?? "";
+          });
+          return initial;
         });
-        setAnswers(initial);
       })
       .catch((e: any) => setError(e?.message ?? t("survey.errLoad")));
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [me]);
+  }, [me, lang]);
 
   const questions: any[] = useMemo(() => def?.questions ?? [], [def]);
   const totalSteps = questions.length;
