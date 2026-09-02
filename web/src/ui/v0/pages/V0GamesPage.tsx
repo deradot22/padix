@@ -1,11 +1,12 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useLocation } from "react-router-dom";
 import { Calendar, CalendarDays, Clock, Globe, Info, List, Lock, Plus, Search, Trophy, Users, X } from "lucide-react";
-import { api, Event } from "../../../lib/api";
+import { api, Event, isUnauthorizedError } from "../../../lib/api";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { AuthRequiredCard } from "@/components/auth-required-card";
 import { GamesCalendar } from "@/components/games-calendar";
 import { cn } from "@/lib/utils";
 import { Dict, useI18n } from "@/lib/i18n";
@@ -32,6 +33,10 @@ const TR = {
   "common.loading": { ru: "Загрузка…", en: "Loading…" },
   "common.error": { ru: "Ошибка", en: "Error" },
   "list.loadFailed": { ru: "Не удалось загрузить: {error}", en: "Failed to load: {error}" },
+  "auth.gamesHint": {
+    ru: "Список игр виден только участникам Padix. Войдите в аккаунт или зарегистрируйтесь — это займёт минуту.",
+    en: "The games list is available to Padix members only. Sign in or create an account — it takes a minute.",
+  },
   "list.empty": { ru: "Нет предстоящих игр.", en: "No upcoming games." },
   "list.nothingFound": { ru: "Ничего не найдено по фильтру.", en: "Nothing matches the filter." },
   "list.title": { ru: "Ближайшие игры (2 недели)", en: "Upcoming games (2 weeks)" },
@@ -113,6 +118,8 @@ export function V0GamesPage(props: { me: any }) {
   const [events, setEvents] = useState<Event[] | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  // 401 от API: показываем предложение войти, а не техническую ошибку загрузки.
+  const [unauthorized, setUnauthorized] = useState(false);
   const [view, setView] = useState<"list" | "calendar">("list");
   const [calendarEvents, setCalendarEvents] = useState<Event[]>([]);
   const [calendarLoading, setCalendarLoading] = useState(false);
@@ -138,13 +145,17 @@ export function V0GamesPage(props: { me: any }) {
     if (props.me && !props.me.surveyCompleted) return;
     setLoading(true);
     setError(null);
+    setUnauthorized(false);
     const now = new Date();
     const from = formatDate(now);
     const to = formatDate(new Date(now.getFullYear(), now.getMonth(), now.getDate() + 14));
     api
       .getUpcomingEvents(from, to)
       .then((d) => setEvents((d ?? []).filter((e) => e.status !== "FINISHED")))
-      .catch((e: unknown) => setError(e instanceof Error ? e.message : t("common.error")))
+      .catch((e: unknown) => {
+        setUnauthorized(isUnauthorizedError(e));
+        setError(e instanceof Error ? e.message : t("common.error"));
+      })
       .finally(() => setLoading(false));
   }, [props.me]);
 
@@ -302,6 +313,9 @@ export function V0GamesPage(props: { me: any }) {
   const listContent = useMemo(() => {
     if (loading) {
       return <div className="text-sm text-muted-foreground">{t("common.loading")}</div>;
+    }
+    if (unauthorized) {
+      return <AuthRequiredCard description={t("auth.gamesHint")} />;
     }
     if (error) {
       return (
@@ -465,7 +479,7 @@ export function V0GamesPage(props: { me: any }) {
         </div>
       </div>
     );
-  }, [error, events, filteredEvents, loading, nav, registeredIds, filterBar, searchQuery, lang, t]);
+  }, [error, unauthorized, events, filteredEvents, loading, nav, registeredIds, filterBar, searchQuery, lang, t]);
 
   return (
     <div className="space-y-5">

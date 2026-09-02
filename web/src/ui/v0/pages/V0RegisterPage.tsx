@@ -1,11 +1,12 @@
 import { FormEvent, useEffect, useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import { api, AuthConfig, setToken, TelegramAuthPayload } from "../../../lib/api";
 import { TelegramLoginButton } from "@/components/telegram-login-button";
 import { GoogleLoginButton } from "@/components/google-login-button";
 import { FacebookLoginButton } from "@/components/facebook-login-button";
 import { TwitterLoginButton } from "@/components/twitter-login-button";
 import { Dict, useI18n } from "@/lib/i18n";
+import { nextPath } from "@/lib/next-path";
 
 const TR = {
   "reg.title": { ru: "Регистрация", en: "Sign up" },
@@ -33,6 +34,9 @@ const TR = {
 
 export function V0RegisterPage(props: { onAuth: (me: any) => void }) {
   const nav = useNavigate();
+  const location = useLocation();
+  // ?next= — страница, с которой пользователя развернули на вход (см. AuthRequiredCard).
+  const backTo = nextPath(location.search);
   const { t } = useI18n(TR);
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
@@ -76,7 +80,7 @@ export function V0RegisterPage(props: { onAuth: (me: any) => void }) {
       props.onAuth(me);
       // Новый юзер из Telegram — анкета ещё не пройдена, кидаем туда.
       if (!me.surveyCompleted) nav("/survey");
-      else nav("/");
+      else nav(backTo);
     } catch (err: any) {
       setError(err?.message ?? t("reg.errTelegram"));
     } finally {
@@ -93,7 +97,7 @@ export function V0RegisterPage(props: { onAuth: (me: any) => void }) {
       const me = await api.me();
       props.onAuth(me);
       if (!me.surveyCompleted) nav("/survey");
-      else nav("/");
+      else nav(backTo);
     } catch (err: any) {
       setError(err?.message ?? t("reg.errGoogle"));
     } finally {
@@ -110,7 +114,7 @@ export function V0RegisterPage(props: { onAuth: (me: any) => void }) {
       const me = await api.me();
       props.onAuth(me);
       if (!me.surveyCompleted) nav("/survey");
-      else nav("/");
+      else nav(backTo);
     } catch (err: any) {
       setError(err?.message ?? t("reg.errFacebook"));
     } finally {
@@ -233,7 +237,7 @@ export function V0RegisterPage(props: { onAuth: (me: any) => void }) {
           <div className="text-lg font-semibold">{t("reg.haveAccount")}</div>
           <div className="mt-2 text-sm text-muted-foreground">{t("reg.haveAccountHint")}</div>
           <Link
-            to="/login"
+            to={`/login${location.search}`}
             className="mt-4 inline-flex h-11 w-full items-center justify-center rounded-md border border-border bg-transparent px-4 text-sm font-medium hover:bg-secondary transition-colors"
           >
             {t("reg.signIn")}

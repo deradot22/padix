@@ -1,11 +1,12 @@
 import { FormEvent, useEffect, useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import { api, AuthConfig, setAdminToken, setToken, TelegramAuthPayload } from "../../../lib/api";
 import { TelegramLoginButton } from "@/components/telegram-login-button";
 import { GoogleLoginButton } from "@/components/google-login-button";
 import { FacebookLoginButton } from "@/components/facebook-login-button";
 import { TwitterLoginButton } from "@/components/twitter-login-button";
 import { Dict, useI18n } from "@/lib/i18n";
+import { nextPath } from "@/lib/next-path";
 
 const TR = {
   "login.title": { ru: "Войти", en: "Sign in" },
@@ -28,6 +29,9 @@ const TR = {
 
 export function V0LoginPage(props: { onAuth: (me: any) => void }) {
   const nav = useNavigate();
+  const location = useLocation();
+  // ?next= — страница, с которой пользователя развернули на вход (см. AuthRequiredCard).
+  const backTo = nextPath(location.search);
   const { t } = useI18n(TR);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -60,7 +64,7 @@ export function V0LoginPage(props: { onAuth: (me: any) => void }) {
       const me = await api.me();
       props.onAuth(me);
       if (!me.surveyCompleted) nav("/survey");
-      else nav("/");
+      else nav(backTo);
     } catch (err: any) {
       setError(err?.message ?? t("login.errGeneric"));
     } finally {
@@ -78,7 +82,7 @@ export function V0LoginPage(props: { onAuth: (me: any) => void }) {
       const me = await api.me();
       props.onAuth(me);
       if (!me.surveyCompleted) nav("/survey");
-      else nav("/");
+      else nav(backTo);
     } catch (err: any) {
       setError(err?.message ?? t("login.errTelegram"));
     } finally {
@@ -96,7 +100,7 @@ export function V0LoginPage(props: { onAuth: (me: any) => void }) {
       const me = await api.me();
       props.onAuth(me);
       if (!me.surveyCompleted) nav("/survey");
-      else nav("/");
+      else nav(backTo);
     } catch (err: any) {
       setError(err?.message ?? t("login.errGoogle"));
     } finally {
@@ -114,7 +118,7 @@ export function V0LoginPage(props: { onAuth: (me: any) => void }) {
       const me = await api.me();
       props.onAuth(me);
       if (!me.surveyCompleted) nav("/survey");
-      else nav("/");
+      else nav(backTo);
     } catch (err: any) {
       setError(err?.message ?? t("login.errFacebook"));
     } finally {
@@ -214,7 +218,7 @@ export function V0LoginPage(props: { onAuth: (me: any) => void }) {
             {t("login.noAccountHint")}
           </div>
           <Link
-            to="/register"
+            to={`/register${location.search}`}
             className="mt-4 inline-flex h-11 w-full items-center justify-center rounded-md border border-border bg-transparent px-4 text-sm font-medium hover:bg-secondary transition-colors"
           >
             {t("login.register")}

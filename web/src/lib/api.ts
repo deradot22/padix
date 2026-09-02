@@ -234,6 +234,26 @@ export type ApiError = {
   path?: string | null;
 };
 
+/**
+ * Ошибка HTTP-запроса к API с сохранённым статусом: по нему UI отличает
+ * «не авторизован» (401) от настоящего сбоя загрузки и показывает предложение
+ * войти/зарегистрироваться вместо технического текста ошибки.
+ */
+export class ApiRequestError extends Error {
+  readonly status: number;
+
+  constructor(message: string, status: number) {
+    super(message);
+    this.name = "ApiRequestError";
+    this.status = status;
+  }
+}
+
+/** true — сервер ответил 401 (нет токена, токен протух или доступ только для своих). */
+export function isUnauthorizedError(e: unknown): boolean {
+  return e instanceof ApiRequestError && e.status === 401;
+}
+
 export type EventHistoryItem = {
   eventId: string;
   eventTitle: string;
@@ -424,10 +444,10 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
         msg === "Token unsupported" ||
         msg === "Invalid token"
       ) {
-        throw new Error("Сессия недействительна или истекла. Войдите снова.");
+        throw new ApiRequestError("Сессия недействительна или истекла. Войдите снова.", 401);
       }
     }
-    throw new Error(msg);
+    throw new ApiRequestError(msg, res.status);
   }
 
   // 204 / empty

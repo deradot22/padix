@@ -2,7 +2,8 @@
 import { Link, useParams, useLocation } from "react-router-dom";
 import { AlertTriangle, ArrowLeft, Check, ChevronDown, Clock, Globe, Lock, MapPin, Pencil, Repeat, Scale, Share2, Target, Trash2, Trophy, Tv, UserPlus, Users, Zap, X } from "lucide-react";
 import { useNavigate } from "react-router-dom";
-import { api, BalancePreview, EventDetails, FriendItem, FriendsSnapshot, Match, Player } from "../../../lib/api";
+import { api, BalancePreview, EventDetails, FriendItem, FriendsSnapshot, isUnauthorizedError, Match, Player } from "../../../lib/api";
+import { AuthRequiredCard } from "@/components/auth-required-card";
 import { PlayerTooltip } from "@/components/player-tooltip";
 import { EventLeaderboard } from "@/components/event-leaderboard";
 import { Button } from "@/components/ui/button";
@@ -32,6 +33,10 @@ const TR = {
   "common.loading": { ru: "Загрузка…", en: "Loading…" },
   "common.loadFailed": { ru: "Не удалось загрузить", en: "Failed to load" },
   "common.loadError": { ru: "Ошибка загрузки", en: "Failed to load" },
+  "auth.eventHint": {
+    ru: "Эта игра доступна только участникам Padix. Войдите в аккаунт или зарегистрируйтесь — и увидите состав, расписание и счёт.",
+    en: "This game is available to Padix members only. Sign in or create an account to see the line-up, schedule and scores.",
+  },
   "common.notFound": { ru: "Событие не найдено.", en: "Event not found." },
   "common.backToGames": { ru: "Назад к играм", en: "Back to games" },
   "common.toGamesList": { ru: "К списку игр", en: "To games list" },
@@ -379,6 +384,8 @@ export function V0EventPage(props: { me: any; meLoaded?: boolean }) {
   const modalOpenRef = useRef(false);
   const [data, setData] = useState<EventDetails | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
+  // 401 от API: не «ошибка загрузки», а «нужно войти» — показываем предложение авторизоваться.
+  const [loadUnauthorized, setLoadUnauthorized] = useState(false);
   const [loading, setLoading] = useState(true);
   const [registering, setRegistering] = useState(false);
   const [canceling, setCanceling] = useState(false);
@@ -764,6 +771,7 @@ export function V0EventPage(props: { me: any; meLoaded?: boolean }) {
     let cancelled = false;
     setLoading(true);
     setLoadError(null);
+    setLoadUnauthorized(false);
     api
       .getEventDetails(eventId)
       .then((d) => {
@@ -772,6 +780,7 @@ export function V0EventPage(props: { me: any; meLoaded?: boolean }) {
       })
       .catch((e: unknown) => {
         if (cancelled) return;
+        setLoadUnauthorized(isUnauthorizedError(e));
         setLoadError(e instanceof Error ? e.message : t("common.loadError"));
       })
       .finally(() => {
@@ -923,6 +932,7 @@ export function V0EventPage(props: { me: any; meLoaded?: boolean }) {
   const content = useMemo(() => {
     if (!props.me) {
       if (loading) return <div className="text-sm text-muted-foreground">{t("common.loading")}</div>;
+      if (loadUnauthorized) return <AuthRequiredCard description={t("auth.eventHint")} />;
       if (loadError)
         return (
           <div className="rounded-lg border border-destructive/30 bg-destructive/10 p-4 text-sm">
@@ -979,6 +989,7 @@ export function V0EventPage(props: { me: any; meLoaded?: boolean }) {
       );
     }
     if (loading) return <div className="text-sm text-muted-foreground">{t("common.loading")}</div>;
+    if (loadUnauthorized) return <AuthRequiredCard description={t("auth.eventHint")} />;
     if (loadError)
       return (
         <div className="rounded-lg border border-destructive/30 bg-destructive/10 p-4 text-sm">
@@ -3044,6 +3055,7 @@ export function V0EventPage(props: { me: any; meLoaded?: boolean }) {
     invitingId,
     invited,
     loadError,
+    loadUnauthorized,
     loading,
     registering,
     finishing,
