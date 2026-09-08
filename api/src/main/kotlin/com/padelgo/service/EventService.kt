@@ -1089,7 +1089,31 @@ class EventService(
             reg.cancelRequested = true
             reg.cancelRequestedAt = now.toInstant(java.time.ZoneOffset.UTC)
             regRepo.save(reg)
+            notifyCancelRequested(event, playerId)
             com.padelgo.api.CancelRegistrationResponse("REQUESTED", "Cancellation requested from author")
+        }
+    }
+
+    /**
+     * Уведомляет организатора в личку бота, что игрок запросил отмену регистрации
+     * (за <24ч до старта — сам отмениться уже не может, нужно подтверждение автора).
+     * Fire-and-forget после коммита: проблемы с ботом не должны валить транзакцию.
+     */
+    private fun notifyCancelRequested(event: Event, playerId: UUID) {
+        val eventId = event.id ?: return
+        val ownerId = event.createdByUserId ?: return
+        val playerName = playerRepo.findById(playerId).orElse(null)?.name ?: return
+        val payload = com.padelgo.service.CancelRequestedNotify(
+            eventId = eventId,
+            ownerUserId = ownerId,
+            title = event.title,
+            date = event.date,
+            startTime = event.startTime,
+            playerName = playerName
+        )
+        runAfterCommit {
+            try { botClient.notifyCancelRequested(payload) }
+            catch (e: Exception) { log.warn("Failed to notify bot about cancel request for event {}: {}", eventId, e.message) }
         }
     }
 

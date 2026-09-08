@@ -99,6 +99,19 @@ data class RosterChangedNotify(
 )
 
 /**
+ * Уведомление организатора (в личку бота) о том, что игрок запросил отмену регистрации
+ * за <24ч до старта — такую отмену нельзя применить самому, её подтверждает автор.
+ */
+data class CancelRequestedNotify(
+    val eventId: UUID,
+    val ownerUserId: UUID,
+    val title: String,
+    val date: LocalDate,
+    val startTime: LocalTime,
+    val playerName: String
+)
+
+/**
  * Уведомление админа о новом тикете обратной связи.
  * Бот находит PRIVATE-чат для adminUserId в `telegram_chat`, отправляет туда текст
  * и, при наличии, прикреплённое медиа. Если у adminUserId нет привязанного private —
@@ -197,6 +210,9 @@ class BotClient(
 
     fun notifyRosterChanged(payload: RosterChangedNotify): Int =
         post("/api/internal/telegram/notify/roster-changed", payload)
+
+    fun notifyCancelRequested(payload: CancelRequestedNotify): Int =
+        post("/api/internal/telegram/notify/cancel-requested", payload)
 
     fun notifyAdminFeedback(payload: AdminFeedbackNotify): Int =
         post("/api/internal/telegram/notify/admin-feedback", payload)

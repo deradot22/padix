@@ -135,6 +135,15 @@ data class RosterChangedRequest(
     val capacity: Int
 )
 
+data class CancelRequestedRequest(
+    val eventId: UUID,
+    val ownerUserId: UUID,
+    val title: String,
+    val date: LocalDate,
+    val startTime: LocalTime,
+    val playerName: String
+)
+
 data class AdminFeedbackRequest(
     val adminUserId: UUID,
     val ticketId: UUID,
@@ -208,6 +217,36 @@ class InternalNotifyController(
         val ev = req.toEvent()
         val sent = service.handleRosterChanged(ev, req.ownerUserId, req.oldCount, req.newCount, req.capacity)
         return NotifyResult(sent)
+    }
+
+    /**
+     * Игрок запросил отмену регистрации (<24ч до старта) — уведомляем организатора в его
+     * PRIVATE-чат. Если у автора нет привязанного PRIVATE чата — sent=0 (no-op): он всё равно
+     * увидит запрос в приложении в блоке «Запросы на отмену».
+     */
+    @PostMapping("/notify/cancel-requested")
+    fun cancelRequested(@RequestBody req: CancelRequestedRequest): NotifyResult {
+        val privateChat = chatRepo.findAllByUserIdOrderByLinkedAtAsc(req.ownerUserId)
+            .firstOrNull { it.chatType == TelegramChatType.PRIVATE.name }
+        if (privateChat == null) {
+            log.info("cancel-requested: no PRIVATE TG chat linked for owner {}", req.ownerUserId)
+            return NotifyResult(0)
+        }
+        val time = "%02d:%02d".format(req.startTime.hour, req.startTime.minute)
+        val date = "%02d.%02d".format(req.date.dayOfMonth, req.date.monthValue)
+        val text = buildString {
+            append("🔔 <b>Запрос на отмену</b>\n\n")
+            append("<b>").append(htmlEscape(req.playerName)).append("</b> хочет отменить регистрацию на игру ")
+            append("<b>«").append(htmlEscape(req.title)).append("»</b> ($date $time).\n\n")
+            append("Подтвердить отмену можно в приложении, в блоке «Запросы на отмену».")
+        }
+        try {
+            telegramClient.sendMessage(privateChat.chatId, text, parseMode = "HTML")
+        } catch (e: Exception) {
+            log.warn("cancel-requested: sendMessage failed for chat {}: {}", privateChat.chatId, e.message)
+            return NotifyResult(0)
+        }
+        return NotifyResult(1)
     }
 
     /**
