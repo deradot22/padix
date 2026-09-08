@@ -11,6 +11,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { ModalScrollArea } from "@/components/ui/modal-scroll-area";
 import { EditGameScoresDialog } from "@/components/edit-game-scores-dialog";
 import { useConfirm } from "@/components/ui/confirm-dialog";
+import { ToastViewport, useToasts } from "@/components/ui/toast";
 import { DatePicker, TimePicker } from "@/components/ui/date-picker";
 import { cn, formatEventDate, timeRange } from "../utils";
 import { Dict, Lang, plural, useI18n } from "@/lib/i18n";
@@ -78,6 +79,15 @@ const TR = {
   "join.cancelling": { ru: "Отмена…", en: "Cancelling…" },
   "join.registered": { ru: "Вы записаны", en: "You're in" },
   "join.cancelled": { ru: "Регистрация отменена", en: "Registration cancelled" },
+  "join.cancelRequested": {
+    ru: "Запрос на отмену отправлен организатору",
+    en: "Cancellation request sent to the organizer",
+  },
+  "join.cancelPending": { ru: "Ожидается отмена", en: "Cancellation pending" },
+  "join.cancelPendingHint": {
+    ru: "До старта меньше суток — отмену подтверждает организатор",
+    en: "Less than a day to start — the organizer confirms the cancellation",
+  },
   "join.cancelError": { ru: "Ошибка отмены", en: "Failed to cancel" },
   "join.registerError": { ru: "Ошибка регистрации", en: "Failed to register" },
   "join.ratingMismatch": { ru: "Рейтинг не подходит", en: "Rating out of range" },
@@ -415,6 +425,7 @@ export function V0EventPage(props: { me: any; meLoaded?: boolean }) {
   const [starting, setStarting] = useState(false);
   const [finishing, setFinishing] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
+  const { toasts, showToast, dismissToast } = useToasts();
   const [info, setInfo] = useState<string | null>(null);
   // Авто-скрытие info-сообщений через 4 сек, чтобы не залипали
   useEffect(() => {
@@ -1042,6 +1053,8 @@ export function V0EventPage(props: { me: any; meLoaded?: boolean }) {
     const meId = props.me?.playerId;
     const myPublicId = props.me?.publicId;
     const isRegistered = !!meId && registered.some((p) => p.id === meId);
+    // Игрок запросил отмену (<24ч до старта) — ждёт подтверждения организатора.
+    const myPendingCancel = !!meId && pending.some((p) => p.id === meId);
     const isAuthor = data.isAuthor;
     // Турнир: не влияет на рейтинг, автор может добавлять любых игроков и вписывать гостей.
     const isTournament = e.kind === "TOURNAMENT";
@@ -1084,6 +1097,7 @@ export function V0EventPage(props: { me: any; meLoaded?: boolean }) {
 
     return (
       <>
+        <ToastViewport toasts={toasts} onDismiss={dismissToast} />
         <div className="space-y-8 pb-8">
         <Link
           to="/games"
@@ -1174,6 +1188,15 @@ export function V0EventPage(props: { me: any; meLoaded?: boolean }) {
                 {e.status === "OPEN_FOR_REGISTRATION" || e.status === "REGISTRATION_CLOSED" ? (
                   <>
                     {isRegistered ? (
+                      myPendingCancel ? (
+                        <div className="w-full sm:w-[240px] space-y-2">
+                          <div className="h-11 w-full px-6 rounded-md border border-amber-500/40 dark:border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-400 text-sm font-medium inline-flex items-center justify-center gap-2">
+                            <Clock className="h-4 w-4" />
+                            {t("join.cancelPending")}
+                          </div>
+                          <p className="text-xs text-muted-foreground">{t("join.cancelPendingHint")}</p>
+                        </div>
+                      ) : (
                       <button
                         type="button"
                         className="h-11 w-full sm:w-[240px] px-6 rounded-md border border-primary bg-primary/10 text-primary text-sm font-medium hover:bg-primary/20 transition-colors inline-flex items-center justify-center"
@@ -1184,12 +1207,16 @@ export function V0EventPage(props: { me: any; meLoaded?: boolean }) {
                           setActionError(null);
                           setInfo(null);
                           try {
-                            await api.cancelRegistration(eventId);
+                            const res = await api.cancelRegistration(eventId);
                             const refreshed = await api.getEventDetails(eventId);
                             setData(refreshed);
-                            setInfo(t("join.cancelled"));
+                            if (res.status === "REQUESTED") {
+                              showToast(t("join.cancelRequested"), "info");
+                            } else {
+                              showToast(t("join.cancelled"), "success");
+                            }
                           } catch (err: any) {
-                            setActionError(err?.message ?? t("join.cancelError"));
+                            showToast(err?.message ?? t("join.cancelError"), "error");
                           } finally {
                             setCanceling(false);
                           }
@@ -1198,6 +1225,7 @@ export function V0EventPage(props: { me: any; meLoaded?: boolean }) {
                         <Check className="h-5 w-5 mr-2" />
                         {canceling ? t("join.cancelling") : t("join.youAreIn")}
                       </button>
+                      )
                     ) : e.status === "OPEN_FOR_REGISTRATION" ? (
                       ratingBlocked ? (
                         <div className="w-full sm:w-[240px] space-y-2">
@@ -2725,7 +2753,11 @@ export function V0EventPage(props: { me: any; meLoaded?: boolean }) {
                                                 setScorePadOpen(false);
                                                 setData(await api.getEventDetails(eventId));
                                               })
-                                              .catch((err: any) => setScoreError(err?.message ?? t("score.saveError")))
+                                              .catch((err: any) => {
+                                                const msg = err?.message ?? t("score.saveError");
+                                                setScoreError(msg);
+                                                showToast(msg, "error");
+                                              })
                                               .finally(() => setScoreSavingId(null));
                                           }}
                                         >
@@ -2787,7 +2819,9 @@ export function V0EventPage(props: { me: any; meLoaded?: boolean }) {
                                                   })
                                                   .catch(async (err: any) => {
                                                     delete pendingScoreRef.current[m.id];
-                                                    setScoreError(err?.message ?? t("score.saveError"));
+                                                    const msg = err?.message ?? t("score.saveError");
+                                                    setScoreError(msg);
+                                                    showToast(msg, "error");
                                                     // Возможен 409 «уже введён» — обновим, чтобы UI показал актуальный счёт/автора.
                                                     if (eventId) {
                                                       try {

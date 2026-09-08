@@ -537,7 +537,7 @@ data class EventDetailsResponse(
 
 @Schema(description = "Результат запроса отмены регистрации")
 data class CancelRegistrationResponse(
-    @Schema(description = "CANCELLED — отменена сразу (если игра ещё не стартовала), PENDING — ожидает подтверждения организатора")
+    @Schema(description = "CANCELLED — отменена сразу (>24ч до старта или сам автор); REQUESTED — запрос отправлен организатору и ожидает его подтверждения")
     val status: String,
 
     @Schema(description = "Человекочитаемое сообщение")
