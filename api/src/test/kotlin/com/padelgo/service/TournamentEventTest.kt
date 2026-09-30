@@ -293,4 +293,18 @@ class TournamentEventTest {
 
         assertEquals(listOf("Обычный"), board.map { it.name })
     }
+
+    @Test
+    fun `скрытые игроки не попадают в общий рейтинг-лидерборд`() {
+        whenever(playerRepo.findAll()).doReturn(
+            listOf(
+                Player(id = UUID.randomUUID(), name = "Обычный", rating = 1200),
+                Player(id = UUID.randomUUID(), name = "test7", rating = 1100, hidden = true)
+            )
+        )
+
+        val board = service.listPlayersByRating()
+
+        assertEquals(listOf("Обычный"), board.map { it.name })
+    }
 }

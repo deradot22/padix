@@ -125,6 +125,12 @@ class AdminController(
         }
         req.disabled?.let { user.disabled = it }
         req.isFeedbackAdmin?.let { user.isFeedbackAdmin = it }
+        req.hidden?.let { nextHidden ->
+            if (player != null) {
+                player.hidden = nextHidden
+                players.save(player)
+            }
+        }
         users.save(user)
         return AdminUserResponse.from(user.id!!, user.email, user.publicId, user.disabled, user.surveyCompleted, user.isFeedbackAdmin, player)
     }
@@ -139,6 +145,9 @@ class AdminController(
         user.passwordHash = encoder.encode(UUID.randomUUID().toString())
         if (player != null) {
             player.name = "Удалённый пользователь #${user.publicId}"
+            // Клиенты отсекают удалённых по префиксу имени; флаг убирает игрока из выдачи
+            // на бэкенде, поэтому он исчезает и в уже выпущенных сборках приложения.
+            player.hidden = true
             players.save(player)
         }
         users.save(user)
@@ -307,7 +316,9 @@ data class AdminUpdateUserRequest(
     val password: String? = null,
     val disabled: Boolean? = null,
     /** Назначить/снять «admin для обратной связи» — получает TG-уведомления о новых тикетах. */
-    val isFeedbackAdmin: Boolean? = null
+    val isFeedbackAdmin: Boolean? = null,
+    /** Скрыть/показать игрока в публичных списках: лидерборд и пикеры «добавить игрока». */
+    val hidden: Boolean? = null
 )
 
 data class AdminRestoreUserRequest(
@@ -340,7 +351,9 @@ data class AdminUserResponse(
     val gamesPlayed: Int,
     val surveyCompleted: Boolean,
     val disabled: Boolean,
-    val isFeedbackAdmin: Boolean
+    val isFeedbackAdmin: Boolean,
+    /** true — игрок скрыт из публичных списков игроков. */
+    val hidden: Boolean
 ) {
     companion object {
         fun from(
@@ -363,7 +376,8 @@ data class AdminUserResponse(
                 gamesPlayed = player?.gamesPlayed ?: 0,
                 surveyCompleted = surveyCompleted,
                 disabled = disabled,
-                isFeedbackAdmin = isFeedbackAdmin
+                isFeedbackAdmin = isFeedbackAdmin,
+                hidden = player?.hidden ?: false
             )
         }
     }

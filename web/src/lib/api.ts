@@ -321,6 +321,8 @@ export type AdminUser = {
   disabled: boolean;
   /** Получает TG-уведомления о новых тикетах обратной связи. */
   isFeedbackAdmin: boolean;
+  /** true — игрок скрыт из публичных списков игроков (лидерборд и пикеры). */
+  hidden: boolean;
 };
 
 export type FriendsSnapshot = {
@@ -828,7 +830,7 @@ export const api = {
   adminLogin: (username: string, password: string) =>
     request<{ token: string }>("/api/admin/login", { method: "POST", body: JSON.stringify({ username, password }) }),
   adminListUsers: () => adminRequest<AdminUser[]>("/api/admin/users"),
-  adminUpdateUser: (userId: string, payload: { email?: string; name?: string; password?: string; disabled?: boolean; isFeedbackAdmin?: boolean }) =>
+  adminUpdateUser: (userId: string, payload: { email?: string; name?: string; password?: string; disabled?: boolean; isFeedbackAdmin?: boolean; hidden?: boolean }) =>
     adminRequest<AdminUser>(`/api/admin/users/${userId}`, { method: "PATCH", body: JSON.stringify(payload) }),
   adminDeleteUser: (userId: string) => adminRequest<AdminUser>(`/api/admin/users/${userId}`, { method: "DELETE" }),
   adminRestoreUser: (userId: string, payload: { email: string; password: string; name?: string }) =>
