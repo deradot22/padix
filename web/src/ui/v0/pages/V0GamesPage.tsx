@@ -130,16 +130,29 @@ export function V0GamesPage(props: { me: any }) {
 
   // Фильтр-вкладка (Все / 🌐 Открытые / 🔒 Мои) и поиск по названию.
   // Сохраняем в localStorage чтобы не сбрасывалось при навигации.
+  // «Все» — вся лента вошедшего пользователя, а это пока только его игры и игры друзей
+  // (/api/events/feed); общий список всех игр вернётся вместе с клубами.
   type FilterTab = "all" | "public" | "mine";
   const [filterTab, setFilterTab] = useState<FilterTab>(() => {
-    const stored = typeof window !== "undefined" ? window.localStorage.getItem("padix.games.filterTab") : null;
-    return (stored === "public" || stored === "mine" || stored === "all") ? stored : "all";
+    try {
+      const stored = window.localStorage.getItem("padix.games.filterTab");
+      return stored === "public" || stored === "mine" ? stored : "all";
+    } catch {
+      return "all";
+    }
   });
   const [searchQuery, setSearchQuery] = useState<string>(() => {
     return typeof window !== "undefined" ? (window.localStorage.getItem("padix.games.searchQuery") ?? "") : "";
   });
-  useEffect(() => { try { window.localStorage.setItem("padix.games.filterTab", filterTab); } catch { /* ignore */ } }, [filterTab]);
+  const chooseFilterTab = (tab: FilterTab) => {
+    setFilterTab(tab);
+    try { window.localStorage.setItem("padix.games.filterTab", tab); } catch { /* ignore */ }
+  };
   useEffect(() => { try { window.localStorage.setItem("padix.games.searchQuery", searchQuery); } catch { /* ignore */ } }, [searchQuery]);
+
+  // Вошедшему — игры его круга, гостю — открытые игры, как и раньше.
+  const loadGames = (from: string, to: string) =>
+    props.me ? api.getFeed(from, to) : api.getUpcomingEvents(from, to);
 
   useEffect(() => {
     if (props.me && !props.me.surveyCompleted) return;
@@ -149,8 +162,7 @@ export function V0GamesPage(props: { me: any }) {
     const now = new Date();
     const from = formatDate(now);
     const to = formatDate(new Date(now.getFullYear(), now.getMonth(), now.getDate() + 14));
-    api
-      .getUpcomingEvents(from, to)
+    loadGames(from, to)
       .then((d) => setEvents((d ?? []).filter((e) => e.status !== "FINISHED")))
       .catch((e: unknown) => {
         setUnauthorized(isUnauthorizedError(e));
@@ -189,7 +201,7 @@ export function V0GamesPage(props: { me: any }) {
     const to = formatDate(new Date(date.getFullYear(), date.getMonth() + 1, 0));
     setCalendarLoading(true);
     try {
-      const res = await api.getUpcomingEvents(from, to);
+      const res = await loadGames(from, to);
       setCalendarEvents(res ?? []);
     } catch {
       setCalendarEvents([]);
@@ -219,7 +231,7 @@ export function V0GamesPage(props: { me: any }) {
       const from = formatDate(new Date(restoredDate.getFullYear(), restoredDate.getMonth(), 1));
       const to = formatDate(new Date(restoredDate.getFullYear(), restoredDate.getMonth() + 1, 0));
       setCalendarLoading(true);
-      api.getUpcomingEvents(from, to)
+      loadGames(from, to)
         .then(res => {
           setCalendarEvents(res ?? []);
           // Восстановить выбранные события для даты
@@ -273,7 +285,7 @@ export function V0GamesPage(props: { me: any }) {
             <button
               key={tab.id}
               type="button"
-              onClick={() => setFilterTab(tab.id)}
+              onClick={() => chooseFilterTab(tab.id)}
               className={cn(
                 "inline-flex h-8 items-center gap-1.5 rounded-full border px-3 text-xs font-medium transition-colors",
                 active

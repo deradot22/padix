@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { ChevronDown, Filter, Gamepad2, Search, Trophy, TrendingUp, Users } from "lucide-react";
+import { ChevronDown, Filter, Gamepad2, Globe, Search, Trophy, TrendingUp, Users, UsersRound } from "lucide-react";
 import { api, hasToken, isUnauthorizedError, Player } from "../../../lib/api";
 import { ntrpLevel } from "../../../lib/rating";
 import { Badge } from "@/components/ui/badge";
@@ -37,7 +37,14 @@ const TR = {
     en: "No players match the filter. Try changing it.",
   },
   "empty.none": { ru: "Пока нет участников.", en: "No players yet." },
+  "empty.friends": {
+    ru: "Среди друзей пока некого сравнить. Добавьте друзей из общего рейтинга — вкладка «Все».",
+    en: "No friends to compare with yet. Add friends from the full rating — the «All» tab.",
+  },
+  "scope.friends": { ru: "Друзья", en: "Friends" },
+  "scope.all": { ru: "Все", en: "All" },
   "table.title": { ru: "Полный рейтинг", en: "Full rating" },
+  "table.titleFriends": { ru: "Рейтинг среди друзей", en: "Rating among friends" },
   "table.player": { ru: "Игрок", en: "Player" },
   "table.rating": { ru: "Рейтинг", en: "Rating" },
   "table.matches": { ru: "Матчей", en: "Matches" },
@@ -65,9 +72,25 @@ const NTRP_COLORS: Record<string, string> = {
   "5.0+": "text-rose-700 dark:text-rose-400",
 };
 
+type RatingScope = "friends" | "all";
+const SCOPE_STORAGE_KEY = "padix_rating_scope";
+
+function readStoredScope(): RatingScope | null {
+  try {
+    const v = localStorage.getItem(SCOPE_STORAGE_KEY);
+    return v === "friends" || v === "all" ? v : null;
+  } catch {
+    return null;
+  }
+}
+
 export function V0RatingPage(props: { authed: boolean; me?: { playerId?: string } | null }) {
   const { t, lang } = useI18n(TR);
   const [data, setData] = useState<Player[] | null>(null);
+  // «Круг» пользователя (он сам и друзья) — источник вкладки «Друзья».
+  const [circle, setCircle] = useState<Player[] | null>(null);
+  // Явный выбор вкладки; null — ещё не выбирали, тогда решаем по умолчанию ниже.
+  const [chosenScope, setChosenScope] = useState<RatingScope | null>(readStoredScope);
   const [error, setError] = useState<string | null>(null);
   // 401 от API: вместо технической ошибки предлагаем войти или зарегистрироваться.
   const [unauthorized, setUnauthorized] = useState(false);
@@ -81,12 +104,27 @@ export function V0RatingPage(props: { authed: boolean; me?: { playerId?: string 
   const myRowRef = useRef<HTMLTableRowElement | null>(null);
   const meId = props.me?.playerId;
 
+  // По умолчанию — «Друзья», если друзья есть; новичку без друзей сразу показываем всех,
+  // чтобы первая встреча с рейтингом не была пустой таблицей из одного себя.
+  const scope: RatingScope =
+    !props.authed || circle === null ? "all" : chosenScope ?? (circle.length > 1 ? "friends" : "all");
+  const source = scope === "friends" ? circle : data;
+
+  const chooseScope = (next: RatingScope) => {
+    setChosenScope(next);
+    try {
+      localStorage.setItem(SCOPE_STORAGE_KEY, next);
+    } catch {
+      // Хранилище недоступно (приватный режим) — просто не запоминаем выбор.
+    }
+  };
+
   const ratingStats = useMemo(() => {
-    const list = (data ?? []).filter((p) => !p.name.startsWith("Удалённый пользователь"));
+    const list = (source ?? []).filter((p) => !p.name.startsWith("Удалённый пользователь"));
     const calibrated = list.filter((p) => (p.calibrationEventsRemaining ?? 0) === 0).length;
     const notCalibrated = list.filter((p) => (p.calibrationEventsRemaining ?? 0) > 0).length;
     return { calibrated, notCalibrated, total: list.length };
-  }, [data]);
+  }, [source]);
 
   useEffect(() => {
     let cancelled = false;
@@ -117,6 +155,16 @@ export function V0RatingPage(props: { authed: boolean; me?: { playerId?: string 
     if (!props.authed || !hasToken()) return;
     let cancelled = false;
     api
+      .getTopPlayers()
+      .then((c) => { if (!cancelled) setCircle(c); })
+      .catch(() => { if (!cancelled) setCircle(null); });
+    return () => { cancelled = true; };
+  }, [props.authed]);
+
+  useEffect(() => {
+    if (!props.authed || !hasToken()) return;
+    let cancelled = false;
+    api
       .getFriends()
       .then((f) => { if (!cancelled) setFriends(f); })
       .catch(() => { if (!cancelled) setFriends(null); });
@@ -124,14 +172,14 @@ export function V0RatingPage(props: { authed: boolean; me?: { playerId?: string 
   }, [props.authed]);
 
   const basePlayers = useMemo(() => {
-    let list = (data ?? []).filter((p) => !p.name.startsWith("Удалённый пользователь") && (p.rating ?? 0) > 0);
+    let list = (source ?? []).filter((p) => !p.name.startsWith("Удалённый пользователь") && (p.rating ?? 0) > 0);
     if (calibrationFilter === "calibrated") list = list.filter((p) => (p.calibrationEventsRemaining ?? 0) === 0);
     else if (calibrationFilter === "in_calibration") list = list.filter((p) => (p.calibrationEventsRemaining ?? 0) > 0);
     // Скрытые рейтинги (полгода без игр) — в конец списка, чтобы позиция не выдавала число.
     return list.sort(
       (a, b) => Number(a.ratingHidden ?? false) - Number(b.ratingHidden ?? false) || (b.rating ?? 0) - (a.rating ?? 0)
     );
-  }, [data, calibrationFilter]);
+  }, [source, calibrationFilter]);
 
   const globalRankMap = useMemo(() => {
     const map = new Map<string, number>();
@@ -305,7 +353,7 @@ export function V0RatingPage(props: { authed: boolean; me?: { playerId?: string 
     );
   };
 
-  const hasAnyPlayer = !loading && !error && (data?.length ?? 0) > 0;
+  const hasAnyPlayer = !loading && !error && (source?.length ?? 0) > 0;
   const hasData = !loading && !error && (filteredPlayers?.length ?? 0) > 0;
   const topPlayersLocal = hasData ? filteredPlayers.slice(0, 3) : [];
 
@@ -435,6 +483,38 @@ export function V0RatingPage(props: { authed: boolean; me?: { playerId?: string 
         </div>
       </div>
 
+      {props.authed && circle !== null && (
+        <div className="relative flex rounded-xl border border-border bg-secondary/30 p-1 sm:w-fit" role="tablist">
+          <div
+            className="absolute top-1 bottom-1 rounded-lg bg-primary shadow-lg transition-all duration-300 ease-in-out motion-reduce:transition-none"
+            style={{
+              width: "calc(50% - 4px)",
+              left: scope === "friends" ? "4px" : "calc(50%)",
+            }}
+          />
+          {([
+            { key: "friends", icon: UsersRound, label: t("scope.friends") },
+            { key: "all", icon: Globe, label: t("scope.all") },
+          ] as const).map(({ key, icon: Icon, label }) => (
+            <button
+              key={key}
+              type="button"
+              role="tab"
+              aria-selected={scope === key}
+              onClick={() => chooseScope(key)}
+              className={cn(
+                "relative z-10 flex-1 sm:flex-none flex items-center justify-center gap-2 rounded-lg px-6 py-2.5 sm:py-2 text-sm font-semibold transition-colors duration-300 min-w-[120px]",
+                "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                scope === key ? "text-primary-foreground" : "text-muted-foreground hover:text-foreground",
+              )}
+            >
+              <Icon className="h-4 w-4" />
+              {label}
+            </button>
+          ))}
+        </div>
+      )}
+
       {topCards}
 
       {hasAnyPlayer && (
@@ -522,7 +602,7 @@ export function V0RatingPage(props: { authed: boolean; me?: { playerId?: string 
       )}
       {!loading && !error && !hasData && (
         <div className="text-sm text-muted-foreground py-8 text-center">
-          {hasAnyPlayer ? t("empty.filtered") : t("empty.none")}
+          {hasAnyPlayer ? t("empty.filtered") : scope === "friends" ? t("empty.friends") : t("empty.none")}
         </div>
       )}
 
@@ -532,7 +612,7 @@ export function V0RatingPage(props: { authed: boolean; me?: { playerId?: string 
             <div className="flex items-center justify-between">
               <CardTitle className="flex items-center gap-2 text-base sm:text-lg">
                 <TrendingUp className="h-4 w-4 sm:h-5 sm:w-5 text-primary" />
-                {t("table.title")}
+                {scope === "friends" ? t("table.titleFriends") : t("table.title")}
               </CardTitle>
               <Badge variant="secondary" className="text-xs tabular-nums">
                 {filteredPlayers.length} {plural(lang, filteredPlayers.length, ["игрок", "игрока", "игроков"], ["player", "players"])}

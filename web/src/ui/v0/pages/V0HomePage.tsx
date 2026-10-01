@@ -28,15 +28,21 @@ const TR = {
     en: "{calibrated} calibrated, {notCalibrated} in calibration",
   },
   "stats.gamesToday": { ru: "Игр сегодня", en: "Games today" },
-  "stats.matchesWeek": { ru: "Матчей за неделю", en: "Matches this week" },
-  "upcoming.title": { ru: "Ближайшие игры", en: "Upcoming games" },
+  "stats.matchesWeek": { ru: "Игр за неделю", en: "Games this week" },
+  "upcoming.title": { ru: "Ваши игры и игры друзей", en: "Your and friends' games" },
   "upcoming.all": { ru: "Все игры", en: "All games" },
-  "upcoming.empty": { ru: "Ближайших игр нет.", en: "No upcoming games." },
+  "upcoming.empty": {
+    ru: "У вас и ваших друзей пока нет ближайших игр. Найдите игру в общем списке.",
+    en: "You and your friends have no upcoming games yet. Find one in the full list.",
+  },
   "upcoming.registered": { ru: "Вы записаны", en: "You're registered" },
   "upcoming.join": { ru: "Вступить", en: "Join" },
-  "top.title": { ru: "Топ игроков", en: "Top players" },
+  "top.title": { ru: "Топ среди друзей", en: "Top among friends" },
   "top.fullRating": { ru: "Полный рейтинг", en: "Full rating" },
-  "top.empty": { ru: "Пока нет участников.", en: "No players yet." },
+  "top.empty": {
+    ru: "Добавьте друзей, чтобы сравнить рейтинг.",
+    en: "Add friends to compare ratings.",
+  },
   "common.loading": { ru: "Загрузка…", en: "Loading…" },
   "join.noPlayerId": {
     ru: "Не удалось определить игрока (playerId). Перезайдите в аккаунт.",
@@ -146,6 +152,7 @@ export function V0HomePage(props: { me: any }) {
   const [events, setEvents] = useState<Event[] | null>(null);
   const [statsEvents, setStatsEvents] = useState<Event[] | null>(null);
   const [rating, setRating] = useState<Player[] | null>(null);
+  const [circleTop, setCircleTop] = useState<Player[] | null>(null);
   const [loading, setLoading] = useState(true);
   const [joiningId, setJoiningId] = useState<string | null>(null);
   const [joinError, setJoinError] = useState<string | null>(null);
@@ -160,19 +167,25 @@ export function V0HomePage(props: { me: any }) {
     const upcomingTo = formatDate(new Date(now.getFullYear(), now.getMonth(), now.getDate() + 14));
     const statsFrom = formatDate(new Date(now.getFullYear(), now.getMonth(), now.getDate() - 6));
     const statsTo = formatDate(now);
-    const eventsReq = api.getUpcomingEvents(upcomingFrom, upcomingTo);
+    // Списки главной — только «круг» пользователя (он сам и друзья): общая лента
+    // и общий рейтинг включают всех подряд, в том числе из других городов.
+    // Статистика в плитках остаётся по всей платформе.
+    const eventsReq = api.getFeed(upcomingFrom, upcomingTo);
+    const topReq = api.getTopPlayers();
     const statsReq = api.getUpcomingEvents(statsFrom, statsTo);
 
-    Promise.all([eventsReq, ratingReq, statsReq])
-      .then(([e, r, s]) => {
+    Promise.all([eventsReq, ratingReq, statsReq, topReq])
+      .then(([e, r, s, top]) => {
         setEvents(e ?? []);
         setRating(r ?? []);
         setStatsEvents(s ?? []);
+        setCircleTop(top ?? []);
       })
       .catch(() => {
         setEvents([]);
         setRating([]);
         setStatsEvents([]);
+        setCircleTop([]);
       })
       .finally(() => setLoading(false));
   }, [props.me]);
@@ -209,8 +222,10 @@ export function V0HomePage(props: { me: any }) {
   const stats = useMemo(() => {
     const now = new Date();
     const todayIso = formatDate(now);
-    const gamesToday = (statsEvents ?? []).filter((e) => e.date === todayIso).length;
-    const gamesWeek = (statsEvents ?? []).length;
+    // Считаем игры, которые реально проходят: без черновиков и отменённых.
+    const held = (statsEvents ?? []).filter((e) => e.status !== "CANCELLED" && e.status !== "DRAFT");
+    const gamesToday = held.filter((e) => e.date === todayIso).length;
+    const gamesWeek = held.length;
     const list = (rating ?? []).filter((p) => !p.name.startsWith("Удалённый пользователь"));
     const calibrated = list.filter((p) => (p.calibrationEventsRemaining ?? 0) === 0).length;
     const notCalibrated = list.filter((p) => (p.calibrationEventsRemaining ?? 0) > 0).length;
@@ -219,14 +234,14 @@ export function V0HomePage(props: { me: any }) {
 
   const upcoming = (events ?? []).filter((e) => e.status !== "FINISHED").slice(0, 2);
   const topPlayers = useMemo(() => {
-    const list = (rating ?? []).filter(
+    const list = (circleTop ?? []).filter(
       (p) =>
         !p.name.startsWith("Удалённый пользователь") &&
         p.calibrationEventsRemaining === 0 &&
         (p.rating ?? 0) > 0,
     );
     return list.slice(0, 3);
-  }, [rating]);
+  }, [circleTop]);
 
   async function joinEvent(eventId: string) {
     if (!props.me) {
