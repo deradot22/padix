@@ -21,6 +21,19 @@ class AuthService(
 ) {
     private val rng = SecureRandom()
 
+    /**
+     * Фиксирует, что пользователь принял Условия и Политику версии [version] — доказательство
+     * согласия на случай спора. Хранится последнее принятие; старую версию поверх новой не пишем.
+     */
+    @Transactional
+    fun acceptTerms(userId: UUID, version: Int) {
+        val user = users.findById(userId).orElseThrow { ApiException(HttpStatus.UNAUTHORIZED, "Unauthorized") }
+        if ((user.termsVersion ?: 0) > version) return
+        user.termsVersion = version
+        user.termsAcceptedAt = java.time.Instant.now()
+        users.save(user)
+    }
+
     @Transactional
     fun register(req: RegisterRequest): AuthResponse {
         val email = req.email.trim().lowercase()

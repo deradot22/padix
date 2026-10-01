@@ -4,6 +4,7 @@ import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { Header } from "@/components/header";
 import { BottomNav } from "@/components/bottom-nav";
 import { EmailVerificationBanner } from "@/components/email-verification-banner";
+import { SiteFooter } from "@/components/site-footer";
 
 export function MainLayout(props: {
   children: React.ReactNode;
@@ -56,6 +57,7 @@ export function MainLayout(props: {
             {props.children}
           </motion.div>
         </AnimatePresence>
+        <SiteFooter />
       </main>
       {props.authed ? <BottomNav /> : null}
     </div>

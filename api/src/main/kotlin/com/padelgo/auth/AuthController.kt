@@ -210,6 +210,14 @@ class MeController(
     @GetMapping
     fun me(): MeResponse = auth.me(principal())
 
+    @Operation(
+        summary = "Зафиксировать принятие Условий и Политики",
+        description = "Клиент вызывает после входа/регистрации с экрана, где показана строка «Регистрируясь, " +
+            "вы принимаете Условия и Политику». Хранятся дата и версия последнего принятия."
+    )
+    @PostMapping("/terms-acceptance")
+    fun acceptTerms(@Valid @RequestBody req: AcceptTermsRequest) = auth.acceptTerms(principal().userId, req.version)
+
     @Operation(summary = "Обновить аватар (base64 data URL)")
     @PatchMapping("/avatar")
     fun updateAvatar(@RequestBody req: UpdateAvatarRequest): MeResponse = auth.updateAvatar(principal(), req)
@@ -296,13 +304,20 @@ class MeController(
     fun ratingNotification(): com.padelgo.domain.UserRatingNotification? =
         ratingNotificationRepo.findFirstByUserIdAndSeenAtIsNullOrderByCreatedAtDesc(principal().userId)
 
-    @Operation(summary = "Отметить уведомление о рейтинге как прочитанное")
+    @Operation(
+        summary = "Отметить уведомление о рейтинге как прочитанное",
+        description = "Заодно гасит все более старые непрочитанные: в них рейтинг уже устарел, " +
+            "и после нескольких игр клиент иначе показал бы цепочку плашек с неактуальными цифрами."
+    )
     @PostMapping("/rating-notification/{id}/seen")
     fun markRatingNotificationSeen(@PathVariable id: java.util.UUID) {
         val n = ratingNotificationRepo.findById(id).orElse(null) ?: return
         if (n.userId != principal().userId) return
-        n.seenAt = java.time.Instant.now()
-        ratingNotificationRepo.save(n)
+        val now = java.time.Instant.now()
+        val stale = ratingNotificationRepo.findAllByUserIdAndSeenAtIsNull(n.userId!!)
+            .filter { it.id == n.id || (it.createdAt != null && n.createdAt != null && !it.createdAt!!.isAfter(n.createdAt)) }
+        stale.forEach { it.seenAt = now }
+        ratingNotificationRepo.saveAll(stale.ifEmpty { listOf(n.also { it.seenAt = now }) })
     }
 
     private fun principal(): JwtPrincipal {

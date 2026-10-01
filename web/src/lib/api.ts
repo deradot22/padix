@@ -475,7 +475,17 @@ export const api = {
     const qs = params.toString();
     return request<Event[]>(`/api/events/upcoming${qs ? `?${qs}` : ""}`);
   },
+  /** Лента главной: игры пользователя и его друзей (без чужих, отменённых и сыгранных). */
+  getFeed: (from?: string, to?: string) => {
+    const params = new URLSearchParams();
+    if (from) params.set("from", from);
+    if (to) params.set("to", to);
+    const qs = params.toString();
+    return request<Event[]>(`/api/events/feed${qs ? `?${qs}` : ""}`);
+  },
   getRating: () => request<Player[]>("/api/players/rating"),
+  /** Топ главной: сам пользователь и его друзья, по рейтингу. */
+  getTopPlayers: () => request<Player[]>("/api/players/top"),
   getEventDetails: (eventId: string) => request<EventDetails>(`/api/events/${eventId}`),
   registerForEvent: (eventId: string, playerId: string) =>
     request(`/api/events/${eventId}/register`, {
@@ -814,6 +824,9 @@ export const api = {
     request<{ date: string; rating: number; delta: number | null; eventId: string | null; kind?: "MATCH" | "DECAY" }[]>("/api/me/rating-history"),
   getRatingNotification: () =>
     request<{ id: string; newRating: number; delta: number; eventId: string } | null>("/api/me/rating-notification"),
+  /** Пользователь принял Условия и Политику версии [version] (см. lib/terms.ts). */
+  acceptTerms: (version: number) =>
+    request("/api/me/terms-acceptance", { method: "POST", body: JSON.stringify({ version }) }),
   markRatingNotificationSeen: (id: string) =>
     request(`/api/me/rating-notification/${id}/seen`, { method: "POST" }),
 
