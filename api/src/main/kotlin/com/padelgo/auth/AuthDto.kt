@@ -24,6 +24,13 @@ data class RegisterRequest(
     val gender: String? = null
 )
 
+@Schema(description = "Пользователь принял Условия и Политику конфиденциальности указанной версии")
+data class AcceptTermsRequest(
+    @field:jakarta.validation.constraints.Min(1)
+    @Schema(description = "Версия документов, которую клиент показал пользователю", example = "1")
+    val version: Int,
+)
+
 @Schema(description = "Запрос на вход")
 data class LoginRequest(
     @field:Email

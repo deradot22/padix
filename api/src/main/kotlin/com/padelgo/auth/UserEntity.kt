@@ -57,6 +57,14 @@ class UserAccount(
     @Column(name = "disabled", nullable = false)
     var disabled: Boolean = false,
 
+    /** Когда пользователь последний раз принял Условия и Политику (см. [termsVersion]). */
+    @Column(name = "terms_accepted_at")
+    var termsAcceptedAt: Instant? = null,
+
+    /** Версия принятых документов; растёт, когда Условия или Политика меняются. */
+    @Column(name = "terms_version")
+    var termsVersion: Int? = null,
+
     @Column(name = "calibration_events_remaining", nullable = false)
     var calibrationEventsRemaining: Int = 0,
 

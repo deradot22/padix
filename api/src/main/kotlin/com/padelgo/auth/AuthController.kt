@@ -210,6 +210,14 @@ class MeController(
     @GetMapping
     fun me(): MeResponse = auth.me(principal())
 
+    @Operation(
+        summary = "Зафиксировать принятие Условий и Политики",
+        description = "Клиент вызывает после входа/регистрации с экрана, где показана строка «Регистрируясь, " +
+            "вы принимаете Условия и Политику». Хранятся дата и версия последнего принятия."
+    )
+    @PostMapping("/terms-acceptance")
+    fun acceptTerms(@Valid @RequestBody req: AcceptTermsRequest) = auth.acceptTerms(principal().userId, req.version)
+
     @Operation(summary = "Обновить аватар (base64 data URL)")
     @PatchMapping("/avatar")
     fun updateAvatar(@RequestBody req: UpdateAvatarRequest): MeResponse = auth.updateAvatar(principal(), req)
