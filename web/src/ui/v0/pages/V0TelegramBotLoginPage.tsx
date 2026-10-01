@@ -1,4 +1,5 @@
 import { FormEvent, useEffect, useRef, useState } from "react";
+import { TermsNotice } from "@/components/terms-notice";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { Loader2, CheckCircle2, XCircle, ExternalLink, Mail } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -354,6 +355,7 @@ export function V0TelegramBotLoginPage(props: { onAuth: (me: MeResponse) => void
               <Button type="submit" disabled={completing} className="w-full">
                 {completing ? t("tgLogin.creating") : t("tgLogin.create")}
               </Button>
+              <TermsNotice />
             </form>
           ) : status.status === "REJECTED" ? (
             <div className="flex flex-col items-center gap-4 text-center">

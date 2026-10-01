@@ -1,4 +1,5 @@
 import { FormEvent, useEffect, useState } from "react";
+import { TermsNotice } from "@/components/terms-notice";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { api, AuthConfig, setAdminToken, setToken, TelegramAuthPayload } from "../../../lib/api";
 import { TelegramLoginButton } from "@/components/telegram-login-button";
@@ -210,6 +211,7 @@ export function V0LoginPage(props: { onAuth: (me: any) => void }) {
               </div>
             </div>
           ) : null}
+          <TermsNotice className="mt-6 text-center text-xs text-muted-foreground" />
         </div>
 
         <div className="rounded-xl border border-border bg-card p-6">

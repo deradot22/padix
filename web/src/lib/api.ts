@@ -824,6 +824,9 @@ export const api = {
     request<{ date: string; rating: number; delta: number | null; eventId: string | null; kind?: "MATCH" | "DECAY" }[]>("/api/me/rating-history"),
   getRatingNotification: () =>
     request<{ id: string; newRating: number; delta: number; eventId: string } | null>("/api/me/rating-notification"),
+  /** Пользователь принял Условия и Политику версии [version] (см. lib/terms.ts). */
+  acceptTerms: (version: number) =>
+    request("/api/me/terms-acceptance", { method: "POST", body: JSON.stringify({ version }) }),
   markRatingNotificationSeen: (id: string) =>
     request(`/api/me/rating-notification/${id}/seen`, { method: "POST" }),
 

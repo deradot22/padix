@@ -1,7 +1,7 @@
 "use client";
 
 import { Link, NavLink, useLocation, useNavigate } from "react-router-dom";
-import { Bell, Check, Gamepad2, Languages, LogOut, Menu, MessageSquare, Moon, Plus, Settings, Sun, TrendingUp, User, UserPlus, X } from "lucide-react";
+import { Bell, Check, Gamepad2, Info, Languages, LogOut, Menu, MessageSquare, Moon, Plus, Settings, Sun, TrendingUp, User, UserPlus, X } from "lucide-react";
 import { motion, AnimatePresence, useReducedMotion } from "motion/react";
 import { createPortal } from "react-dom";
 import { Button } from "@/components/ui/button";
@@ -38,6 +38,7 @@ const TR = {
   "menu": { ru: "Меню", en: "Menu" },
   "settings": { ru: "Настройки", en: "Settings" },
   "feedback": { ru: "Обратная связь", en: "Feedback" },
+  "about": { ru: "О приложении", en: "About" },
   "theme.toLight": { ru: "Переключить на светлую тему", en: "Switch to light theme" },
   "theme.toDark": { ru: "Переключить на тёмную тему", en: "Switch to dark theme" },
   "theme.light": { ru: "Светлая тема", en: "Light theme" },
@@ -518,6 +519,17 @@ export function Header(props: {
                   type="button"
                   onClick={() => {
                     setSettingsOpen(false);
+                    nav("/about");
+                  }}
+                  className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm font-medium text-muted-foreground hover:bg-secondary/50 hover:text-foreground transition-colors"
+                >
+                  <Info className="h-4 w-4" />
+                  {t("about")}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSettingsOpen(false);
                     props.onLogout?.();
                   }}
                   className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm font-medium text-muted-foreground hover:bg-secondary/50 hover:text-foreground transition-colors"
@@ -599,6 +611,21 @@ export function Header(props: {
                   >
                     <MessageSquare className="h-4 w-4" />
                     {t("feedback")}
+                  </NavLink>
+                  <NavLink
+                    to="/about"
+                    onClick={() => setMobileOpen(false)}
+                    className={({ isActive }) =>
+                      cn(
+                        "rounded-lg px-3 py-2 text-sm font-medium transition-all duration-200 flex items-center gap-2",
+                        isActive || pathname === "/about"
+                          ? "bg-primary/15 font-semibold text-primary"
+                          : "text-muted-foreground hover:bg-foreground/5 hover:text-foreground",
+                      )
+                    }
+                  >
+                    <Info className="h-4 w-4" />
+                    {t("about")}
                   </NavLink>
                 </>
               )}

@@ -16,6 +16,8 @@ import { V0RegisterPage } from "./v0/pages/V0RegisterPage";
 import { V0SurveyPage } from "./v0/pages/V0SurveyPage";
 import { V0AdminPage } from "./v0/pages/V0AdminPage";
 import { V0AdminFeedbackPage } from "./v0/pages/V0AdminFeedbackPage";
+import { confirmTermsIfShown } from "../lib/terms";
+import { V0AboutPage } from "./v0/pages/V0AboutPage";
 import { V0FeedbackPage } from "./v0/pages/V0FeedbackPage";
 import { V0LandingPage } from "./v0/pages/V0LandingPage";
 import { V0VerifyEmailPage } from "./v0/pages/V0VerifyEmailPage";
@@ -44,6 +46,12 @@ export function App() {
   const location = useLocation();
   const { t, lang } = useI18n(TR);
   const [me, setMe] = useState<MeResponse | null>(null);
+  // Любой успешный вход: запоминаем пользователя и, если он видел строку о согласии с
+  // Условиями и Политикой, сообщаем серверу принятую версию.
+  const onAuthenticated = (m: MeResponse) => {
+    setMe(m);
+    void confirmTermsIfShown();
+  };
   const [meLoaded, setMeLoaded] = useState(false);
   const [surveyResult, setSurveyResult] = useState<null | { rating: number; remaining: number }>(null);
   const [notificationCount, setNotificationCount] = useState(0);
@@ -209,7 +217,8 @@ export function App() {
       || location.pathname === "/auth/telegram-login"
       || location.pathname === "/auth/telegram-link-confirm"
       || location.pathname === "/privacy"
-      || location.pathname === "/terms";
+      || location.pathname === "/terms"
+      || location.pathname === "/about";
     if (me && !me.surveyCompleted && !exempt) {
       navigate("/survey", { replace: true });
     }
@@ -257,8 +266,8 @@ export function App() {
         >
           {authed && <Route index element={<V0HomePage me={me} />} />}
           <Route path="rating" element={<V0RatingPage authed={authed} me={me} />} />
-          <Route path="login" element={<V0LoginPage onAuth={(m) => setMe(m)} />} />
-          <Route path="register" element={<V0RegisterPage onAuth={(m) => setMe(m)} />} />
+          <Route path="login" element={<V0LoginPage onAuth={onAuthenticated} />} />
+          <Route path="register" element={<V0RegisterPage onAuth={onAuthenticated} />} />
           <Route path="survey" element={<V0SurveyPage me={me} onDone={(m) => setMe(m)} onResult={(r) => setSurveyResult(r)} />} />
 
           <Route path="games" element={<V0GamesPage me={me} />} />
@@ -268,11 +277,12 @@ export function App() {
           <Route path="settings" element={<V0SettingsPage me={me} meLoaded={meLoaded} onMeUpdate={setMe} />} />
           <Route path="events/:eventId" element={<V0EventPage me={me} meLoaded={meLoaded} />} />
           <Route path="feedback" element={<V0FeedbackPage me={me} meLoaded={meLoaded} />} />
+          <Route path="about" element={<V0AboutPage />} />
           <Route path="verify-email" element={<V0VerifyEmailPage authed={authed} onVerified={refreshMeAfterVerify} />} />
-          <Route path="auth/oauth-callback" element={<V0OAuthCallbackPage onAuth={(m) => setMe(m)} />} />
-          <Route path="auth/telegram-callback" element={<V0TelegramCallbackPage onAuth={(m) => setMe(m)} />} />
-          <Route path="auth/telegram-login" element={<V0TelegramBotLoginPage onAuth={(m) => setMe(m)} />} />
-          <Route path="auth/telegram-link-confirm" element={<V0TelegramLinkConfirmPage onAuth={(m) => setMe(m)} />} />
+          <Route path="auth/oauth-callback" element={<V0OAuthCallbackPage onAuth={onAuthenticated} />} />
+          <Route path="auth/telegram-callback" element={<V0TelegramCallbackPage onAuth={onAuthenticated} />} />
+          <Route path="auth/telegram-login" element={<V0TelegramBotLoginPage onAuth={onAuthenticated} />} />
+          <Route path="auth/telegram-link-confirm" element={<V0TelegramLinkConfirmPage onAuth={onAuthenticated} />} />
           {/*
             /admin маршруты в DEV доступны всегда (быстрая локальная работа).
             В production публикуются только если VITE_ENABLE_ADMIN_UI=true —
