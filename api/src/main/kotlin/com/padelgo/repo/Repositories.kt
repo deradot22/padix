@@ -22,6 +22,34 @@ interface EventRepository : JpaRepository<Event, UUID> {
     fun findAllByDateOrderByStartTimeAsc(date: LocalDate): List<Event>
     fun findAllByDateBetweenOrderByDateAscStartTimeAsc(from: LocalDate, to: LocalDate): List<Event>
     fun findAllBySeriesId(seriesId: UUID): List<Event>
+
+    /** Игры, которые создал кто-то из [authorIds]. Источник ленты главной — см. HomeFeedService. */
+    fun findAllByCreatedByUserIdInAndDateBetweenAndStatusIn(
+        authorIds: Collection<UUID>,
+        from: LocalDate,
+        to: LocalDate,
+        statuses: Collection<com.padelgo.domain.EventStatus>
+    ): List<Event>
+
+    /** Игры, куда записан кто-то из [playerIds]. Второй источник ленты главной. */
+    @Query(
+        """
+        select e from Event e
+        where e.date between :from and :to
+          and e.status in :statuses
+          and e.id in (
+            select r.eventId from Registration r
+            where r.playerId in :playerIds
+              and r.status = com.padelgo.domain.RegistrationStatus.REGISTERED
+          )
+        """
+    )
+    fun findAllWithRegisteredPlayers(
+        @Param("playerIds") playerIds: Collection<UUID>,
+        @Param("from") from: LocalDate,
+        @Param("to") to: LocalDate,
+        @Param("statuses") statuses: Collection<com.padelgo.domain.EventStatus>
+    ): List<Event>
 }
 
 interface EventSeriesRepository : JpaRepository<com.padelgo.domain.EventSeries, UUID> {
@@ -141,6 +169,7 @@ interface RatingChangeRepository : JpaRepository<RatingChange, UUID> {
 
 interface UserRatingNotificationRepository : JpaRepository<com.padelgo.domain.UserRatingNotification, UUID> {
     fun findFirstByUserIdAndSeenAtIsNullOrderByCreatedAtDesc(userId: UUID): com.padelgo.domain.UserRatingNotification?
+    fun findAllByUserIdAndSeenAtIsNull(userId: UUID): List<com.padelgo.domain.UserRatingNotification>
     fun findAllByUserIdOrderByCreatedAtDesc(userId: UUID, pageable: org.springframework.data.domain.Pageable): List<com.padelgo.domain.UserRatingNotification>
     /** Нотификации по конкретному эвенту (для идемпотентного пересоздания после пересчёта). */
     fun findAllByEventId(eventId: UUID): List<com.padelgo.domain.UserRatingNotification>

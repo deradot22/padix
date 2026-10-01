@@ -51,7 +51,10 @@ data class PlayerResponse(
     val ratingHidden: Boolean = false,
 
     @Schema(description = "true — гость, вписанный организатором турнира вручную (без аккаунта)")
-    val isGuest: Boolean = false
+    val isGuest: Boolean = false,
+
+    @Schema(description = "Только в составе игры с фиксированными парами: общий id пары у двух партнёров. Иначе null.")
+    val teamId: UUID? = null
 ) {
     companion object {
         fun from(p: Player, calibrationEventsRemaining: Int? = null, publicId: String? = null) = PlayerResponse(
@@ -306,10 +309,13 @@ data class EventResponse(
     val maxRating: Int? = null,
 
     @Schema(description = "Вид события: REGULAR — обычная игра, TOURNAMENT — турнир (не влияет на рейтинг)")
-    val kind: com.padelgo.domain.EventKind = com.padelgo.domain.EventKind.REGULAR
+    val kind: com.padelgo.domain.EventKind = com.padelgo.domain.EventKind.REGULAR,
+
+    @Schema(description = "true — текущий пользователь записан на игру (бейдж «Вы записаны»). Заполняется в листингах /today, /upcoming, /feed; null для анонима и в остальных ответах.")
+    val registeredByMe: Boolean? = null
 ) {
     companion object {
-        fun from(e: Event, registeredCount: Int = 0, seriesTitle: String? = null) = EventResponse(
+        fun from(e: Event, registeredCount: Int = 0, seriesTitle: String? = null, registeredByMe: Boolean? = null) = EventResponse(
             id = e.id!!,
             title = e.title,
             date = e.date,
@@ -332,7 +338,8 @@ data class EventResponse(
             seriesTitle = seriesTitle,
             minRating = e.minRating,
             maxRating = e.maxRating,
-            kind = e.kind
+            kind = e.kind,
+            registeredByMe = registeredByMe
         )
     }
 }

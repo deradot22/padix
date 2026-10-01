@@ -115,6 +115,12 @@ class EventService(
      * - PUBLIC видны всем (включая анонимных)
      * - PRIVATE видны только автору, зарегистрированным игрокам и приглашённым
      */
+    /** Фиксированные пары: playerId -> общий team_id партнёров (только записанные, только у кого пара есть). */
+    fun teamIdsByPlayer(eventId: UUID): Map<UUID, UUID> =
+        regRepo.findAllByEventIdAndStatus(eventId)
+            .filter { it.playerId != null && it.teamId != null }
+            .associate { it.playerId!! to it.teamId!! }
+
     fun filterVisibleFor(events: List<Event>, userId: UUID?): List<Event> {
         if (events.isEmpty()) return events
         val publicEvents = events.filter { it.visibility == com.padelgo.domain.EventVisibility.PUBLIC }

@@ -34,8 +34,30 @@ private val logger = LoggerFactory.getLogger("EventController")
 class PlayerController(
     private val service: EventService,
     private val userRepo: com.padelgo.auth.UserRepository,
-    private val playerRepo: PlayerRepository
+    private val playerRepo: PlayerRepository,
+    private val homeFeed: com.padelgo.service.HomeFeedService
 ) {
+    @Operation(
+        summary = "Топ игроков для главной",
+        description = "Сам пользователь и его друзья, по рейтингу (убывание). Формат строк — как у /rating. " +
+            "Требует авторизации.",
+        security = [SecurityRequirement(name = "BearerAuth")]
+    )
+    @GetMapping("/top")
+    fun top(): List<PlayerResponse> {
+        val p = org.springframework.security.core.context.SecurityContextHolder.getContext().authentication?.principal
+        val userId = (p as? com.padelgo.auth.JwtPrincipal)?.userId
+            ?: throw ApiException(org.springframework.http.HttpStatus.UNAUTHORIZED, "Unauthorized")
+        val players = homeFeed.topPlayers(userId)
+        val usersByPlayerId = userRepo.findAllByPlayerIdIn(players.mapNotNull { it.id })
+            .associateBy { it.playerId!! }
+        return players.map { pl ->
+            val calibration = usersByPlayerId[pl.id]?.calibrationMatchesRemaining
+            val publicId = formatPublicId(usersByPlayerId[pl.id]?.publicId)
+            PlayerResponse.from(pl, calibration, publicId)
+        }
+    }
+
     @Operation(
         summary = "Список игроков по рейтингу (убывание)",
         description = "Публичный эндпоинт — токен не нужен. Используется для выбора игроков при регистрации на игру."
@@ -120,7 +142,8 @@ class EventController(
     private val playerRepo: PlayerRepository,
     private val userRepo: com.padelgo.auth.UserRepository,
     private val courtRepo: com.padelgo.repo.EventCourtRepository,
-    private val botClient: com.padelgo.service.BotClient
+    private val botClient: com.padelgo.service.BotClient,
+    private val homeFeed: com.padelgo.service.HomeFeedService
 ) {
     @Operation(
         summary = "Создать игру",
@@ -179,18 +202,17 @@ class EventController(
     @Operation(summary = "Игры на сегодня (включая PRIVATE — детали закрыты в getDetails)")
     @GetMapping("/today")
     fun today(): List<EventResponse> {
-        // Все эвенты светятся в листинге (включая PRIVATE c бэйджиком 🔒).
-        // Доступ к деталям контролирует getDetails (см. accessRestricted).
-        val events = service.getToday(LocalDate.now())
+        // Чужие приватные игры в листинг не попадают — та же проверка, что и для деталей игры.
+        val events = service.filterVisibleFor(service.getToday(LocalDate.now()), currentUserIdOrNull())
         val titles = service.seriesTitles(events)
-        return events.map { e -> EventResponse.from(e, service.getRegisteredCount(e.id!!), titles[e.seriesId]) }
+        return listing(events, titles)
     }
 
     @Operation(
         summary = "Предстоящие игры",
         description = "По умолчанию: от сегодня до +14 дней. Параметры from/to задают диапазон дат (YYYY-MM-DD). " +
-            "PRIVATE-игры тоже включаются в листинг (с visibility=PRIVATE), но детали в getDetails " +
-            "недоступны не-участникам (вернётся accessRestricted=true)."
+            "Приватные игры попадают в листинг только своим: организатору, записанному игроку " +
+            "или приглашённому. Аноним видит только публичные."
     )
     @GetMapping("/upcoming")
     fun upcoming(
@@ -201,9 +223,45 @@ class EventController(
     ): List<EventResponse> {
         val start = from?.let { LocalDate.parse(it) } ?: LocalDate.now()
         val end = to?.let { LocalDate.parse(it) } ?: start.plusDays(14)
-        val events = service.getUpcoming(start, end)
+        val events = service.filterVisibleFor(service.getUpcoming(start, end), currentUserIdOrNull())
         val titles = service.seriesTitles(events)
-        return events.map { e -> EventResponse.from(e, service.getRegisteredCount(e.id!!), titles[e.seriesId]) }
+        return listing(events, titles)
+    }
+
+    @Operation(
+        summary = "Лента игр для главной",
+        description = "Игры, которые создал или куда записался сам пользователь либо его друзья. " +
+            "Только предстоящие (без черновиков, отменённых и сыгранных); чужие приватные игры не попадают. " +
+            "По умолчанию: от сегодня до +14 дней. Требует авторизации.",
+        security = [SecurityRequirement(name = "BearerAuth")]
+    )
+    @GetMapping("/feed")
+    fun feed(
+        @Parameter(description = "Начало диапазона (YYYY-MM-DD), по умолчанию сегодня")
+        @RequestParam(required = false) from: String?,
+        @Parameter(description = "Конец диапазона (YYYY-MM-DD), по умолчанию from + 14 дней")
+        @RequestParam(required = false) to: String?
+    ): List<EventResponse> {
+        val userId = principalUserId()
+        val start = from?.let { LocalDate.parse(it) } ?: LocalDate.now()
+        val end = to?.let { LocalDate.parse(it) } ?: start.plusDays(14)
+        val events = homeFeed.upcomingGames(userId, start, end)
+        val titles = service.seriesTitles(events)
+        return listing(events, titles)
+    }
+
+    /** Карточки списка игр: число записанных, название серии и «записан ли я» одним запросом на весь список. */
+    private fun listing(events: List<Event>, titles: Map<UUID, String>): List<EventResponse> {
+        val playerId = currentPlayerIdOrNull()
+        val mine = playerId?.let { homeFeed.registeredEventIds(it, events.mapNotNull { e -> e.id }) }
+        return events.map { e ->
+            EventResponse.from(e, service.getRegisteredCount(e.id!!), titles[e.seriesId], registeredByMe = mine?.contains(e.id))
+        }
+    }
+
+    private fun currentPlayerIdOrNull(): UUID? {
+        val p = org.springframework.security.core.context.SecurityContextHolder.getContext().authentication?.principal
+        return if (p is com.padelgo.auth.JwtPrincipal) p.playerId else null
     }
 
     private fun currentUserIdOrNull(): UUID? {
@@ -497,13 +555,15 @@ class EventController(
         val authorName = service.getAuthorName(eventId) ?: if (isAuthor) "Вы" else "Не указан"
         val registeredCount = service.getRegisteredCount(eventId)
         val seriesTitle = service.seriesTitles(listOf(event))[event.seriesId]
+        // Фиксированные пары: клиенты группируют состав по teamId, чтобы было видно, кто с кем.
+        val teamIds = if (event.format == com.padelgo.domain.EventFormat.FIXED_PAIRS) service.teamIdsByPlayer(eventId) else emptyMap()
         return EventDetailsResponse(
             EventResponse.from(event, registeredCount, seriesTitle),
             roundDtos,
             regs.map { p ->
                 val calibration = usersByPlayerId[p.id]?.calibrationMatchesRemaining
                 val publicId = formatPublicId(usersByPlayerId[p.id]?.publicId)
-                PlayerResponse.from(p, calibration, publicId)
+                PlayerResponse.from(p, calibration, publicId).copy(teamId = teamIds[p.id])
             },
             pending.map { p ->
                 val calibration = usersByPlayerId[p.id]?.calibrationMatchesRemaining
