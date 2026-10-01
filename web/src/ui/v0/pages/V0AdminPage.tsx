@@ -12,6 +12,7 @@ type EditState = {
   email?: string;
   password?: string;
   disabled?: boolean;
+  hidden?: boolean;
 };
 
 export function V0AdminPage() {
@@ -89,6 +90,7 @@ export function V0AdminPage() {
     if (draft.email && draft.email !== user.email) payload.email = draft.email;
     if (draft.password) payload.password = draft.password;
     if (draft.disabled !== undefined && draft.disabled !== user.disabled) payload.disabled = draft.disabled;
+    if (draft.hidden !== undefined && draft.hidden !== user.hidden) payload.hidden = draft.hidden;
     if (Object.keys(payload).length === 0) return;
     setLoading(true);
     setError(null);
@@ -512,6 +514,19 @@ export function V0AdminPage() {
                       onChange={(e) => applyEdit(user.userId, { disabled: e.target.checked })}
                     />
                     <span className="text-sm">{(draft.disabled ?? user.disabled) ? "Отключен" : "Активен"}</span>
+                  </div>
+                </div>
+                <div className="space-y-1">
+                  <Label>Списки игроков</Label>
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="checkbox"
+                      checked={draft.hidden ?? user.hidden}
+                      onChange={(e) => applyEdit(user.userId, { hidden: e.target.checked })}
+                    />
+                    <span className="text-sm">
+                      {(draft.hidden ?? user.hidden) ? "Скрыт из рейтинга" : "Показывается"}
+                    </span>
                   </div>
                 </div>
               </div>

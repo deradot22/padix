@@ -160,7 +160,7 @@ class EventService(
 
     fun listPlayersByRating(): List<Player> =
         playerRepo.findAll()
-            .filter { !it.isGuest }
+            .filter { !it.isGuest && !it.hidden }
             .sortedWith(compareByDescending<Player> { it.rating }.thenBy { it.name.lowercase() })
 
     @Transactional

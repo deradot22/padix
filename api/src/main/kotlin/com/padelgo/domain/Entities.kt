@@ -48,7 +48,15 @@ class Player(
 
     // Гость: вписан вручную в турнир, без аккаунта; вне общего рейтинга и decay.
     @Column(name = "is_guest", nullable = false)
-    var isGuest: Boolean = false
+    var isGuest: Boolean = false,
+
+    /**
+     * Скрыт из публичных списков игроков (/api/players/rating — лидерборд и пикеры).
+     * Ставится в админке для тестовых/служебных аккаунтов и при удалении аккаунта.
+     * Вход, регистрации, матчи и история у такого игрока работают как обычно.
+     */
+    @Column(name = "hidden", nullable = false)
+    var hidden: Boolean = false
 )
 
 @Entity
