@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { ChevronDown, Filter, Gamepad2, Globe, Search, Trophy, TrendingUp, Users, UsersRound } from "lucide-react";
+import { ChevronDown, Filter, Globe, Search, Trophy, TrendingUp, Users, UsersRound } from "lucide-react";
+import { PadelIcon } from "@/components/padel-icon";
 import { api, hasToken, isUnauthorizedError, Player } from "../../../lib/api";
 import { ntrpLevel } from "../../../lib/rating";
 import { Badge } from "@/components/ui/badge";
@@ -433,7 +434,7 @@ export function V0RatingPage(props: { authed: boolean; me?: { playerId?: string 
               </span>
               <span className="text-border hidden sm:inline">|</span>
               <span className="flex items-center gap-1">
-                <Gamepad2 className="h-3 w-3 sm:hidden" />
+                <PadelIcon className="h-3 w-3 sm:hidden" />
                 <span className="hidden sm:inline">
                   {player.gamesPlayed} {plural(lang, player.gamesPlayed, ["матч", "матча", "матчей"], ["match", "matches"])}
                 </span>

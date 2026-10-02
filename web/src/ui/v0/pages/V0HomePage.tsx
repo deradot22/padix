@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { ArrowRight, Calendar, Clock, Gamepad2, TrendingUp, Trophy, Users, Zap } from "lucide-react";
+import { ArrowRight, Calendar, Clock, TrendingUp, Trophy, Users, Zap } from "lucide-react";
+import { PadelIcon } from "@/components/padel-icon";
 import { animate, motion, useReducedMotion, type Variants } from "motion/react";
 import { api, Event, Player } from "../../../lib/api";
 import { Badge } from "@/components/ui/badge";
@@ -275,7 +276,7 @@ export function V0HomePage(props: { me: any }) {
       span: "sm:col-span-2",
       big: true,
     },
-    { label: t("stats.gamesToday"), value: String(stats.gamesToday), icon: Gamepad2, iconWrap: "bg-accent/15 text-accent", span: "sm:col-span-1", big: false },
+    { label: t("stats.gamesToday"), value: String(stats.gamesToday), icon: PadelIcon, iconWrap: "bg-accent/15 text-accent", span: "sm:col-span-1", big: false },
     { label: t("stats.matchesWeek"), value: String(stats.gamesWeek), icon: TrendingUp, iconWrap: "bg-primary/15 text-primary", span: "sm:col-span-1", big: false },
   ];
 
@@ -303,7 +304,7 @@ export function V0HomePage(props: { me: any }) {
           <motion.div variants={childVariant} className="mt-6 flex flex-wrap gap-3">
             <Button asChild size="lg">
               <Link to="/games">
-                <Gamepad2 className="mr-2 h-5 w-5" />
+                <PadelIcon className="mr-2 h-5 w-5" />
                 {t("hero.findGame")}
               </Link>
             </Button>

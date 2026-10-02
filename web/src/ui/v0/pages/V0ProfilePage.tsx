@@ -18,7 +18,6 @@ import {
   Calendar,
   CheckCircle,
   Clock,
-  Gamepad2,
   Hash,
   Mail,
   MapPin,
@@ -34,6 +33,7 @@ import {
   X,
   XCircle,
 } from "lucide-react";
+import { PadelIcon } from "@/components/padel-icon";
 import { Dict, plural, useI18n } from "@/lib/i18n";
 
 const TR = {
@@ -713,7 +713,7 @@ export function V0ProfilePage(props: { me: any; meLoaded?: boolean; onMeUpdate?:
                 onClick={() => setProfileTab("invites")}
                 className={tabBtn(profileTab === "invites")}
               >
-                <Gamepad2 className="h-4 w-4 shrink-0" />
+                <PadelIcon className="h-4 w-4 shrink-0" />
                 <span>{t("tabs.invites")}</span>
                 {invitesCount > 0 && <span className="hidden tabular-nums sm:inline">({invitesCount})</span>}
               </button>
@@ -733,7 +733,7 @@ export function V0ProfilePage(props: { me: any; meLoaded?: boolean; onMeUpdate?:
           <>
             <CardHeader className="pb-4">
               <CardTitle className="flex items-center gap-2">
-                <Gamepad2 className="h-6 w-6 text-primary" />
+                <PadelIcon className="h-6 w-6 text-primary" />
                 {t("invites.title")}
               </CardTitle>
               <CardDescription>

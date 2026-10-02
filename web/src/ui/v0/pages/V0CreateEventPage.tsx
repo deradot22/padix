@@ -5,7 +5,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Gamepad2, Users, Clock, Calendar, Lightbulb, Users2, MapPin, Zap, Send, MessageCircle, Users as UsersIcon, Lock, Globe, Repeat, Trophy } from "lucide-react";
+import { Users, Clock, Calendar, Lightbulb, Users2, MapPin, Zap, Send, MessageCircle, Users as UsersIcon, Lock, Globe, Repeat, Trophy } from "lucide-react";
+import { PadelIcon } from "@/components/padel-icon";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 import { api, EventFormat, EventVisibility, PairingMode, TelegramChat } from "../../../lib/api";
@@ -900,7 +901,7 @@ export function V0CreateEventPage(props: {
               {!recurring && (
                 <div className="space-y-3">
                   <Label className="font-medium flex items-center gap-2">
-                    <Gamepad2 className="h-4 w-4 text-primary" />
+                    <PadelIcon className="h-4 w-4 text-primary" />
                     {t("format.label")}
                   </Label>
                   <div className="grid gap-3 md:grid-cols-3">
@@ -1192,7 +1193,7 @@ export function V0CreateEventPage(props: {
                   {t("common.cancel")}
                 </Button>
                 <Button className="flex-1 h-12 bg-primary text-primary-foreground" size="lg" disabled={loading}>
-                  {isTournament ? <Trophy className="mr-2 h-5 w-5" /> : <Gamepad2 className="mr-2 h-5 w-5" />}
+                  {isTournament ? <Trophy className="mr-2 h-5 w-5" /> : <PadelIcon className="mr-2 h-5 w-5" />}
                   {loading ? t("submit.saving") : isEditing ? t("submit.saveSubscription") : isTournament ? t("submit.createTournament") : t("submit.createGame")}
                 </Button>
               </div>
