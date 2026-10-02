@@ -1,7 +1,8 @@
 "use client";
 
 import { Link, NavLink, useLocation, useNavigate } from "react-router-dom";
-import { Bell, Check, Gamepad2, Info, Languages, LogOut, Menu, MessageSquare, Moon, Plus, Settings, Sun, TrendingUp, User, UserPlus, X } from "lucide-react";
+import { Bell, Check, Info, Languages, LogOut, Menu, MessageSquare, Moon, Plus, Settings, Sun, TrendingUp, User, UserPlus, X } from "lucide-react";
+import { PadelIcon } from "@/components/padel-icon";
 import { motion, AnimatePresence, useReducedMotion } from "motion/react";
 import { createPortal } from "react-dom";
 import { Button } from "@/components/ui/button";
@@ -57,7 +58,7 @@ const desktopNavigation = [
 // "Создать игру" больше не отдельный пункт — это кнопка "+" рядом с "Игры".
 const mobileNavigation: { nameKey: keyof typeof TR; href: string; icon: LucideIcon }[] = [
   { nameKey: "nav.rating", href: "/rating", icon: TrendingUp },
-  { nameKey: "nav.games", href: "/games", icon: Gamepad2 },
+  { nameKey: "nav.games", href: "/games", icon: PadelIcon },
   { nameKey: "nav.profile", href: "/profile", icon: User },
 ];
 // Совместимость со старым кодом, который ещё может ссылаться на navigation.

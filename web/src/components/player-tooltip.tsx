@@ -2,7 +2,8 @@
 
 import { ReactNode, useCallback, useEffect, useId, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { Check, Gamepad2, Trophy, UserPlus } from "lucide-react";
+import { Check, Trophy, UserPlus } from "lucide-react";
+import { PadelIcon } from "@/components/padel-icon";
 import { Button } from "@/components/ui/button";
 import { ntrpLevel } from "@/lib/rating";
 import { Dict, useI18n } from "@/lib/i18n";
@@ -198,7 +199,7 @@ export function PlayerTooltip({
 
               <div className="flex items-center justify-between">
                 <span className="flex items-center gap-1.5 text-muted-foreground">
-                  <Gamepad2 className="h-3.5 w-3.5" />
+                  <PadelIcon className="h-3.5 w-3.5" />
                   {t("matches")}
                 </span>
                 <span className="font-medium text-foreground">{player.matches ?? 0}</span>

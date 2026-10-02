@@ -1,5 +1,6 @@
 import { Link } from "react-router-dom";
-import { Gamepad2, TrendingUp, Trophy, Users, Zap, ArrowRight } from "lucide-react";
+import { TrendingUp, Trophy, Users, Zap, ArrowRight } from "lucide-react";
+import { PadelIcon } from "@/components/padel-icon";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Dict, useI18n } from "@/lib/i18n";
@@ -28,7 +29,7 @@ export function V0LandingPage() {
   const { t } = useI18n(TR);
   const features = [
     {
-      icon: Gamepad2,
+      icon: PadelIcon,
       title: t("features.organize.title"),
       description: t("features.organize.desc"),
     },

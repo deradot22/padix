@@ -1,5 +1,6 @@
 import { NavLink } from "react-router-dom";
-import { TrendingUp, Gamepad2, Plus, User } from "lucide-react";
+import { TrendingUp, Plus, User } from "lucide-react";
+import { PadelIcon } from "@/components/padel-icon";
 import { cn } from "@/lib/utils";
 import { Dict, useI18n } from "@/lib/i18n";
 
@@ -13,7 +14,7 @@ const TR = {
 
 const items = [
   { nameKey: "nav.rating" as const, href: "/rating", icon: TrendingUp },
-  { nameKey: "nav.games" as const, href: "/games", icon: Gamepad2 },
+  { nameKey: "nav.games" as const, href: "/games", icon: PadelIcon },
   { nameKey: "nav.create" as const, href: "/create", icon: Plus },
   { nameKey: "nav.profile" as const, href: "/profile", icon: User },
 ];
