@@ -1,4 +1,5 @@
 import { API_BASE_URL } from "./env";
+import { getCurrentLang } from "./i18n";
 
 export type EventFormat = "AMERICANA" | "MEXICANO" | "FIXED_PAIRS";
 export type PairingMode = "ROUND_ROBIN" | "BALANCED";
@@ -253,6 +254,37 @@ export class ApiRequestError extends Error {
   }
 }
 
+/**
+ * Тексты для людей вместо технических сообщений браузера («NetworkError when attempting
+ * to fetch resource», «Failed to fetch», «HTTP 502 Bad Gateway»). Сообщения сервера с
+ * кодами 4xx («Рейтинг ниже минимального…») остаются как есть — они уже для людей.
+ */
+const ERROR_TEXT = {
+  network: {
+    ru: "Нет связи с сервером. Проверьте интернет и попробуйте ещё раз.",
+    en: "Can't reach the server. Check your connection and try again.",
+  },
+  server: {
+    ru: "Сервер временно недоступен. Попробуйте через минуту.",
+    en: "The server is temporarily unavailable. Try again in a minute.",
+  },
+  generic: {
+    ru: "Что-то пошло не так. Попробуйте ещё раз.",
+    en: "Something went wrong. Try again.",
+  },
+} as const;
+
+function errorText(kind: keyof typeof ERROR_TEXT): string {
+  return ERROR_TEXT[kind][getCurrentLang()];
+}
+
+/** Текст ошибки для показа пользователю — для любого исключения из вызова api. */
+export function errorMessage(e: unknown): string {
+  if (e instanceof ApiRequestError) return e.message;
+  if (e instanceof TypeError) return errorText("network");
+  return errorText("generic");
+}
+
 /** true — сервер ответил 401 (нет токена, токен протух или доступ только для своих). */
 export function isUnauthorizedError(e: unknown): boolean {
   return e instanceof ApiRequestError && e.status === 401;
@@ -416,14 +448,24 @@ export function adminToken() {
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const token = getToken();
-  const res = await fetch(`${API_BASE_URL}${path}`, {
-    ...init,
-    headers: {
-      "Content-Type": "application/json",
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      ...(init?.headers ?? {}),
-    },
-  });
+  let res: Response;
+  try {
+    res = await fetch(`${API_BASE_URL}${path}`, {
+      ...init,
+      headers: {
+        "Content-Type": "application/json",
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        ...(init?.headers ?? {}),
+      },
+    });
+  } catch {
+    // fetch падает целиком только при сетевой ошибке: нет сети, сервер не отвечает, CORS.
+    throw new ApiRequestError(errorText("network"), 0);
+  }
+
+  if (res.status >= 500) {
+    throw new ApiRequestError(errorText("server"), res.status);
+  }
 
   if (!res.ok) {
     let body: unknown = null;

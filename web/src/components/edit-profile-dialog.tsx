@@ -266,17 +266,17 @@ export function EditProfileDialog(props: {
             </div>
             <div className="space-y-1.5">
               <label className="text-sm font-medium">{t("profile.country")}</label>
-              <select
-                className="h-10 w-full rounded-md border border-input bg-transparent px-3 text-sm outline-none focus:ring-2 focus:ring-ring/50"
-                value={country}
-                onChange={(e) => setCountry(e.target.value)}
-                autoComplete="country"
-              >
-                <option value="">{t("profile.countryUnset")}</option>
-                {countryOptions(lang).map((c) => (
-                  <option key={c.code} value={c.code}>{c.name}</option>
-                ))}
-              </select>
+              <Select value={country || "_unset"} onValueChange={(v) => setCountry(v === "_unset" ? "" : v)}>
+                <SelectTrigger className="h-10">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="_unset">{t("profile.countryUnset")}</SelectItem>
+                  {countryOptions(lang).map((c) => (
+                    <SelectItem key={c.code} value={c.code}>{c.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
           </div>
 
