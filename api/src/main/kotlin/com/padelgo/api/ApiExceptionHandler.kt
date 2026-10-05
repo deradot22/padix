@@ -1,5 +1,6 @@
 package com.padelgo.api
 
+import com.fasterxml.jackson.annotation.JsonInclude
 import jakarta.servlet.http.HttpServletRequest
 import org.springframework.http.HttpStatus
 import org.springframework.http.ResponseEntity
@@ -12,7 +13,9 @@ data class ErrorResponse(
     val status: Int,
     val error: String,
     val message: String,
-    val path: String?
+    val path: String?,
+    @get:JsonInclude(JsonInclude.Include.NON_NULL)
+    val code: String? = null
 )
 
 @RestControllerAdvice
@@ -26,7 +29,8 @@ class ApiExceptionHandler {
                     status = ex.status.value(),
                     error = ex.status.reasonPhrase,
                     message = ex.message,
-                    path = req.requestURI
+                    path = req.requestURI,
+                    code = ex.code
                 )
             )
 
@@ -83,6 +87,11 @@ class ApiExceptionHandler {
         req: HttpServletRequest,
     ): ResponseEntity<ErrorResponse> {
         val root = ex.mostSpecificCause.message.orEmpty()
+        val code = when {
+            root.contains("users_email_key", ignoreCase = true) -> ApiErrorCodes.EMAIL_TAKEN
+            root.contains("players_name_key", ignoreCase = true) -> ApiErrorCodes.NAME_TAKEN
+            else -> null
+        }
         val pretty = when {
             root.contains("users_email_key", ignoreCase = true) -> "Этот email уже зарегистрирован"
             root.contains("uk_users_telegram_user_id", ignoreCase = true) -> "Этот Telegram уже привязан к другому аккаунту"
@@ -93,7 +102,7 @@ class ApiExceptionHandler {
             else -> "Не удалось сохранить — конфликт данных"
         }
         return ResponseEntity.status(HttpStatus.CONFLICT).body(
-            ErrorResponse(409, "Conflict", pretty, req.requestURI),
+            ErrorResponse(409, "Conflict", pretty, req.requestURI, code),
         )
     }
 }

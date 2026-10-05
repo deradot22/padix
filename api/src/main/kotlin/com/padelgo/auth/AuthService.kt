@@ -1,5 +1,6 @@
 package com.padelgo.auth
 
+import com.padelgo.api.ApiErrorCodes
 import com.padelgo.api.ApiException
 import com.padelgo.repo.PlayerRepository
 import com.padelgo.service.Ntrp
@@ -40,7 +41,7 @@ class AuthService(
         if (disposableEmailChecker.isDisposable(email)) {
             throw ApiException(HttpStatus.BAD_REQUEST, "Используйте, пожалуйста, постоянный email-адрес")
         }
-        if (users.findByEmailIgnoreCase(email) != null) throw ApiException(HttpStatus.CONFLICT, "Email already registered")
+        if (users.findByEmailIgnoreCase(email) != null) throw ApiException(HttpStatus.CONFLICT, "Email already registered", ApiErrorCodes.EMAIL_TAKEN)
 
         val player = players.save(
             com.padelgo.domain.Player(
@@ -182,7 +183,7 @@ class AuthService(
         req.name?.trim()?.takeIf { it.isNotBlank() }?.let { name ->
             val existing = players.findByNameIgnoreCase(name)
             if (existing != null && existing.id != player.id) {
-                throw ApiException(HttpStatus.CONFLICT, "Имя уже занято")
+                throw ApiException(HttpStatus.CONFLICT, "Имя уже занято", ApiErrorCodes.NAME_TAKEN)
             }
             player.name = name
         }
@@ -194,7 +195,7 @@ class AuthService(
             }
             val existing = users.findByEmailIgnoreCase(email)
             if (existing != null && existing.id != user.id) {
-                throw ApiException(HttpStatus.CONFLICT, "Email уже занят")
+                throw ApiException(HttpStatus.CONFLICT, "Email уже занят", ApiErrorCodes.EMAIL_TAKEN)
             }
             if (user.email == null || !user.email!!.equals(email, ignoreCase = true)) {
                 user.email = email
