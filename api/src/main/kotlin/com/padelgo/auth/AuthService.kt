@@ -2,6 +2,7 @@ package com.padelgo.auth
 
 import com.padelgo.api.ApiErrorCodes
 import com.padelgo.api.ApiException
+import com.padelgo.domain.Countries
 import com.padelgo.repo.PlayerRepository
 import com.padelgo.service.Ntrp
 import jakarta.transaction.Transactional
@@ -48,7 +49,8 @@ class AuthService(
                 name = req.name.trim(),
                 rating = 1000,
                 ntrp = Ntrp.fromRating(1000),
-                gamesPlayed = 0
+                gamesPlayed = 0,
+                country = Countries.normalize(req.country)
             )
         )
         val gender = req.gender?.trim()?.uppercase()?.takeIf { it in listOf("M", "F") }
@@ -140,6 +142,7 @@ class AuthService(
             ratingHidden = com.padelgo.service.RatingDecay.isRatingHidden(player.lastMatchAt, java.time.Instant.now()),
             avatarUrl = player.avatarUrl,
             gender = user.gender,
+            country = player.country,
             showWinProbability = user.showWinProbability,
             emailVerified = user.emailVerifiedAt != null,
             hasPassword = !user.passwordHash.isNullOrBlank(),
@@ -214,6 +217,13 @@ class AuthService(
             req.gender.trim().isEmpty() -> user.gender = null
             req.gender.trim().uppercase() in listOf("M", "F") -> user.gender = req.gender.trim().uppercase()
             else -> { /* invalid, no change */ }
+        }
+
+        req.country?.let { raw ->
+            when {
+                raw.isBlank() -> player.country = null
+                else -> Countries.normalize(raw)?.let { player.country = it }
+            }
         }
 
         req.showWinProbability?.let { user.showWinProbability = it }

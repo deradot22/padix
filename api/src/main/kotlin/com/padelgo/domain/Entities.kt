@@ -56,7 +56,11 @@ class Player(
      * Вход, регистрации, матчи и история у такого игрока работают как обычно.
      */
     @Column(name = "hidden", nullable = false)
-    var hidden: Boolean = false
+    var hidden: Boolean = false,
+
+    /** Страна, код ISO 3166-1 alpha-2 (см. [Countries]). null — не указана. */
+    @Column(name = "country", length = 2)
+    var country: String? = null
 )
 
 @Entity

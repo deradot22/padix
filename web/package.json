@@ -20,6 +20,7 @@
     "autoprefixer": "^10.4.20",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
+    "flag-icons": "^7.5.0",
     "lucide-react": "^0.454.0",
     "motion": "^12.40.0",
     "postcss": "^8.5.3",

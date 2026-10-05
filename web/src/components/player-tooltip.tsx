@@ -7,6 +7,7 @@ import { PadelIcon } from "@/components/padel-icon";
 import { Button } from "@/components/ui/button";
 import { ntrpLevel } from "@/lib/rating";
 import { Dict, useI18n } from "@/lib/i18n";
+import { CountryFlag } from "@/components/country-flag";
 
 const TR = {
   "rating": { ru: "Рейтинг", en: "Rating" },
@@ -27,6 +28,8 @@ export interface PlayerTooltipPlayer {
   matches?: number;
   ntrp?: string;
   avatarUrl?: string | null;
+  /** Страна, код ISO 3166-1 alpha-2. */
+  country?: string | null;
 }
 
 export interface PlayerTooltipProps {
@@ -176,7 +179,10 @@ export function PlayerTooltip({
                 </div>
               )}
               <div>
-                <p className="font-semibold text-foreground">{player.name}</p>
+                <p className="flex items-center gap-1.5 font-semibold text-foreground">
+                  <span>{player.name}</span>
+                  <CountryFlag code={player.country} className="text-sm" />
+                </p>
                 {publicId ? <p className="text-xs text-muted-foreground">{publicId}</p> : null}
               </div>
             </div>

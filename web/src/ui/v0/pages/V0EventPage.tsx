@@ -5,6 +5,7 @@ import { useNavigate } from "react-router-dom";
 import { api, BalancePreview, EventDetails, FriendItem, FriendsSnapshot, isUnauthorizedError, Match, Player } from "../../../lib/api";
 import { AuthRequiredCard } from "@/components/auth-required-card";
 import { PlayerTooltip } from "@/components/player-tooltip";
+import { CountryFlag } from "@/components/country-flag";
 import { EventLeaderboard } from "@/components/event-leaderboard";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -2406,7 +2407,10 @@ export function V0EventPage(props: { me: any; meLoaded?: boolean }) {
                         p.name?.[0]?.toUpperCase?.() ?? "?"
                       )}
                     </div>
-                    <p className="text-sm font-medium text-center truncate">{p.name}</p>
+                    <p className="flex items-center justify-center gap-1.5 text-sm font-medium">
+                      <span className="truncate">{p.name}</span>
+                      <CountryFlag code={p.country} className="text-[11px]" />
+                    </p>
                     <p className="text-xs text-muted-foreground text-center">
                       {p.isGuest ? t("participants.guest") : isTournament ? " " : p.rating}
                     </p>

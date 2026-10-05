@@ -12,6 +12,8 @@ import { EditGameScoresDialog } from "@/components/edit-game-scores-dialog";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { PlayerTooltip } from "@/components/player-tooltip";
+import { CountryFlag } from "@/components/country-flag";
+import { countryName, isCountryCode } from "@/lib/countries";
 import { EventLeaderboard } from "@/components/event-leaderboard";
 import { RatingGraph } from "@/components/rating-graph";
 import {
@@ -533,6 +535,12 @@ export function V0ProfilePage(props: { me: any; meLoaded?: boolean; onMeUpdate?:
                   {viewMe.gender === "M" ? t("header.genderM") : t("header.genderF")}
                 </Badge>
               ) : null}
+              {isCountryCode(viewMe.country) ? (
+                <Badge variant="secondary" className="h-8 gap-1.5 px-3 py-0 text-sm font-medium">
+                  <CountryFlag code={viewMe.country} className="text-xs" />
+                  {countryName(viewMe.country, lang)}
+                </Badge>
+              ) : null}
               <div className="relative">
                 <button
                   type="button"
@@ -927,6 +935,7 @@ export function V0ProfilePage(props: { me: any; meLoaded?: boolean; onMeUpdate?:
                         ntrp: friend.ntrp,
                         odid: friend.publicId,
                         avatarUrl: friend.avatarUrl,
+                        country: friend.country,
                       }}
                       showAddFriend={false}
                     >
@@ -939,7 +948,10 @@ export function V0ProfilePage(props: { me: any; meLoaded?: boolean; onMeUpdate?:
                           )}
                         </div>
                         <div className="min-w-0 flex-1">
-                          <p className="text-sm font-medium truncate">{friend.name}</p>
+                          <p className="flex items-center gap-1.5 text-sm font-medium">
+                            <span className="truncate">{friend.name}</span>
+                            <CountryFlag code={friend.country} className="text-[11px]" />
+                          </p>
                           <p className="text-xs text-muted-foreground tabular-nums">NTRP {friend.ntrp ?? ntrpLevel(friend.rating)}</p>
                         </div>
                         <span className="shrink-0 font-display font-bold tabular-nums text-base">{friend.rating}</span>

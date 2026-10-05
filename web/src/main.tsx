@@ -11,6 +11,7 @@ import "@fontsource/barlow/700.css";
 import "@fontsource/barlow-condensed/500.css";
 import "@fontsource/barlow-condensed/600.css";
 import "@fontsource/barlow-condensed/700.css";
+import "flag-icons/css/flag-icons.min.css";
 import "./ui/base.css";
 import "./ui/v0/tailwind.css";
 import { installDevErrorOverlay } from "./ui/dev-error-overlay";
