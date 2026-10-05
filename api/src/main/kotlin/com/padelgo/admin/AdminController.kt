@@ -148,6 +148,7 @@ class AdminController(
             // Клиенты отсекают удалённых по префиксу имени; флаг убирает игрока из выдачи
             // на бэкенде, поэтому он исчезает и в уже выпущенных сборках приложения.
             player.hidden = true
+            player.country = null
             players.save(player)
         }
         users.save(user)

@@ -30,7 +30,7 @@ export function V0PrivacyPage() {
         </p>
         <p>
           For a better experience, while using the Application, the Service Provider may require you to provide us
-          with certain personally identifiable information, including but not limited to Email, UserId, Gender. The
+          with certain personally identifiable information, including but not limited to Email, UserId, Gender, Country. The
           information that the Service Provider request will be retained by them and used as described in this
           privacy policy.
         </p>

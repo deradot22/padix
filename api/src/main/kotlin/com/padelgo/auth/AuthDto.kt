@@ -21,7 +21,10 @@ data class RegisterRequest(
     val name: String,
 
     @Schema(description = "Пол: M — мужской, F — женский. null — не указан", example = "M")
-    val gender: String? = null
+    val gender: String? = null,
+
+    @Schema(description = "Страна, код ISO 3166-1 alpha-2. null — не указана", example = "ES")
+    val country: String? = null
 )
 
 @Schema(description = "Пользователь принял Условия и Политику конфиденциальности указанной версии")
@@ -92,6 +95,9 @@ data class MeResponse(
 
     @Schema(description = "Пол: M / F / null")
     val gender: String? = null,
+
+    @Schema(description = "Страна, код ISO 3166-1 alpha-2, или null")
+    val country: String? = null,
 
     @Schema(description = "Показывать шансы выигрыша перед матчем (полоска и метка в модале раундов). По умолчанию false.")
     val showWinProbability: Boolean = false,
@@ -211,6 +217,9 @@ data class UpdateProfileRequest(
 
     @Schema(description = "Пол: M / F", example = "M")
     val gender: String? = null,
+
+    @Schema(description = "Страна, код ISO 3166-1 alpha-2. Пустая строка — убрать страну", example = "ES")
+    val country: String? = null,
 
     @Schema(description = "Тоггл «Показывать шансы выигрыша» в модале «Раунды». null — не менять.")
     val showWinProbability: Boolean? = null

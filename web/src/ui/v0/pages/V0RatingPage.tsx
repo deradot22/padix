@@ -12,6 +12,8 @@ import { cn } from "@/lib/utils";
 import { Dict, useI18n, plural } from "@/lib/i18n";
 import { AuthRequiredCard } from "@/components/auth-required-card";
 import { PlayerTooltip } from "@/components/player-tooltip";
+import { CountryFlag } from "@/components/country-flag";
+import { countryName, isCountryCode } from "@/lib/countries";
 
 const TR = {
   "header.title": { ru: "Рейтинг", en: "Rating" },
@@ -23,6 +25,7 @@ const TR = {
   "filter.calibratedOnly": { ru: "Только откалиброванные", en: "Calibrated only" },
   "filter.inCalibration": { ru: "В калибровке", en: "In calibration" },
   "filter.all": { ru: "Все", en: "All" },
+  "filter.anyCountry": { ru: "Все страны", en: "All countries" },
   "filter.from": { ru: "от", en: "from" },
   "filter.to": { ru: "до", en: "to" },
   "toMyRank": { ru: "К моему рейтингу (#{rank})", en: "To my rank (#{rank})" },
@@ -101,6 +104,7 @@ export function V0RatingPage(props: { authed: boolean; me?: { playerId?: string 
   const [calibrationFilter, setCalibrationFilter] = useState<"all" | "calibrated" | "in_calibration">("calibrated");
   const [ntrpMin, setNtrpMin] = useState<string>("");
   const [ntrpMax, setNtrpMax] = useState<string>("");
+  const [countryFilter, setCountryFilter] = useState<string>("");
   const [filterOpen, setFilterOpen] = useState(false);
   const myRowRef = useRef<HTMLTableRowElement | null>(null);
   const meId = props.me?.playerId;
@@ -202,15 +206,25 @@ export function V0RatingPage(props: { authed: boolean; me?: { playerId?: string 
       const idx = NTRP_LEVELS.indexOf(ntrpMax);
       list = list.filter((p) => NTRP_LEVELS.indexOf(ntrpLevel(p.rating)) <= idx);
     }
+    if (countryFilter) list = list.filter((p) => p.country === countryFilter);
     return list;
-  }, [basePlayers, search, ntrpMin, ntrpMax]);
+  }, [basePlayers, search, ntrpMin, ntrpMax, countryFilter]);
+
+  // В фильтре — только страны, которые есть у игроков текущего списка.
+  const countriesInList = useMemo(() => {
+    const codes = new Set<string>();
+    basePlayers.forEach((p) => { if (isCountryCode(p.country)) codes.add(p.country); });
+    return [...codes]
+      .map((code) => ({ code, name: countryName(code, lang) }))
+      .sort((a, b) => a.name.localeCompare(b.name, lang));
+  }, [basePlayers, lang]);
 
   const myRank = useMemo(() => {
     if (!meId) return null;
     return globalRankMap.get(meId) ?? null;
   }, [globalRankMap, meId]);
 
-  const isSearchActive = !!(search.trim() || ntrpMin || ntrpMax);
+  const isSearchActive = !!(search.trim() || ntrpMin || ntrpMax || countryFilter);
   const topCount = 10;
   const topPlayers = filteredPlayers.slice(0, topCount);
   const showMyRowSeparately = !isSearchActive && meId && myRank !== null && myRank > topCount;
@@ -311,6 +325,7 @@ export function V0RatingPage(props: { authed: boolean; me?: { playerId?: string 
               ntrp: player.ratingHidden ? undefined : player.ntrp,
               odid: player.publicId,
               avatarUrl: player.avatarUrl,
+              country: player.country,
             }}
             showAddFriend={props.authed}
             addFriendStatus={friendStatus(player)}
@@ -327,6 +342,7 @@ export function V0RatingPage(props: { authed: boolean; me?: { playerId?: string 
               <span className="font-medium text-xs sm:text-sm truncate cursor-pointer min-w-0">
                 {player.name}
               </span>
+              <CountryFlag code={player.country} className="text-[11px] sm:text-xs" />
             </div>
           </PlayerTooltip>
         </td>
@@ -423,6 +439,7 @@ export function V0RatingPage(props: { authed: boolean; me?: { playerId?: string 
                 )}>
                   {player.name}
                 </span>
+                <CountryFlag code={player.country} className={isFirst ? "text-xs sm:text-sm" : "text-[10px] sm:text-xs"} />
               </div>
             </PlayerTooltip>
             <p className={cn("font-display font-bold tabular-nums leading-none", isFirst ? "text-3xl sm:text-5xl" : "text-2xl sm:text-4xl")}>
@@ -462,7 +479,7 @@ export function V0RatingPage(props: { authed: boolean; me?: { playerId?: string 
     );
   }, [hasData, topPlayersLocal, globalRankMap, meId, friends, props.authed, lang, t]);
 
-  const activeFiltersCount = [calibrationFilter !== "calibrated", ntrpMin, ntrpMax].filter(Boolean).length;
+  const activeFiltersCount = [calibrationFilter !== "calibrated", ntrpMin, ntrpMax, countryFilter].filter(Boolean).length;
 
   return (
     <div className="space-y-4 sm:space-y-6">
@@ -589,6 +606,24 @@ export function V0RatingPage(props: { authed: boolean; me?: { playerId?: string 
                   </SelectContent>
                 </Select>
               </div>
+              {countriesInList.length > 0 && (
+                <Select value={countryFilter || "any"} onValueChange={(v) => setCountryFilter(v === "any" ? "" : v)}>
+                  <SelectTrigger className="h-9 w-full sm:w-[200px]">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="any">{t("filter.anyCountry")}</SelectItem>
+                    {countriesInList.map((c) => (
+                      <SelectItem key={c.code} value={c.code}>
+                        <span className="flex items-center gap-2">
+                          <CountryFlag code={c.code} className="text-xs" />
+                          {c.name}
+                        </span>
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              )}
             </div>
           )}
         </div>

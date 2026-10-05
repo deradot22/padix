@@ -54,7 +54,10 @@ data class PlayerResponse(
     val isGuest: Boolean = false,
 
     @Schema(description = "Только в составе игры с фиксированными парами: общий id пары у двух партнёров. Иначе null.")
-    val teamId: UUID? = null
+    val teamId: UUID? = null,
+
+    @Schema(description = "Страна игрока, код ISO 3166-1 alpha-2. null — не указана", example = "ES")
+    val country: String? = null
 ) {
     companion object {
         fun from(p: Player, calibrationEventsRemaining: Int? = null, publicId: String? = null) = PlayerResponse(
@@ -67,7 +70,8 @@ data class PlayerResponse(
             publicId = publicId,
             avatarUrl = AvatarLinks.publicUrl(p.id, p.avatarUrl),
             ratingHidden = com.padelgo.service.RatingDecay.isRatingHidden(p.lastMatchAt, java.time.Instant.now()),
-            isGuest = p.isGuest
+            isGuest = p.isGuest,
+            country = p.country
         )
     }
 }

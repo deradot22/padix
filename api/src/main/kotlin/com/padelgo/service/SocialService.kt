@@ -78,7 +78,8 @@ class SocialService(
                 ntrp = player?.ntrp ?: "1.0",
                 gamesPlayed = player?.gamesPlayed ?: 0,
                 calibrationEventsRemaining = user.calibrationEventsRemaining,
-                avatarUrl = com.padelgo.api.AvatarLinks.publicUrl(player?.id, player?.avatarUrl)
+                avatarUrl = com.padelgo.api.AvatarLinks.publicUrl(player?.id, player?.avatarUrl),
+                country = player?.country
             )
         }.sortedBy { it.name.lowercase() }
 
@@ -223,7 +224,8 @@ data class FriendItem(
     val ntrp: String,
     val gamesPlayed: Int,
     val calibrationEventsRemaining: Int,
-    val avatarUrl: String? = null
+    val avatarUrl: String? = null,
+    val country: String? = null
 )
 
 data class FriendRequestItem(

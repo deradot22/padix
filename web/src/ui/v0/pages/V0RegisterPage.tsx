@@ -8,6 +8,7 @@ import { FacebookLoginButton } from "@/components/facebook-login-button";
 import { TwitterLoginButton } from "@/components/twitter-login-button";
 import { Dict, useI18n } from "@/lib/i18n";
 import { nextPath } from "@/lib/next-path";
+import { countryOptions } from "@/lib/countries";
 
 const TR = {
   "reg.title": { ru: "Регистрация", en: "Sign up" },
@@ -16,6 +17,8 @@ const TR = {
   "reg.genderNone": { ru: "Не указан", en: "Not specified" },
   "reg.genderM": { ru: "М", en: "M" },
   "reg.genderF": { ru: "Ж", en: "F" },
+  "reg.country": { ru: "Страна", en: "Country" },
+  "reg.countryNone": { ru: "Не указана", en: "Not specified" },
   "reg.password": { ru: "Пароль", en: "Password" },
   "reg.submitting": { ru: "Создаём…", en: "Creating…" },
   "reg.submit": { ru: "Создать аккаунт", en: "Create account" },
@@ -38,11 +41,12 @@ export function V0RegisterPage(props: { onAuth: (me: any) => void }) {
   const location = useLocation();
   // ?next= — страница, с которой пользователя развернули на вход (см. AuthRequiredCard).
   const backTo = nextPath(location.search);
-  const { t } = useI18n(TR);
+  const { t, lang } = useI18n(TR);
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [gender, setGender] = useState<string>("");
+  const [country, setCountry] = useState<string>("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [authConfig, setAuthConfig] = useState<AuthConfig | null>(null);
@@ -59,7 +63,7 @@ export function V0RegisterPage(props: { onAuth: (me: any) => void }) {
     setLoading(true);
     setError(null);
     try {
-      const { token } = await api.register(email, password, name, gender || undefined);
+      const { token } = await api.register(email, password, name, gender || undefined, country || undefined);
       setToken(token?.trim() || null);
       const me = await api.me();
       props.onAuth(me);
@@ -155,6 +159,20 @@ export function V0RegisterPage(props: { onAuth: (me: any) => void }) {
                 <option value="">{t("reg.genderNone")}</option>
                 <option value="M">{t("reg.genderM")}</option>
                 <option value="F">{t("reg.genderF")}</option>
+              </select>
+            </div>
+            <div className="space-y-2">
+              <label className="text-sm font-medium">{t("reg.country")}</label>
+              <select
+                className="h-11 w-full rounded-md border border-border bg-secondary px-3 text-sm outline-none focus:ring-2 focus:ring-ring/50"
+                value={country}
+                onChange={(e) => setCountry(e.target.value)}
+                autoComplete="country"
+              >
+                <option value="">{t("reg.countryNone")}</option>
+                {countryOptions(lang).map((c) => (
+                  <option key={c.code} value={c.code}>{c.name}</option>
+                ))}
               </select>
             </div>
             <div className="space-y-2">

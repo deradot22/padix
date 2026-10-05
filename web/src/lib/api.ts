@@ -20,6 +20,8 @@ export type Player = {
   ratingHidden?: boolean;
   /** true — гость, вписанный организатором турнира вручную (без аккаунта). */
   isGuest?: boolean;
+  /** Страна, код ISO 3166-1 alpha-2. null — не указана. */
+  country?: string | null;
 };
 
 export type EventVisibility = "PRIVATE" | "PUBLIC";
@@ -176,6 +178,8 @@ export type MeResponse = {
   ratingHidden?: boolean;
   avatarUrl?: string | null;
   gender?: string | null;
+  /** Страна, код ISO 3166-1 alpha-2. null — не указана. */
+  country?: string | null;
   /** Показывать шансы выигрыша в модале «Раунды». По умолчанию false. */
   showWinProbability: boolean;
   /** true — email подтверждён по ссылке из письма. */
@@ -300,6 +304,7 @@ export type FriendItem = {
   gamesPlayed: number;
   calibrationEventsRemaining: number;
   avatarUrl?: string | null;
+  country?: string | null;
 };
 
 export type FriendRequestItem = {
@@ -675,10 +680,10 @@ export const api = {
       body: JSON.stringify(payload),
     }),
 
-  register: (email: string, password: string, name: string, gender?: string) =>
+  register: (email: string, password: string, name: string, gender?: string, country?: string) =>
     request<{ token: string }>("/api/auth/register", {
       method: "POST",
-      body: JSON.stringify({ email, password, name, gender: gender || null }),
+      body: JSON.stringify({ email, password, name, gender: gender || null, country: country || null }),
     }),
   login: (email: string, password: string) =>
     request<{ token: string }>("/api/auth/login", {
@@ -787,7 +792,7 @@ export const api = {
     }),
   updateAvatar: (avatarDataUrl: string | null) =>
     request<MeResponse>("/api/me/avatar", { method: "PATCH", body: JSON.stringify({ avatarDataUrl }) }),
-  updateProfile: (payload: { name?: string; email?: string; password?: string; gender?: string; showWinProbability?: boolean }) =>
+  updateProfile: (payload: { name?: string; email?: string; password?: string; gender?: string; country?: string; showWinProbability?: boolean }) =>
     request<MeResponse>("/api/me/profile", { method: "PATCH", body: JSON.stringify(payload) }),
   getFriends: () => request<FriendsSnapshot>("/api/friends"),
   requestFriend: (publicId: string) =>

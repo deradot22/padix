@@ -7,6 +7,7 @@ import { api, MeResponse } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { Dict, useI18n } from "@/lib/i18n";
 import { Upload } from "lucide-react";
+import { countryOptions } from "@/lib/countries";
 
 const TR = {
   "profile.title": { ru: "Редактировать профиль", en: "Edit profile" },
@@ -17,6 +18,8 @@ const TR = {
   "profile.genderUnset": { ru: "Не указан", en: "Not specified" },
   "profile.genderM": { ru: "М", en: "Male" },
   "profile.genderF": { ru: "Ж", en: "Female" },
+  "profile.country": { ru: "Страна", en: "Country" },
+  "profile.countryUnset": { ru: "Не указана", en: "Not specified" },
   "profile.showOdds": { ru: "Показывать шансы выигрыша", en: "Show win probability" },
   "profile.showOddsHint": {
     ru: "В модале «Раунды» под каждым матчем будет полоска шансов и метка «Лёгкий фаворит» / «Равные шансы» и т.п. По Elo.",
@@ -99,10 +102,11 @@ export function EditProfileDialog(props: {
   me: MeResponse;
   onSaved: (me: MeResponse) => void;
 }) {
-  const { t } = useI18n(TR);
+  const { t, lang } = useI18n(TR);
   const [name, setName] = useState(props.me.name ?? "");
   const [email, setEmail] = useState(props.me.email ?? "");
   const [gender, setGender] = useState(props.me.gender ?? "");
+  const [country, setCountry] = useState(props.me.country ?? "");
   const [avatar, setAvatar] = useState<string | null>(props.me.avatarUrl ?? null);
   const [showWinProbability, setShowWinProbability] = useState<boolean>(props.me.showWinProbability === true);
   const [saving, setSaving] = useState(false);
@@ -114,6 +118,7 @@ export function EditProfileDialog(props: {
       setName(props.me.name ?? "");
       setEmail(props.me.email ?? "");
       setGender(props.me.gender ?? "");
+      setCountry(props.me.country ?? "");
       setAvatar(props.me.avatarUrl ?? null);
       setShowWinProbability(props.me.showWinProbability === true);
       setError(null);
@@ -124,7 +129,8 @@ export function EditProfileDialog(props: {
   const dirty =
     name.trim() !== (props.me.name ?? "") ||
     email.trim() !== (props.me.email ?? "") ||
-    gender !== (props.me.gender ?? "");
+    gender !== (props.me.gender ?? "") ||
+    country !== (props.me.country ?? "");
 
   const initials = props.me.name?.trim().split(/\s+/).slice(0, 2).map((w) => w[0]?.toUpperCase()).join("") || "?";
 
@@ -156,10 +162,11 @@ export function EditProfileDialog(props: {
     setSaving(true);
     setError(null);
     try {
-      const payload: { name?: string; email?: string; gender?: string } = {};
+      const payload: { name?: string; email?: string; gender?: string; country?: string } = {};
       if (name.trim() && name.trim() !== (props.me.name ?? "")) payload.name = name.trim();
       if (email.trim() !== (props.me.email ?? "")) payload.email = email.trim();
       if (gender !== (props.me.gender ?? "")) payload.gender = gender;
+      if (country !== (props.me.country ?? "")) payload.country = country;
       if (Object.keys(payload).length === 0) {
         props.onOpenChange(false);
         return;
@@ -256,6 +263,20 @@ export function EditProfileDialog(props: {
                   <SelectItem value="F">{t("profile.genderF")}</SelectItem>
                 </SelectContent>
               </Select>
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-sm font-medium">{t("profile.country")}</label>
+              <select
+                className="h-10 w-full rounded-md border border-input bg-transparent px-3 text-sm outline-none focus:ring-2 focus:ring-ring/50"
+                value={country}
+                onChange={(e) => setCountry(e.target.value)}
+                autoComplete="country"
+              >
+                <option value="">{t("profile.countryUnset")}</option>
+                {countryOptions(lang).map((c) => (
+                  <option key={c.code} value={c.code}>{c.name}</option>
+                ))}
+              </select>
             </div>
           </div>
 

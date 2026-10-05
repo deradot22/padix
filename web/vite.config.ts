@@ -7,6 +7,12 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 export default defineConfig({
   plugins: [react()],
+  build: {
+    // Флаги стран (flag-icons) подключены через CSS. По умолчанию Vite встраивает мелкие SVG
+    // прямо в стили — это раздувало CSS вчетверо. Оставляем флаги отдельными файлами:
+    // браузер скачивает только те, что реально показаны на странице.
+    assetsInlineLimit: (filePath) => (filePath.includes("flag-icons") ? false : undefined),
+  },
   resolve: {
     alias: {
       "@": path.resolve(__dirname, "src"),
