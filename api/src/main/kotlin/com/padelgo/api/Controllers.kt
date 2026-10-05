@@ -551,7 +551,8 @@ class EventController(
             }
             RoundResponse.from(r, ms)
         }
-        val isAuthor = service.isAuthor(eventId, principalUserId())
+        // Публичная страница игры открывается и без входа — для гостя isAuthor просто false.
+        val isAuthor = currentUserId != null && service.isAuthor(eventId, currentUserId)
         val authorName = service.getAuthorName(eventId) ?: if (isAuthor) "Вы" else "Не указан"
         val registeredCount = service.getRegisteredCount(eventId)
         val seriesTitle = service.seriesTitles(listOf(event))[event.seriesId]

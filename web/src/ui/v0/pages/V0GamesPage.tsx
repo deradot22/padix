@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useLocation } from "react-router-dom";
 import { Calendar, CalendarDays, Clock, Globe, Info, List, Lock, Plus, Search, Trophy, Users, X } from "lucide-react";
-import { api, Event, isUnauthorizedError } from "../../../lib/api";
+import { api, errorMessage, Event, isUnauthorizedError } from "../../../lib/api";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -32,7 +32,8 @@ const TR = {
   "search.reset": { ru: "Сбросить поиск", en: "Reset search" },
   "common.loading": { ru: "Загрузка…", en: "Loading…" },
   "common.error": { ru: "Ошибка", en: "Error" },
-  "list.loadFailed": { ru: "Не удалось загрузить: {error}", en: "Failed to load: {error}" },
+  "common.retry": { ru: "Повторить", en: "Retry" },
+  "list.loadFailed": { ru: "Не удалось загрузить игры. {error}", en: "Could not load games. {error}" },
   "auth.gamesHint": {
     ru: "Список игр виден только участникам Padix. Войдите в аккаунт или зарегистрируйтесь — это займёт минуту.",
     en: "The games list is available to Padix members only. Sign in or create an account — it takes a minute.",
@@ -118,6 +119,7 @@ export function V0GamesPage(props: { me: any }) {
   const [events, setEvents] = useState<Event[] | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [reloadKey, setReloadKey] = useState(0);
   // 401 от API: показываем предложение войти, а не техническую ошибку загрузки.
   const [unauthorized, setUnauthorized] = useState(false);
   const [view, setView] = useState<"list" | "calendar">("list");
@@ -166,10 +168,10 @@ export function V0GamesPage(props: { me: any }) {
       .then((d) => setEvents((d ?? []).filter((e) => e.status !== "FINISHED")))
       .catch((e: unknown) => {
         setUnauthorized(isUnauthorizedError(e));
-        setError(e instanceof Error ? e.message : t("common.error"));
+        setError(errorMessage(e));
       })
       .finally(() => setLoading(false));
-  }, [props.me]);
+  }, [props.me, reloadKey]);
 
   useEffect(() => {
     const mainIds = (events ?? []).map((e) => e.id);
@@ -332,7 +334,10 @@ export function V0GamesPage(props: { me: any }) {
     if (error) {
       return (
         <div className="rounded-lg border border-destructive/30 bg-destructive/10 p-4 text-sm text-foreground">
-          {t("list.loadFailed", { error })}
+          <p>{t("list.loadFailed", { error })}</p>
+          <Button variant="outline" size="sm" className="mt-3" onClick={() => setReloadKey((k) => k + 1)}>
+            {t("common.retry")}
+          </Button>
         </div>
       );
     }

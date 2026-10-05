@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { ChevronDown, Filter, Globe, Search, Trophy, TrendingUp, Users, UsersRound } from "lucide-react";
 import { PadelIcon } from "@/components/padel-icon";
-import { api, hasToken, isUnauthorizedError, Player } from "../../../lib/api";
+import { api, errorMessage, hasToken, isUnauthorizedError, Player } from "../../../lib/api";
 import { ntrpLevel } from "../../../lib/rating";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -31,7 +31,8 @@ const TR = {
   "toMyRank": { ru: "К моему рейтингу (#{rank})", en: "To my rank (#{rank})" },
   "common.loading": { ru: "Загрузка…", en: "Loading…" },
   "error.loadFallback": { ru: "Ошибка загрузки", en: "Failed to load" },
-  "loadFailed": { ru: "Не удалось загрузить: {error}", en: "Failed to load: {error}" },
+  "loadFailed": { ru: "Не удалось загрузить рейтинг. {error}", en: "Could not load the rating. {error}" },
+  "retry": { ru: "Повторить", en: "Retry" },
   "auth.ratingHint": {
     ru: "Рейтинг доступен участникам Padix. Войдите в аккаунт или зарегистрируйтесь — это займёт минуту.",
     en: "The rating is available to Padix members. Sign in or create an account — it takes a minute.",
@@ -96,6 +97,7 @@ export function V0RatingPage(props: { authed: boolean; me?: { playerId?: string 
   // Явный выбор вкладки; null — ещё не выбирали, тогда решаем по умолчанию ниже.
   const [chosenScope, setChosenScope] = useState<RatingScope | null>(readStoredScope);
   const [error, setError] = useState<string | null>(null);
+  const [reloadKey, setReloadKey] = useState(0);
   // 401 от API: вместо технической ошибки предлагаем войти или зарегистрироваться.
   const [unauthorized, setUnauthorized] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -145,7 +147,7 @@ export function V0RatingPage(props: { authed: boolean; me?: { playerId?: string 
       .catch((e: unknown) => {
         if (cancelled) return;
         setUnauthorized(isUnauthorizedError(e));
-        setError(e instanceof Error ? e.message : t("error.loadFallback"));
+        setError(errorMessage(e));
       })
       .finally(() => {
         if (cancelled) return;
@@ -164,7 +166,7 @@ export function V0RatingPage(props: { authed: boolean; me?: { playerId?: string 
       .then((c) => { if (!cancelled) setCircle(c); })
       .catch(() => { if (!cancelled) setCircle(null); });
     return () => { cancelled = true; };
-  }, [props.authed]);
+  }, [props.authed, reloadKey]);
 
   useEffect(() => {
     if (!props.authed || !hasToken()) return;
@@ -633,7 +635,10 @@ export function V0RatingPage(props: { authed: boolean; me?: { playerId?: string 
       {unauthorized && <AuthRequiredCard description={t("auth.ratingHint")} />}
       {error && !unauthorized && (
         <div className="rounded-lg border border-destructive/30 bg-destructive/10 p-4 text-sm">
-          {t("loadFailed", { error })}
+          <p>{t("loadFailed", { error })}</p>
+          <Button variant="outline" size="sm" className="mt-3" onClick={() => setReloadKey((k) => k + 1)}>
+            {t("retry")}
+          </Button>
         </div>
       )}
       {!loading && !error && !hasData && (

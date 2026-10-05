@@ -152,7 +152,7 @@ export function V0RegisterPage(props: { onAuth: (me: any) => void }) {
             <div className="space-y-2">
               <label className="text-sm font-medium">{t("reg.gender")}</label>
               <select
-                className="h-11 w-full rounded-md border border-border bg-secondary px-3 text-sm outline-none focus:ring-2 focus:ring-ring/50"
+                className="h-11 w-full rounded-md border border-border bg-secondary px-3 text-sm text-foreground outline-none focus:ring-2 focus:ring-ring/50 [&>option]:bg-secondary [&>option]:text-foreground"
                 value={gender}
                 onChange={(e) => setGender(e.target.value)}
               >
@@ -164,7 +164,7 @@ export function V0RegisterPage(props: { onAuth: (me: any) => void }) {
             <div className="space-y-2">
               <label className="text-sm font-medium">{t("reg.country")}</label>
               <select
-                className="h-11 w-full rounded-md border border-border bg-secondary px-3 text-sm outline-none focus:ring-2 focus:ring-ring/50"
+                className="h-11 w-full rounded-md border border-border bg-secondary px-3 text-sm text-foreground outline-none focus:ring-2 focus:ring-ring/50 [&>option]:bg-secondary [&>option]:text-foreground"
                 value={country}
                 onChange={(e) => setCountry(e.target.value)}
                 autoComplete="country"

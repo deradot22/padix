@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { api, EventHistoryItem, EventHistoryMatch, EventInviteItem, FriendsSnapshot, Round, TopPartner, hasToken } from "../../../lib/api";
+import { api, errorMessage, EventHistoryItem, EventHistoryMatch, EventInviteItem, FriendsSnapshot, Round, TopPartner, hasToken } from "../../../lib/api";
 import { ntrpLevel } from "../../../lib/rating";
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
@@ -279,7 +279,7 @@ export function V0ProfilePage(props: { me: any; meLoaded?: boolean; onMeUpdate?:
       })
       .catch((e: any) => {
         if (cancelled) return;
-        setHistoryError(e?.message ?? t("common.error"));
+        setHistoryError(errorMessage(e));
       })
       .finally(() => {
         if (cancelled) return;
@@ -313,7 +313,7 @@ export function V0ProfilePage(props: { me: any; meLoaded?: boolean; onMeUpdate?:
     api
       .topPartners(props.me.playerId, 3)
       .then((d) => { if (!cancelled) setPartners(d); })
-      .catch((e: any) => { if (!cancelled) setPartnersError(e?.message ?? t("common.error")); })
+      .catch((e: any) => { if (!cancelled) setPartnersError(errorMessage(e)); })
       .finally(() => { if (!cancelled) setPartnersLoading(false); });
     return () => { cancelled = true; };
   }, [profileTab, partners, props.me?.playerId]);
@@ -358,7 +358,7 @@ export function V0ProfilePage(props: { me: any; meLoaded?: boolean; onMeUpdate?:
                     setDetailsRounds([]);
                     setDetailsTitle(it.eventTitle);
                   } catch (err: any) {
-                    setHistoryError(err?.message ?? t("common.error"));
+                    setHistoryError(errorMessage(err));
                   }
                 }}
               >
@@ -811,7 +811,7 @@ export function V0ProfilePage(props: { me: any; meLoaded?: boolean; onMeUpdate?:
                                   const refreshed = await api.getInvites();
                                   setInvites(refreshed ?? []);
                                 } catch (e: any) {
-                                  setHistoryError(e?.message ?? t("common.error"));
+                                  setHistoryError(errorMessage(e));
                                 } finally {
                                   setInviteActionId(null);
                                 }
@@ -836,7 +836,7 @@ export function V0ProfilePage(props: { me: any; meLoaded?: boolean; onMeUpdate?:
                                   const refreshed = await api.getInvites();
                                   setInvites(refreshed ?? []);
                                 } catch (e: any) {
-                                  setHistoryError(e?.message ?? t("common.error"));
+                                  setHistoryError(errorMessage(e));
                                 } finally {
                                   setInviteActionId(null);
                                 }

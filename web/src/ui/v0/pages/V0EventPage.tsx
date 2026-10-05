@@ -2,7 +2,7 @@
 import { Link, useParams, useLocation } from "react-router-dom";
 import { AlertTriangle, ArrowLeft, Check, ChevronDown, Clock, Globe, Lock, MapPin, Pencil, Repeat, Scale, Share2, Target, Trash2, Trophy, Tv, UserPlus, Users, Zap, X } from "lucide-react";
 import { useNavigate } from "react-router-dom";
-import { api, BalancePreview, EventDetails, FriendItem, FriendsSnapshot, isUnauthorizedError, Match, Player } from "../../../lib/api";
+import { api, BalancePreview, errorMessage, EventDetails, FriendItem, FriendsSnapshot, isUnauthorizedError, Match, Player } from "../../../lib/api";
 import { AuthRequiredCard } from "@/components/auth-required-card";
 import { PlayerTooltip } from "@/components/player-tooltip";
 import { CountryFlag } from "@/components/country-flag";
@@ -35,6 +35,7 @@ const TR = {
   "common.loading": { ru: "Загрузка…", en: "Loading…" },
   "common.loadFailed": { ru: "Не удалось загрузить", en: "Failed to load" },
   "common.loadError": { ru: "Ошибка загрузки", en: "Failed to load" },
+  "common.retry": { ru: "Повторить", en: "Retry" },
   "auth.eventHint": {
     ru: "Эта игра доступна только участникам Padix. Войдите в аккаунт или зарегистрируйтесь — и увидите состав, расписание и счёт.",
     en: "This game is available to Padix members only. Sign in or create an account to see the line-up, schedule and scores.",
@@ -395,6 +396,7 @@ export function V0EventPage(props: { me: any; meLoaded?: boolean }) {
   const modalOpenRef = useRef(false);
   const [data, setData] = useState<EventDetails | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [reloadKey, setReloadKey] = useState(0);
   // 401 от API: не «ошибка загрузки», а «нужно войти» — показываем предложение авторизоваться.
   const [loadUnauthorized, setLoadUnauthorized] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -793,7 +795,7 @@ export function V0EventPage(props: { me: any; meLoaded?: boolean }) {
       .catch((e: unknown) => {
         if (cancelled) return;
         setLoadUnauthorized(isUnauthorizedError(e));
-        setLoadError(e instanceof Error ? e.message : t("common.loadError"));
+        setLoadError(errorMessage(e));
       })
       .finally(() => {
         if (cancelled) return;
@@ -802,7 +804,7 @@ export function V0EventPage(props: { me: any; meLoaded?: boolean }) {
     return () => {
       cancelled = true;
     };
-  }, [eventId, props.me]);
+  }, [eventId, props.me, reloadKey]);
 
   useEffect(() => {
     if (!eventId) return;
@@ -948,7 +950,10 @@ export function V0EventPage(props: { me: any; meLoaded?: boolean }) {
       if (loadError)
         return (
           <div className="rounded-lg border border-destructive/30 bg-destructive/10 p-4 text-sm">
-            {t("common.loadFailed")}: {loadError}
+            <p>{loadError}</p>
+            <Button variant="outline" size="sm" className="mt-3" onClick={() => setReloadKey((k) => k + 1)}>
+              {t("common.retry")}
+            </Button>
           </div>
         );
       if (!data) return <div className="text-sm text-muted-foreground">{t("common.notFound")}</div>;
@@ -1005,7 +1010,10 @@ export function V0EventPage(props: { me: any; meLoaded?: boolean }) {
     if (loadError)
       return (
         <div className="rounded-lg border border-destructive/30 bg-destructive/10 p-4 text-sm">
-          {t("common.loadFailed")}: {loadError}
+          <p>{loadError}</p>
+          <Button variant="outline" size="sm" className="mt-3" onClick={() => setReloadKey((k) => k + 1)}>
+            {t("common.retry")}
+          </Button>
         </div>
       );
     if (!data) return <div className="text-sm text-muted-foreground">{t("common.notFound")}</div>;

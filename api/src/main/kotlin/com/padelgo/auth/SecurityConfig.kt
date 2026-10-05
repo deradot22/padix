@@ -80,7 +80,8 @@ class SecurityConfig(
                 .requestMatchers(
                     "/api/auth/**",
                     "/api/admin/login",
-                    "/api/players/rating"
+                    "/api/players/rating",
+                    "/api/health"
                 ).permitAll()
                 .requestMatchers(org.springframework.http.HttpMethod.GET, "/api/players/*/avatar").permitAll()
                 .requestMatchers(org.springframework.http.HttpMethod.GET, "/api/events/*", "/api/events/today", "/api/events/upcoming").permitAll()
