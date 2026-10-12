@@ -2,6 +2,7 @@ package com.padelgo.service
 
 import com.padelgo.auth.UserAccount
 import com.padelgo.domain.Event
+import com.padelgo.domain.EventFormat
 import com.padelgo.domain.EventStatus
 import com.padelgo.domain.Match
 import com.padelgo.domain.MatchSetScore
@@ -137,10 +138,11 @@ class FinishEventRatingTest {
         whenever(ratingNotificationRepo.findByUserIdAndEventId(any(), eq(eventId))).doReturn(null)
     }
 
-    private fun event(status: EventStatus = EventStatus.IN_PROGRESS) = Event(
+    private fun event(status: EventStatus = EventStatus.IN_PROGRESS, format: EventFormat = EventFormat.AMERICANA) = Event(
         id = eventId,
         title = "Test",
         status = status,
+        format = format,
         scoringMode = ScoringMode.POINTS,
         pointsPerPlayerPerMatch = 6,
         courtsCount = 1,
@@ -162,9 +164,10 @@ class FinishEventRatingTest {
         players: Map<UUID, Player>,
         matches: List<Match>,
         scoresByMatch: Map<UUID, Pair<Int, Int>>,
-        calibrationByPlayer: Map<UUID, Int> = emptyMap()
+        calibrationByPlayer: Map<UUID, Int> = emptyMap(),
+        format: EventFormat = EventFormat.AMERICANA
     ): Event {
-        val ev = event()
+        val ev = event(format = format)
         whenever(eventRepo.findById(eventId)).doReturn(Optional.of(ev))
         whenever(eventRepo.save(any())).thenAnswer { it.arguments[0] }
         whenever(roundRepo.findAllByEventIdOrderByRoundNumberAsc(eventId)).doReturn(
@@ -206,10 +209,8 @@ class FinishEventRatingTest {
         service.finishEvent(eventId, ownerUserId)
 
         assertEquals(4, savedChanges.size)
-        // Полная командная дельта: round(20 × (1 − 1/11) × margin(16:8)) = 19 каждому.
-        val expected = kotlin.math.round(
-            EloRating.teamDelta(1300, 1700, 20.0, 1.0) * EloRating.marginMultiplier(16, 8, 24)
-        ).toInt()
+        // Полная командная дельта (исход + доля очков) каждому, без дележа пополам.
+        val expected = kotlin.math.round(EloRating.teamDelta(1300, 1700, 20.0, 1.0, 16, 8)).toInt()
         assertTrue(expected >= 19, "полная дельта апсета, а не половина: $expected")
         listOf(a1, a2).forEach { pid ->
             assertEquals(expected, savedChanges.first { it.playerId == pid }.delta, "победитель $pid")
@@ -292,24 +293,100 @@ class FinishEventRatingTest {
     }
 
     @Test
-    fun `победа при большом разрыве не даёт победителю ноль, пока дельта не меньше 0_5`() {
-        // Разрыв 400: фаворит выигрывает — дельта мала, но одинакова у обоих партнёров
-        // (раньше делёж нечётной дельты давал одному из пары 0).
+    fun `скромная победа фаворита даёт ноль, а не минус - разгром даёт плюс`() {
+        // Разрыв 400: пара 1700 обязана брать ≈ 66 % очков. 13:11 — меньше ожидаемого,
+        // но победитель в минус не уходит; 20:4 — больше ожидаемого, плюс обоим партнёрам.
         val players = mapOf(
             a1 to Player(id = a1, name = "a1", rating = 1700, gamesPlayed = 50),
             a2 to Player(id = a2, name = "a2", rating = 1700, gamesPlayed = 50),
             b1 to Player(id = b1, name = "b1", rating = 1300, gamesPlayed = 50),
             b2 to Player(id = b2, name = "b2", rating = 1300, gamesPlayed = 50)
         )
-        wire(players, listOf(match(match1Id, round1Id)), mapOf(match1Id to (13 to 11)))
+        wire(
+            players,
+            listOf(match(match1Id, round1Id), match(match2Id, round2Id)),
+            mapOf(match1Id to (13 to 11), match2Id to (20 to 4))
+        )
 
         service.finishEvent(eventId, ownerUserId)
 
-        val d1 = savedChanges.first { it.playerId == a1 }.delta
-        val d2 = savedChanges.first { it.playerId == a2 }.delta
-        assertEquals(d1, d2, "оба партнёра получают одинаково")
-        assertTrue(d1 >= 2, "победа фаворита при разрыве 400 всё ещё даёт очки: $d1")
+        playerIds.forEach { pid ->
+            assertEquals(0, savedChanges.first { it.playerId == pid && it.matchId == match1Id }.delta, "13:11 — ноль у $pid")
+        }
+        val win = savedChanges.first { it.playerId == a1 && it.matchId == match2Id }.delta
+        assertEquals(win, savedChanges.first { it.playerId == a2 && it.matchId == match2Id }.delta, "партнёры получают одинаково")
+        assertTrue(win > 0, "20:4 даёт плюс: $win")
+        assertEquals(-win, savedChanges.first { it.playerId == b1 && it.matchId == match2Id }.delta)
     }
+
+    @Test
+    fun `формат игры не влияет на начисление - Американо, Мексикано и пары дают одно и то же`() {
+        val deltasByFormat = EventFormat.values().associateWith { format ->
+            setup()
+            val players = mapOf(
+                a1 to Player(id = a1, name = "a1", rating = 1500, gamesPlayed = 50),
+                a2 to Player(id = a2, name = "a2", rating = 1100, gamesPlayed = 12),
+                b1 to Player(id = b1, name = "b1", rating = 1300, gamesPlayed = 50),
+                b2 to Player(id = b2, name = "b2", rating = 1250, gamesPlayed = 3)
+            )
+            wire(
+                players,
+                listOf(match(match1Id, round1Id), match(match2Id, round2Id)),
+                mapOf(match1Id to (15 to 9), match2Id to (10 to 14)),
+                format = format
+            )
+            service.finishEvent(eventId, ownerUserId)
+            savedChanges.map { Triple(it.playerId, it.matchId, it.delta) }.toSet()
+        }
+        val reference = deltasByFormat[EventFormat.AMERICANA]!!
+        assertTrue(reference.any { it.third != 0 }, "в эталоне есть ненулевые дельты")
+        deltasByFormat.forEach { (format, deltas) -> assertEquals(reference, deltas, "формат $format") }
+    }
+
+    @Test
+    fun `SETS - ничья по сетам, но больше геймов - небольшой плюс, zero-sum`() {
+        val players = playerIds.associateWith { Player(id = it, name = "p", rating = 1400, gamesPlayed = 50) }
+        wire(players, listOf(match(match1Id, round1Id)), mapOf(match1Id to (6 to 2)))
+        whenever(scoreRepo.findAllByMatchIdOrderBySetNumberAsc(match1Id)).doReturn(
+            listOf(
+                MatchSetScore(matchId = match1Id, setNumber = 1, teamAGames = 6, teamBGames = 2),
+                MatchSetScore(matchId = match1Id, setNumber = 2, teamAGames = 5, teamBGames = 7)
+            )
+        )
+        whenever(eventRepo.findById(eventId)).doReturn(Optional.of(setsEvent(setsPerMatch = 2)))
+
+        service.finishEvent(eventId, ownerUserId)
+
+        val dA = savedChanges.first { it.playerId == a1 }.delta
+        assertTrue(dA in 1..3, "1:1 по сетам, 11:9 по геймам — маленький плюс: $dA")
+        assertEquals(-dA, savedChanges.first { it.playerId == b1 }.delta)
+        assertEquals(0, savedChanges.sumOf { it.delta })
+    }
+
+    @Test
+    fun `SETS - недоигранный матч считается по сыгранным сетам`() {
+        // Из трёх сетов внесён один: кто взял его — тот и выиграл матч; доля геймов смягчает цену.
+        val players = playerIds.associateWith { Player(id = it, name = "p", rating = 1400, gamesPlayed = 50) }
+        wire(players, listOf(match(match1Id, round1Id)), mapOf(match1Id to (6 to 3)))
+        whenever(eventRepo.findById(eventId)).doReturn(Optional.of(setsEvent(setsPerMatch = 3)))
+
+        service.finishEvent(eventId, ownerUserId)
+
+        assertTrue(savedChanges.first { it.playerId == a1 }.delta > 0)
+        assertEquals(0, savedChanges.sumOf { it.delta })
+    }
+
+    private fun setsEvent(setsPerMatch: Int) = Event(
+        id = eventId,
+        title = "Test SETS",
+        status = EventStatus.IN_PROGRESS,
+        scoringMode = ScoringMode.SETS,
+        setsPerMatch = setsPerMatch,
+        gamesPerSet = 6,
+        pointsPerPlayerPerMatch = 6,
+        courtsCount = 1,
+        createdByUserId = ownerUserId
+    )
 
     // ── Bug 2 (правка счёта не апдейтит сообщение в Telegram) ─────────────────
     // Инвариант: правка финального счёта уже завершённой игры организатором обязана
