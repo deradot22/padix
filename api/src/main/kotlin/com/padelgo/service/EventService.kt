@@ -1614,16 +1614,6 @@ class EventService(
             accounts.associate { it.playerId!! to it.calibrationMatchesRemaining }.toMutableMap()
         val accountByPlayerId = accounts.associateBy { it.playerId!! }
 
-        // Нормализация по числу матчей в эвенте с клампом NORM_MIN..NORM_MAX.
-        val matchCountByPlayer: Map<UUID, Int> = finishedMatches.flatMap {
-            listOf(it.teamAPlayer1Id!!, it.teamAPlayer2Id!!, it.teamBPlayer1Id!!, it.teamBPlayer2Id!!)
-        }.groupingBy { it }.eachCount()
-        val avgMatches: Double = if (matchCountByPlayer.isEmpty()) 1.0 else matchCountByPlayer.values.average()
-        val normByPlayer: Map<UUID, Double> = matchCountByPlayer.mapValues { (_, count) ->
-            if (count == 0) 1.0
-            else (avgMatches / count.toDouble()).coerceIn(EloRating.NORM_MIN, EloRating.NORM_MAX)
-        }
-
         // K-фактор фиксируем от числа игр НА НАЧАЛО эвента.
         val gamesAtStart: Map<UUID, Int> = players.mapValues { (_, p) -> p.gamesPlayed }
 
@@ -1649,8 +1639,8 @@ class EventService(
             val calibByPlayer: Map<UUID, Double> = listOf(a1, a2, b1, b2).associate { p ->
                 p.id!! to if ((calibRemaining[p.id] ?: 0) > 0) EloRating.CALIBRATION_MULTIPLIER else 1.0
             }
-            applyDelta(eventId, m.id!!, a1, a2, deltaTeamA, kTeam, calibByPlayer, normByPlayer)
-            applyDelta(eventId, m.id!!, b1, b2, -deltaTeamA, kTeam, calibByPlayer, normByPlayer)
+            applyDelta(eventId, m.id!!, a1, a2, deltaTeamA, kTeam, calibByPlayer)
+            applyDelta(eventId, m.id!!, b1, b2, -deltaTeamA, kTeam, calibByPlayer)
 
             listOf(a1, a2, b1, b2).forEach { p ->
                 p.gamesPlayed += 1
@@ -1908,7 +1898,7 @@ class EventService(
      * Отличия от [finishEvent] (намеренные — иначе пересчёт был бы не идемпотентен):
      *  - НЕ инкрементит gamesPlayed / lastMatchAt / calibrationMatchesRemaining /
      *    calibrationEventsRemaining;
-     *  - kFactor / калибровка / нормировка берутся из СОХРАНЁННЫХ факторов старых
+     *  - kFactor / калибровка берутся из СОХРАНЁННЫХ факторов старых
      *    rating_changes (V48) — т.е. те же, что применил finishEvent; fallback для
      *    legacy-записей без факторов — вывод от текущего состояния игрока;
      *  - прогон идёт в локальной мапе workRating, player.rating меняется только финальной
@@ -1935,9 +1925,6 @@ class EventService(
         val storedCalib: Map<Pair<UUID, UUID>, Double> = oldChanges
             .filter { it.matchId != null && it.playerId != null && it.calibMult != null }
             .associate { (it.matchId!! to it.playerId!!) to it.calibMult!! }
-        val storedNorm: Map<Pair<UUID, UUID>, Double> = oldChanges
-            .filter { it.matchId != null && it.playerId != null && it.normFactor != null }
-            .associate { (it.matchId!! to it.playerId!!) to it.normFactor!! }
 
         // 2. FINISHED-матчи эвента в порядке (roundNumber, courtNumber).
         val rounds = roundRepo.findAllByEventIdOrderByRoundNumberAsc(eventId)
@@ -1984,16 +1971,6 @@ class EventService(
             workRating[pid] = preEvent
         }
 
-        // 3+5. normByPlayer — точно как finishEvent (fallback для legacy-записей без факторов).
-        val matchCountByPlayer: Map<UUID, Int> = finishedMatches.flatMap {
-            listOf(it.teamAPlayer1Id!!, it.teamAPlayer2Id!!, it.teamBPlayer1Id!!, it.teamBPlayer2Id!!)
-        }.groupingBy { it }.eachCount()
-        val avgMatches: Double = if (matchCountByPlayer.isEmpty()) 1.0 else matchCountByPlayer.values.average()
-        val normByPlayer: Map<UUID, Double> = matchCountByPlayer.mapValues { (_, count) ->
-            if (count == 0) 1.0
-            else (avgMatches / count.toDouble()).coerceIn(EloRating.NORM_MIN, EloRating.NORM_MAX)
-        }
-
         // kFactor-fallback для legacy-записей: от текущего gamesPlayed (уже включает эвент).
         val gamesByPlayer: Map<UUID, Int> = playerIds.associateWith { players[it]?.gamesPlayed ?: 0 }
 
@@ -2020,8 +1997,8 @@ class EventService(
 
             val deltaTeamA = computeTeamADelta(event, sets, teamARating, teamBRating, kTeam)
 
-            applyDeltaWork(eventId, m.id!!, a1, a2, deltaTeamA, kTeam, calibrationByPlayer, normByPlayer, storedCalib, storedNorm, workRating, newChanges, newSumByPlayer)
-            applyDeltaWork(eventId, m.id!!, b1, b2, -deltaTeamA, kTeam, calibrationByPlayer, normByPlayer, storedCalib, storedNorm, workRating, newChanges, newSumByPlayer)
+            applyDeltaWork(eventId, m.id!!, a1, a2, deltaTeamA, kTeam, calibrationByPlayer, storedCalib, workRating, newChanges, newSumByPlayer)
+            applyDeltaWork(eventId, m.id!!, b1, b2, -deltaTeamA, kTeam, calibrationByPlayer, storedCalib, workRating, newChanges, newSumByPlayer)
         }
 
         // 6. Заменяем changes этого эвента.
@@ -2088,7 +2065,7 @@ class EventService(
     /**
      * Чистый расчёт дельты команды A для матча (без побочных эффектов) — общий для
      * finishEvent и idempotent-пересчёта. Дробная: округление один раз в самом конце
-     * конвейера (в applyDelta*, после калибровки и нормировки).
+     * конвейера (в applyDelta*, после калибровки).
      */
     internal fun computeTeamADelta(
         event: Event,
@@ -2098,28 +2075,18 @@ class EventService(
         kTeam: Double
     ): Double {
         val scoreA = scoreAFromSets(event.scoringMode, sets)
-        val (teamAPoints, teamBPoints, expectedTotal) = when (event.scoringMode) {
-            ScoringMode.POINTS -> {
-                val s1 = sets.first()
-                Triple(s1.teamAGames, s1.teamBGames, event.pointsPerPlayerPerMatch * 4)
-            }
-            ScoringMode.SETS -> {
-                val totalA = sets.sumOf { it.teamAGames }
-                val totalB = sets.sumOf { it.teamBGames }
-                // Максимум геймов ОДНОЙ команды (а не обеих): раньше ×2 ограничивал
-                // ratio ≤ 0.5, и margin-множитель в SETS не мог превысить 1.125.
-                val maxGames = event.gamesPerSet * event.setsPerMatch
-                Triple(totalA, totalB, maxOf(maxGames, 1))
-            }
+        // POINTS: очки одного «сета»; SETS: геймы за все сеты — доля очков считается от них.
+        val (teamAPoints, teamBPoints) = when (event.scoringMode) {
+            ScoringMode.POINTS -> sets.first().let { it.teamAGames to it.teamBGames }
+            ScoringMode.SETS -> sets.sumOf { it.teamAGames } to sets.sumOf { it.teamBGames }
         }
-        val marginMult = EloRating.marginMultiplier(teamAPoints, teamBPoints, expectedTotal)
-        return EloRating.teamDelta(teamARating, teamBRating, kTeam, scoreA) * marginMult
+        return EloRating.teamDelta(teamARating, teamBRating, kTeam, scoreA, teamAPoints, teamBPoints)
     }
 
     /**
      * Аналог [applyDelta]/[applyDeltaSingle], но пишущий в локальную мапу workRating и
      * аккумулирующий новые RatingChange + newSum (не трогая player.rating). Множители
-     * берутся из сохранённых факторов оригинального расчёта (storedCalib/storedNorm);
+     * берутся из сохранённых факторов оригинального расчёта (storedCalib);
      * fallback для legacy-записей — вывод от текущего состояния игрока.
      */
     private fun applyDeltaWork(
@@ -2130,9 +2097,7 @@ class EventService(
         deltaTeam: Double,
         kTeam: Double,
         calibrationByPlayer: Map<UUID, Int>,
-        normByPlayer: Map<UUID, Double>,
         storedCalib: Map<Pair<UUID, UUID>, Double>,
-        storedNorm: Map<Pair<UUID, UUID>, Double>,
         workRating: MutableMap<UUID, Int>,
         newChanges: MutableList<RatingChange>,
         newSumByPlayer: MutableMap<UUID, Int>
@@ -2140,8 +2105,7 @@ class EventService(
         listOf(p1, p2).forEach { pid ->
             val calib = storedCalib[matchId to pid]
                 ?: if ((calibrationByPlayer[pid] ?: 0) > 0) EloRating.CALIBRATION_MULTIPLIER else 1.0
-            val norm = storedNorm[matchId to pid] ?: normByPlayer[pid] ?: 1.0
-            val delta = kotlin.math.round(deltaTeam * calib * norm).toInt()
+            val delta = kotlin.math.round(deltaTeam * calib).toInt()
             val old = workRating[pid] ?: 0
             val newRating = (old + delta).coerceAtLeast(0)
             workRating[pid] = newRating
@@ -2158,7 +2122,7 @@ class EventService(
                     newRating = newRating,
                     kFactor = kTeam,
                     calibMult = calib,
-                    normFactor = norm
+                    normFactor = 1.0
                 )
             )
         }
@@ -2171,18 +2135,16 @@ class EventService(
         p2: Player,
         deltaTeam: Double,
         kTeam: Double,
-        calibByPlayer: Map<UUID, Double>,
-        normByPlayer: Map<UUID, Double>
+        calibByPlayer: Map<UUID, Double>
     ) {
         // Каждый игрок пары получает ПОЛНУЮ командную дельту (классический team-Elo).
         // Старый делёж пополам занижал апсеты вдвое и рождал нули на нечётных дельтах.
         listOf(p1, p2).forEach { p ->
             val calib = calibByPlayer[p.id] ?: 1.0
-            val norm = normByPlayer[p.id] ?: 1.0
             // round() — от нуля при .5 (roundToInt тянет к +∞: +2.5→3, но −2.5→−2,
             // что ломало симметрию победителей/проигравших).
-            val delta = kotlin.math.round(deltaTeam * calib * norm).toInt()
-            applyDeltaSingle(eventId, matchId, p, delta, kTeam, calib, norm)
+            val delta = kotlin.math.round(deltaTeam * calib).toInt()
+            applyDeltaSingle(eventId, matchId, p, delta, kTeam, calib)
         }
     }
 
@@ -2192,8 +2154,7 @@ class EventService(
         p: Player,
         delta: Int,
         kTeam: Double,
-        calib: Double,
-        norm: Double
+        calib: Double
     ) {
         val old = p.rating
         val newRating = (old + delta).coerceAtLeast(0)
@@ -2211,7 +2172,7 @@ class EventService(
                 newRating = newRating,
                 kFactor = kTeam,
                 calibMult = calib,
-                normFactor = norm
+                normFactor = 1.0
             )
         )
     }

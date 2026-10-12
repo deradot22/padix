@@ -69,8 +69,9 @@ class SurveyService(
 
         val level = (base + delta).coerceIn(0.0, 7.0)
 
-        // level 0..7 -> rating 800..1600 (более консервативно, чтобы тест не "раздувал" цифры)
-        val rating = (800 + (level / 7.0) * 800).toInt().coerceIn(400, 2500)
+        // level 0..7 -> rating 850..1400: середина анкеты ≈ 1120, чуть ниже медианы клуба.
+        // Новичок скорее недооценён и быстро растёт на K=48 ×1.5, чем входит выше поля (2026-10).
+        val rating = (850 + (level / 7.0) * 550).toInt().coerceIn(850, 1400)
 
         user.surveyCompleted = true
         user.surveyLevel = level

@@ -1,23 +1,38 @@
 package com.padelgo.service
 
-import kotlin.math.max
-import kotlin.math.min
 import kotlin.math.pow
 import kotlin.math.roundToInt
 
+/**
+ * Рейтинг v2 (2026-10). Разбор, бэктест на реальных матчах и мотивация констант —
+ * docs/RATING_V2_2026-10.md.
+ *
+ * Дельта команды A за матч (команда B получает −delta):
+ *   outcome = S − E,   E = 1 / (1 + 10^((B − A) / 300)),  S = 1 / 0.5 / 0
+ *   share   = p − P,   P = 1 / (1 + 10^((B − A) / 1400)), p = очки A / все очки матча
+ *   delta   = K × (0.5 × outcome + 0.5 × 3 × share)
+ * Победитель не уходит в минус, проигравший — в плюс.
+ */
 object EloRating {
-    /**
-     * Кламп нормировки по числу сыгранных матчей (avgMatches / playerMatches).
-     * Без клампа запасной с 1 матчем при среднем 5 получал ×5 к дельте одного матча.
-     */
-    const val NORM_MIN = 0.75
-    const val NORM_MAX = 1.5
+    /** Делитель шкалы исхода: разница 225 ≈ 85 % побед, 300 ≈ 91 %. Классические 400 недооценивали фаворита. */
+    const val OUTCOME_SCALE = 300.0
+
+    /** Делитель шкалы доли очков: при разнице 300 фаворит берёт ≈ 62 % очков (измерено по проду). */
+    const val SHARE_SCALE = 1400.0
+
+    const val OUTCOME_WEIGHT = 0.5
+
+    /** Усиление доли очков: треть всех очков сверх ожидания стоит столько же, сколько сам исход. */
+    const val SHARE_GAIN = 3.0
 
     /** Множитель дельты для калибрующегося игрока (calibrationMatchesRemaining > 0). */
     const val CALIBRATION_MULTIPLIER = 1.5
 
     fun expectedScore(ratingA: Int, ratingB: Int): Double =
-        1.0 / (1.0 + 10.0.pow((ratingB - ratingA) / 400.0))
+        1.0 / (1.0 + 10.0.pow((ratingB - ratingA) / OUTCOME_SCALE))
+
+    fun expectedShare(ratingA: Int, ratingB: Int): Double =
+        1.0 / (1.0 + 10.0.pow((ratingB - ratingA) / SHARE_SCALE))
 
     fun kFactor(gamesPlayed: Int): Int =
         when {
@@ -27,48 +42,34 @@ object EloRating {
         }
 
     /**
-     * Командный рейтинг пары — взвешенное среднее с уклоном к слабому игроку (60/40).
-     * Причина: в паддле «бьют по слабому», слабый партнёр — узкое горлышко.
-     * Команда 1800+1400 (avg 1600) на деле слабее команды 1600+1600,
-     * и weighted формула это отражает.
+     * Рейтинг пары — среднее. Прежний уклон к слабому (60/40) заставлял сильного игрока в
+     * паре со слабыми держать завышенный рейтинг: его цифра входила в ожидание лишь на 40 %.
      */
-    fun teamRating(p1Rating: Int, p2Rating: Int): Int {
-        val weaker = min(p1Rating, p2Rating)
-        val stronger = max(p1Rating, p2Rating)
-        return (weaker * 0.6 + stronger * 0.4).roundToInt()
-    }
+    fun teamRating(p1Rating: Int, p2Rating: Int): Int = ((p1Rating + p2Rating) / 2.0).roundToInt()
 
     /**
-     * Возвращает delta для команды A (для команды B будет -delta).
+     * Дельта команды A. scoreA: 1.0 победа / 0.5 ничья / 0.0 поражение;
+     * pointsA/pointsB — очки (POINTS) или геймы за все сеты (SETS).
      *
-     * Дробная: округление делается ОДИН раз в самом конце конвейера (после margin,
-     * калибровки и нормировки) — каскад промежуточных округлений схлопывал мелкие
-     * дельты в 0 и ломал zero-sum.
-     *
-     * scoreA: 1.0 win, 0.5 draw, 0.0 loss
+     * Дробная: округление делается ОДИН раз в конце конвейера (после калибровки) —
+     * каскад промежуточных округлений схлопывал мелкие дельты в 0 и ломал zero-sum.
      */
-    fun teamDelta(teamARating: Int, teamBRating: Int, k: Double, scoreA: Double): Double {
-        val expected = expectedScore(teamARating, teamBRating)
-        return k * (scoreA - expected)
-    }
-
-    /**
-     * Множитель за разницу счёта (margin of victory).
-     * Квадратичная кривая: мелкие победы почти не усиливаются, разгромы — сильно.
-     * multiplier = 1 + 0.5 * (margin/expectedTotal)^2, макс 1.5
-     *
-     * Примеры (expectedTotal=24):
-     *   13:11 (margin=2)   → 1.003 (boring)
-     *   16:8  (margin=8)   → 1.056
-     *   20:4  (margin=16)  → 1.22 (умеренный разгром)
-     *   22:2  (margin=20)  → 1.35
-     *   24:0  (margin=24)  → 1.5 (полный шат-аут)
-     */
-    fun marginMultiplier(teamAPoints: Int, teamBPoints: Int, expectedTotal: Int): Double {
-        if (expectedTotal <= 0) return 1.0
-        val margin = kotlin.math.abs(teamAPoints - teamBPoints)
-        val ratio = min(margin.toDouble() / expectedTotal, 1.0)
-        return 1.0 + 0.5 * ratio * ratio
+    fun teamDelta(
+        teamARating: Int,
+        teamBRating: Int,
+        k: Double,
+        scoreA: Double,
+        pointsA: Int,
+        pointsB: Int
+    ): Double {
+        val outcome = scoreA - expectedScore(teamARating, teamBRating)
+        val total = pointsA + pointsB
+        val share = if (total > 0) pointsA.toDouble() / total - expectedShare(teamARating, teamBRating) else 0.0
+        val delta = k * (OUTCOME_WEIGHT * outcome + (1 - OUTCOME_WEIGHT) * SHARE_GAIN * share)
+        return when {
+            scoreA > 0.5 && delta < 0 -> 0.0
+            scoreA < 0.5 && delta > 0 -> 0.0
+            else -> delta
+        }
     }
 }
-

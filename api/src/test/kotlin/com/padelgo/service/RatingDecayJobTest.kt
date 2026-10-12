@@ -119,9 +119,9 @@ class RatingDecayJobTest {
 
     @Test
     fun `неактивный калибрующийся уходит на повторную калибровку И декеится`() {
-        // a1: 120 дней простоя, калибровка недоиграна (осталось 13). По новой политике:
-        // остаток поднимается до 30 заново, а decay применяется НЕСМОТРЯ на калибровку.
-        val acc = UserAccount(id = UUID.randomUUID(), playerId = aId, calibrationMatchesRemaining = 13)
+        // a1: 120 дней простоя, калибровка недоиграна (осталось 3). По новой политике:
+        // остаток поднимается до 10 заново, а decay применяется НЕСМОТРЯ на калибровку.
+        val acc = UserAccount(id = UUID.randomUUID(), playerId = aId, calibrationMatchesRemaining = 3)
         whenever(userRepo.findAll()).doReturn(listOf(acc))
 
         val a = Player(id = aId, name = "A", rating = 1800, gamesPlayed = 17).apply {
@@ -144,14 +144,14 @@ class RatingDecayJobTest {
 
         job.applyDecay(now)
 
-        assertEquals(30, acc.calibrationMatchesRemaining, "повторная калибровка: остаток поднят до 30 заново")
+        assertEquals(10, acc.calibrationMatchesRemaining, "повторная калибровка: остаток поднят до 10 заново")
         // 30 дней сверх порога → −30 (cap 30%×700=210 не достигнут). Броня калибровки снята.
         assertEquals(1770, a.rating, "decay применился несмотря на статус калибровки")
         assertEquals(1, changes.count { it.playerId == aId && it.kind == RatingChangeKind.DECAY })
 
-        // Повторный прогон того же дня — идемпотентен (остаток уже 30, рейтинг не двигается).
+        // Повторный прогон того же дня — идемпотентен (остаток уже 10, рейтинг не двигается).
         job.applyDecay(now)
-        assertEquals(30, acc.calibrationMatchesRemaining)
+        assertEquals(10, acc.calibrationMatchesRemaining)
         assertEquals(1770, a.rating)
         assertEquals(1, changes.count { it.playerId == aId && it.kind == RatingChangeKind.DECAY })
     }
