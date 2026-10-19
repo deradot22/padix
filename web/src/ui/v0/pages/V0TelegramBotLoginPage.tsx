@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { api, MeResponse, setToken } from "@/lib/api";
+import { api, ApiRequestError, hasToken, MeResponse, setToken } from "@/lib/api";
 import { Dict, useI18n } from "@/lib/i18n";
 
 const TR = {
@@ -118,30 +118,52 @@ export function V0TelegramBotLoginPage(props: { onAuth: (me: MeResponse) => void
       setError(t("tgLogin.errNoToken"));
       return;
     }
+    // Пока юзер в Telegram, iOS замораживает вкладку (особенно во встроенных браузерах
+    // Telegram/Instagram): запрос, начатый перед уходом, может так и не вернуться, и
+    // цепочка поллинга умирала навсегда на «Готовим вход…». Поэтому: таймаут на каждый
+    // запрос, сетевые ошибки не фатальны, при возврате на вкладку — сразу новый запрос.
     let cancelled = false;
+    let finished = false;
+    let seq = 0;
+    let timer: number | undefined;
     const tick = async () => {
+      if (cancelled || finished) return;
+      window.clearTimeout(timer);
+      const my = ++seq;
       try {
-        const s = await api.telegramBotLoginStatus(token);
-        if (cancelled) return;
+        const s = await Promise.race([
+          api.telegramBotLoginStatus(token),
+          new Promise<never>((_, reject) => window.setTimeout(() => reject(new Error("timeout")), 8000)),
+        ]);
+        if (cancelled || my !== seq) return;
         setStatus(s);
-        // Стоп-условия — больше не поллим.
-        if (s.status === "REJECTED" || s.status === "EXPIRED") return;
-        if (s.status === "APPROVED") return;
-        // Иначе продолжаем
-        scheduleNext();
+        if (s.status !== "PENDING" && s.status !== "AWAITING_APPROVAL") {
+          finished = true;
+          return;
+        }
       } catch (e: any) {
-        if (cancelled) return;
-        setError(e?.message ?? t("tgLogin.errStatus"));
+        if (cancelled || my !== seq) return;
+        if (e instanceof ApiRequestError && e.status === 404) {
+          finished = true;
+          setError(e.message || t("tgLogin.errStatus"));
+          return;
+        }
       }
+      timer = window.setTimeout(tick, 1500);
     };
-    const scheduleNext = () => {
-      window.setTimeout(() => {
-        if (!cancelled) tick();
-      }, 1500);
+    const wake = () => {
+      if (document.visibilityState === "visible") tick();
     };
+    document.addEventListener("visibilitychange", wake);
+    window.addEventListener("focus", wake);
+    window.addEventListener("pageshow", wake);
     tick();
     return () => {
       cancelled = true;
+      window.clearTimeout(timer);
+      document.removeEventListener("visibilitychange", wake);
+      window.removeEventListener("focus", wake);
+      window.removeEventListener("pageshow", wake);
     };
     // t намеренно вне зависимостей: смена языка не должна перезапускать поллинг.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -178,6 +200,18 @@ export function V0TelegramBotLoginPage(props: { onAuth: (me: MeResponse) => void
         nav(me.surveyCompleted ? "/" : "/survey", { replace: true });
       }
     } catch (e: any) {
+      // Токен уже обменяла другая вкладка (например, открытая кнопкой из бота) —
+      // если она сохранила сессию в общий localStorage, просто заходим.
+      if (hasToken()) {
+        try {
+          const me = await api.me();
+          props.onAuth(me);
+          nav(me.surveyCompleted ? "/" : "/survey", { replace: true });
+          return;
+        } catch {
+          /* показываем исходную ошибку */
+        }
+      }
       setError(e?.message ?? t("tgLogin.errComplete"));
       setCompleting(false);
       completedRef.current = false;
