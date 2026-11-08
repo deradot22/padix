@@ -284,13 +284,11 @@ export function App() {
           <Route path="auth/telegram-login" element={<V0TelegramBotLoginPage onAuth={onAuthenticated} />} />
           <Route path="auth/telegram-link-confirm" element={<V0TelegramLinkConfirmPage onAuth={onAuthenticated} />} />
           {/*
-            /admin маршруты в DEV доступны всегда (быстрая локальная работа).
-            В production публикуются только если VITE_ENABLE_ADMIN_UI=true —
-            это нужно явно выставить в окружении Render/CI. Иначе админка
-            недоступна через web, и форма логина не «светит» URL в DOM.
-            (Сам API всё ещё доступен через curl с правильным токеном.)
+            /admin доступна и в production: сама форма логина ничего не раскрывает,
+            а API требует отдельный admin-токен (POST /api/admin/login).
+            Скрыть маршруты можно сборкой с VITE_ENABLE_ADMIN_UI=false.
           */}
-          {(import.meta.env.DEV || import.meta.env.VITE_ENABLE_ADMIN_UI === "true") ? (
+          {import.meta.env.VITE_ENABLE_ADMIN_UI !== "false" ? (
             <>
               <Route path="admin" element={<V0AdminPage />} />
               <Route path="admin/feedback" element={<V0AdminFeedbackPage />} />
