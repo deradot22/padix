@@ -128,6 +128,14 @@ data class AdminFeedbackNotify(
     val attachmentMime: String? = null
 )
 
+data class AdminLoginNotify(
+    val adminUserId: UUID,
+    val success: Boolean,
+    val username: String,
+    val ip: String,
+    val reason: String? = null
+)
+
 data class PrepareCancellationRequest(
     val eventId: UUID,
     val ownerUserId: UUID,
@@ -216,6 +224,9 @@ class BotClient(
 
     fun notifyAdminFeedback(payload: AdminFeedbackNotify): Int =
         post("/api/internal/telegram/notify/admin-feedback", payload)
+
+    fun notifyAdminLogin(payload: AdminLoginNotify): Int =
+        post("/api/internal/telegram/notify/admin-login", payload)
 
     // ---------- Прокси для user-facing /api/telegram/* ----------
 

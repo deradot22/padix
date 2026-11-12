@@ -55,6 +55,8 @@ enum class RateLimitPolicy(val capacity: Int, val window: Duration) {
     REGISTER(capacity = 5, window = Duration.ofHours(1)),
     LOGIN(capacity = 10, window = Duration.ofMinutes(5)),
     RESEND_VERIFICATION(capacity = 3, window = Duration.ofMinutes(15)),
+    /** Вход в админку: 5 попыток с IP за 15 минут — перебор пароля становится бессмысленным. */
+    ADMIN_LOGIN(capacity = 5, window = Duration.ofMinutes(15)),
 }
 
 /**
@@ -89,6 +91,7 @@ class RateLimitFilter(private val limiter: RateLimiter) : OncePerRequestFilter()
             RateLimitPolicy.REGISTER -> "Слишком много регистраций с этого IP. Попробуйте через ${formatDuration(retryAfterSec)}."
             RateLimitPolicy.LOGIN -> "Слишком много попыток входа. Попробуйте через ${formatDuration(retryAfterSec)}."
             RateLimitPolicy.RESEND_VERIFICATION -> "Слишком частые запросы на отправку письма. Попробуйте через ${formatDuration(retryAfterSec)}."
+            RateLimitPolicy.ADMIN_LOGIN -> "Слишком много попыток входа в админку. Попробуйте через ${formatDuration(retryAfterSec)}."
         }
         response.writer.write(
             """{"status":429,"error":"Too Many Requests","message":${jsonString(message)}}""",
@@ -102,19 +105,12 @@ class RateLimitFilter(private val limiter: RateLimiter) : OncePerRequestFilter()
             path == "/api/auth/register" -> RateLimitPolicy.REGISTER
             path == "/api/auth/login" -> RateLimitPolicy.LOGIN
             path == "/api/me/resend-verification" -> RateLimitPolicy.RESEND_VERIFICATION
+            path == "/api/admin/login" -> RateLimitPolicy.ADMIN_LOGIN
             else -> null
         }
     }
 
-    private fun clientIp(request: HttpServletRequest): String {
-        // Cloudflare кладёт реальный IP сюда.
-        request.getHeader("CF-Connecting-IP")?.takeIf { it.isNotBlank() }?.let { return it.trim() }
-        // X-Forwarded-For: "client, proxy1, proxy2" — берём первого (client).
-        request.getHeader("X-Forwarded-For")?.takeIf { it.isNotBlank() }?.let {
-            return it.split(",").first().trim()
-        }
-        return request.remoteAddr ?: "unknown"
-    }
+    private fun clientIp(request: HttpServletRequest): String = clientIpOf(request)
 
     private fun formatDuration(seconds: Long): String = when {
         seconds < 60 -> "$seconds сек"
@@ -124,4 +120,13 @@ class RateLimitFilter(private val limiter: RateLimiter) : OncePerRequestFilter()
 
     private fun jsonString(s: String): String =
         "\"" + s.replace("\\", "\\\\").replace("\"", "\\\"") + "\""
+}
+
+/** Реальный IP клиента за Cloudflare/прокси: CF-Connecting-IP → первый из X-Forwarded-For → remoteAddr. */
+fun clientIpOf(request: HttpServletRequest): String {
+    request.getHeader("CF-Connecting-IP")?.takeIf { it.isNotBlank() }?.let { return it.trim() }
+    request.getHeader("X-Forwarded-For")?.takeIf { it.isNotBlank() }?.let {
+        return it.split(",").first().trim()
+    }
+    return request.remoteAddr ?: "unknown"
 }

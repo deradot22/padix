@@ -20,9 +20,15 @@ class JwtService(
      * В этом случае в claim записываем пустую строку — клиент не должен полагаться на это значение,
      * первоисточник правды — `/api/me`.
      */
-    fun createToken(userId: UUID, email: String?, playerId: UUID, isAdmin: Boolean = false): String {
+    fun createToken(
+        userId: UUID,
+        email: String?,
+        playerId: UUID,
+        isAdmin: Boolean = false,
+        ttlOverrideSeconds: Long? = null
+    ): String {
         val now = Instant.now()
-        val exp = now.plusSeconds(ttlSeconds)
+        val exp = now.plusSeconds(ttlOverrideSeconds ?: ttlSeconds)
         return Jwts.builder()
             .subject(userId.toString())
             .claim("email", email ?: "")
@@ -34,9 +40,10 @@ class JwtService(
             .compact()
     }
 
-    fun createAdminToken(username: String): String {
+    /** Админ-токен живёт заметно меньше пользовательского: украденный токен быстро протухает. */
+    fun createAdminToken(username: String, ttlSeconds: Long? = null): String {
         val zero = UUID(0, 0)
-        return createToken(zero, username, zero, true)
+        return createToken(zero, username, zero, isAdmin = true, ttlOverrideSeconds = ttlSeconds)
     }
 
     fun parse(token: String): JwtPrincipal {

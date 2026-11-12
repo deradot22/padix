@@ -52,13 +52,6 @@ export function V0LoginPage(props: { onAuth: (me: any) => void }) {
     setLoading(true);
     setError(null);
     try {
-      if (!email.includes("@")) {
-        const { token } = await api.adminLogin(email, password);
-        setAdminToken(token);
-        setToken(null);
-        nav("/admin");
-        return;
-      }
       const { token } = await api.login(email, password);
       setAdminToken(null);
       setToken(token?.trim() || null);

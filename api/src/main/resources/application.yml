@@ -39,6 +39,10 @@ app:
   admin:
     username: ${APP_ADMIN_USERNAME:admin228}
     password: ${APP_ADMIN_PASSWORD:admin228}
+    # Второй фактор: base32-секрет TOTP (Google Authenticator и т.п.). Пусто — второй фактор выключен.
+    totp-secret: ${APP_ADMIN_TOTP_SECRET:}
+    # Срок жизни admin-токена; по умолчанию 12 часов.
+    token-ttl-seconds: ${APP_ADMIN_TOKEN_TTL_SECONDS:43200}
     # Кто получает TG-уведомления о новых тикетах обратной связи — назначается в /admin
     # (флаг `users.is_feedback_admin`, см. миграцию V36). Юзер должен также привязать
     # свой Telegram через Настройки → Уведомления → Telegram (PRIVATE-чат).

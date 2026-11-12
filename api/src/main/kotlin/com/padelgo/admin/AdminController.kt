@@ -9,8 +9,14 @@ import com.padelgo.domain.Player
 import com.padelgo.repo.PlayerRepository
 import com.padelgo.repo.MatchRepository
 import com.padelgo.repo.RoundRepository
+import com.padelgo.service.AdminLoginNotify
+import com.padelgo.service.BotClient
 import com.padelgo.service.EventService
+import com.padelgo.auth.Totp
+import com.padelgo.auth.clientIpOf
+import jakarta.servlet.http.HttpServletRequest
 import jakarta.validation.constraints.NotBlank
+import org.slf4j.LoggerFactory
 import io.swagger.v3.oas.annotations.tags.Tag
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.http.HttpStatus
@@ -40,19 +46,72 @@ class AdminController(
     private val eventService: EventService,
     private val roundRepo: RoundRepository,
     private val matchRepo: MatchRepository,
+    private val botClient: BotClient,
     @Value("\${app.admin.username}") private val adminUsername: String,
-    @Value("\${app.admin.password}") private val adminPassword: String
+    @Value("\${app.admin.password}") private val adminPassword: String,
+    @Value("\${app.admin.totp-secret:}") private val adminTotpSecret: String,
+    @Value("\${app.admin.token-ttl-seconds:43200}") private val adminTokenTtlSeconds: Long
 ) {
+    private val log = LoggerFactory.getLogger(AdminController::class.java)
+
+    /**
+     * Вход: логин + пароль, и, если задан `app.admin.totp-secret`, ещё код из приложения-аутентификатора.
+     * Любая неудача — одинаковый 401 (кроме «нужен код»: по нему веб показывает поле кода).
+     * О каждой попытке уходит сообщение в Telegram feedback-админам.
+     */
     @PostMapping("/login")
-    fun login(@RequestBody req: AdminLoginRequest): AdminLoginResponse {
+    fun login(@RequestBody req: AdminLoginRequest, request: HttpServletRequest): AdminLoginResponse {
+        val ip = clientIpOf(request)
+        val username = req.username.trim()
         if (adminUsername.isBlank() || adminPassword.isBlank()) {
             throw ApiException(HttpStatus.UNAUTHORIZED, "Invalid credentials")
         }
-        val usernameOk = req.username.trim() == adminUsername.trim()
+        val usernameOk = constantTimeEquals(username, adminUsername.trim())
         val passwordOk = verifyPassword(req.password, adminPassword)
-        if (!usernameOk || !passwordOk) throw ApiException(HttpStatus.UNAUTHORIZED, "Invalid credentials")
-        return AdminLoginResponse(jwt.createAdminToken(adminUsername))
+        if (!usernameOk || !passwordOk) {
+            log.warn("[ADMIN-LOGIN] wrong credentials for '{}' from ip={}", username, ip)
+            notifyLogin(success = false, username = username, ip = ip, reason = "неверный логин или пароль")
+            throw ApiException(HttpStatus.UNAUTHORIZED, "Invalid credentials")
+        }
+        if (adminTotpSecret.isNotBlank()) {
+            val code = req.code?.trim()
+            if (code.isNullOrBlank()) {
+                throw ApiException(HttpStatus.UNAUTHORIZED, "Введите код из приложения-аутентификатора", code = "TOTP_REQUIRED")
+            }
+            if (!Totp.verify(adminTotpSecret, code, nowSeconds())) {
+                log.warn("[ADMIN-LOGIN] wrong TOTP code for '{}' from ip={}", username, ip)
+                notifyLogin(success = false, username = username, ip = ip, reason = "неверный код второго фактора")
+                throw ApiException(HttpStatus.UNAUTHORIZED, "Неверный код", code = "TOTP_INVALID")
+            }
+        }
+        log.info("[ADMIN-LOGIN] success for '{}' from ip={}", username, ip)
+        notifyLogin(success = true, username = username, ip = ip)
+        return AdminLoginResponse(jwt.createAdminToken(adminUsername, adminTokenTtlSeconds))
     }
+
+    /** Переопределяется в тестах. */
+    internal fun nowSeconds(): Long = System.currentTimeMillis() / 1000
+
+    private fun notifyLogin(success: Boolean, username: String, ip: String, reason: String? = null) {
+        if (!botClient.isConfigured()) return
+        val admins = try {
+            users.findAllByIsFeedbackAdminTrue()
+        } catch (e: Exception) {
+            log.warn("[ADMIN-LOGIN] findAllByIsFeedbackAdminTrue failed: {}", e.message)
+            return
+        }
+        admins.forEach { admin ->
+            val adminId = admin.id ?: return@forEach
+            try {
+                botClient.notifyAdminLogin(AdminLoginNotify(adminId, success, username, ip, reason))
+            } catch (e: Exception) {
+                log.warn("[ADMIN-LOGIN] notify failed for admin {}: {}", adminId, e.message)
+            }
+        }
+    }
+
+    private fun constantTimeEquals(a: String, b: String): Boolean =
+        java.security.MessageDigest.isEqual(a.toByteArray(), b.toByteArray())
 
     @PostMapping("/users")
     fun createUser(@RequestBody req: AdminCreateUserRequest): AdminUserResponse {
@@ -304,7 +363,9 @@ data class AdminLoginRequest(
     @field:NotBlank
     val username: String,
     @field:NotBlank
-    val password: String
+    val password: String,
+    /** Код из приложения-аутентификатора; нужен только если на сервере задан TOTP-секрет. */
+    val code: String? = null
 )
 
 data class AdminLoginResponse(
