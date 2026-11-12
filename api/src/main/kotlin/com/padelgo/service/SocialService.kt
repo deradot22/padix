@@ -13,6 +13,7 @@ import com.padelgo.repo.FriendshipRepository
 import com.padelgo.repo.PlayerRepository
 import org.springframework.http.HttpStatus
 import org.springframework.stereotype.Service
+import org.springframework.transaction.annotation.Transactional
 import java.util.UUID
 
 @Service
@@ -58,6 +59,22 @@ class SocialService(
             ?: throw ApiException(HttpStatus.NOT_FOUND, "Request not found")
         req.status = FriendRequestStatus.DECLINED
         friendRequests.save(req)
+    }
+
+    /**
+     * Удаление из друзей — взаимное: связь пропадает у обоих.
+     * Заодно стираются заявки между парой: на (from, to) стоит уникальный индекс,
+     * и без этого повторно добавить человека в друзья было бы нельзя.
+     */
+    @Transactional
+    fun removeFriend(userId: UUID, publicIdRaw: String) {
+        val target = userByPublicId(publicIdRaw)
+        val targetId = target.id!!
+        val removed = friends.deleteByUserIdAndFriendUserId(userId, targetId) +
+            friends.deleteByUserIdAndFriendUserId(targetId, userId)
+        if (removed == 0L) throw ApiException(HttpStatus.NOT_FOUND, "Not friends")
+        friendRequests.deleteByFromUserIdAndToUserId(userId, targetId)
+        friendRequests.deleteByFromUserIdAndToUserId(targetId, userId)
     }
 
     fun listFriends(userId: UUID): FriendsSnapshot {

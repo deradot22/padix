@@ -41,6 +41,15 @@ class SocialController(
     }
 
     @Operation(
+        summary = "Удалить из друзей",
+        description = "Удаление взаимное: пользователи пропадают из списков друзей друг у друга. 404, если они не друзья."
+    )
+    @PostMapping("/friends/remove")
+    fun removeFriend(@Valid @RequestBody req: PublicIdRequest) {
+        service.removeFriend(principalUserId(), req.publicId)
+    }
+
+    @Operation(
         summary = "Список друзей и заявок",
         description = "Возвращает: friends — принятые друзья, incoming — входящие заявки, outgoing — исходящие заявки."
     )
