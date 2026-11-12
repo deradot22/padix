@@ -27,6 +27,7 @@ import java.time.LocalDateTime
 import java.time.LocalTime
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
+import java.time.temporal.ChronoUnit
 import java.util.Base64
 import java.util.Locale
 import java.util.UUID
@@ -489,10 +490,14 @@ class TelegramService(
         val now = Instant.now()
         val newText: String
         val tooltipText: String
+        var returnMarkup: Map<String, Any>? = null
         when (action) {
             "yes" -> {
                 tok.status = "APPROVED"
                 tok.approvedAt = now
+                // Даём время вернуться на сайт: встроенный браузер Telegram/Instagram
+                // замораживает свёрнутую вкладку, и 5 минут от старта часто не хватает.
+                tok.expiresAt = maxOf(tok.expiresAt, now.plus(10, ChronoUnit.MINUTES))
                 authTokenRepo.save(tok)
                 // bot-link flow: если токен помечен link_target_user_id, сразу зовём api
                 // финализировать линковку — чтобы юзер мог регистрироваться на игры через
@@ -502,7 +507,16 @@ class TelegramService(
                 if (tok.linkTargetUserId != null) {
                     runCatching { apiClient.finalizeLink(token) }
                 }
-                newText = "✅ <b>Вход подтверждён</b>\n\nВернитесь на padix.club — вы уже залогинены."
+                // Кнопка ведёт на waiting-страницу с этим же токеном: если исходная вкладка
+                // заморожена или потеряна (типично для in-app браузеров на iOS), вход
+                // завершится в той вкладке, которую откроет кнопка.
+                val base = publicBaseUrl.trimEnd('/')
+                val returnUrl = if (tok.linkTargetUserId != null) "$base/settings"
+                else "$base/auth/telegram-login?token=$token"
+                returnMarkup = TelegramInlineKeyboard.mixedKeyboard(
+                    listOf(listOf(TelegramInlineKeyboard.Btn.Url("↩️ Вернуться в Padix", returnUrl)))
+                )
+                newText = "✅ <b>Вход подтверждён</b>\n\nНажмите кнопку ниже, чтобы вернуться в Padix."
                 tooltipText = "Готово"
             }
             "no" -> {
@@ -520,8 +534,11 @@ class TelegramService(
         runCatching { client.answerCallbackQuery(cb.id, tooltipText) }
         val msg = cb.message
         if (msg != null) {
+            // Telegram отклоняет url-кнопки на http://localhost — тогда правим текст без кнопки.
             runCatching {
-                client.editMessageText(msg.chat.id, msg.messageId, newText)
+                client.editMessageText(msg.chat.id, msg.messageId, newText, replyMarkup = returnMarkup)
+            }.onFailure {
+                if (returnMarkup != null) runCatching { client.editMessageText(msg.chat.id, msg.messageId, newText) }
             }
         }
     }
