@@ -847,6 +847,8 @@ export const api = {
     request("/api/friends/accept", { method: "POST", body: JSON.stringify({ publicId }) }),
   declineFriend: (publicId: string) =>
     request("/api/friends/decline", { method: "POST", body: JSON.stringify({ publicId }) }),
+  removeFriend: (publicId: string) =>
+    request("/api/friends/remove", { method: "POST", body: JSON.stringify({ publicId }) }),
   inviteFriendToEvent: (eventId: string, publicId: string) =>
     request(`/api/events/${eventId}/invite`, { method: "POST", body: JSON.stringify({ publicId }) }),
   addFriendToEvent: (eventId: string, publicId: string) =>

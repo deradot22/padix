@@ -13,11 +13,13 @@ interface FriendRequestRepository : JpaRepository<FriendRequest, UUID> {
     fun findAllByFromUserIdAndStatus(userId: UUID, status: FriendRequestStatus): List<FriendRequest>
     fun findByFromUserIdAndToUserIdAndStatus(fromUserId: UUID, toUserId: UUID, status: FriendRequestStatus): FriendRequest?
     fun findByFromUserIdAndToUserId(fromUserId: UUID, toUserId: UUID): FriendRequest?
+    fun deleteByFromUserIdAndToUserId(fromUserId: UUID, toUserId: UUID): Long
 }
 
 interface FriendshipRepository : JpaRepository<Friendship, UUID> {
     fun findAllByUserId(userId: UUID): List<Friendship>
     fun existsByUserIdAndFriendUserId(userId: UUID, friendUserId: UUID): Boolean
+    fun deleteByUserIdAndFriendUserId(userId: UUID, friendUserId: UUID): Long
 }
 
 interface EventInviteRepository : JpaRepository<EventInvite, UUID> {

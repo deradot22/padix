@@ -11,6 +11,7 @@ import { Input } from "@/components/ui/input";
 import { EditGameScoresDialog } from "@/components/edit-game-scores-dialog";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { useConfirm } from "@/components/ui/confirm-dialog";
 import { PlayerTooltip } from "@/components/player-tooltip";
 import { CountryFlag } from "@/components/country-flag";
 import { countryName, isCountryCode } from "@/lib/countries";
@@ -29,6 +30,7 @@ import {
   TrendingUp,
   Trophy,
   User,
+  UserMinus,
   UserPlus,
   Users,
   Users2,
@@ -95,6 +97,15 @@ const TR = {
   "friends.empty": { ru: "Пока нет друзей.", en: "No friends yet." },
   "friends.incoming": { ru: "Входящие заявки", en: "Incoming requests" },
   "friends.decline": { ru: "Отклонить", en: "Decline" },
+  "friends.remove": { ru: "Удалить из друзей", en: "Remove friend" },
+  "friends.removeConfirm": { ru: "Удалить из друзей?", en: "Remove friend?" },
+  "friends.removeHint": {
+    ru: "{name} пропадёт из вашего списка друзей, а вы — из списка этого игрока. Добавить снова можно новой заявкой.",
+    en: "{name} will disappear from your friend list, and you from theirs. You can add them again with a new request.",
+  },
+  "friends.removeAction": { ru: "Удалить", en: "Remove" },
+  "friends.removed": { ru: "{name} больше не в друзьях", en: "{name} is no longer your friend" },
+  "friends.removeError": { ru: "Не удалось удалить из друзей", en: "Failed to remove friend" },
   "graph.title": { ru: "График рейтинга", en: "Rating graph" },
   "partners.title": { ru: "Лучшие напарники", en: "Best partners" },
   "partners.description": { ru: "С кем ты чаще всего побеждаешь", en: "Who you win with most often" },
@@ -148,6 +159,7 @@ function sortMatchesByRound(matches: EventHistoryMatch[]): EventHistoryMatch[] {
 export function V0ProfilePage(props: { me: any; meLoaded?: boolean; onMeUpdate?: (me: any) => void }) {
   const nav = useNavigate();
   const { t, lang } = useI18n(TR);
+  const confirm = useConfirm();
   const [meLive, setMeLive] = useState<any | null>(null);
   const [friends, setFriends] = useState<FriendsSnapshot | null>(null);
   const [friendInput, setFriendInput] = useState("");
@@ -955,6 +967,36 @@ export function V0ProfilePage(props: { me: any; meLoaded?: boolean; onMeUpdate?:
                           <p className="text-xs text-muted-foreground tabular-nums">NTRP {friend.ntrp ?? ntrpLevel(friend.rating)}</p>
                         </div>
                         <span className="shrink-0 font-display font-bold tabular-nums text-base">{friend.rating}</span>
+                        <button
+                          type="button"
+                          title={t("friends.remove")}
+                          aria-label={t("friends.remove")}
+                          disabled={friendLoading}
+                          className="shrink-0 rounded-md p-1.5 text-muted-foreground hover:bg-destructive/10 hover:text-destructive transition-colors disabled:opacity-50"
+                          onClick={async (e) => {
+                            e.stopPropagation();
+                            const ok = await confirm({
+                              title: t("friends.removeConfirm"),
+                              description: t("friends.removeHint", { name: friend.name }),
+                              confirmLabel: t("friends.removeAction"),
+                              confirmVariant: "destructive",
+                            });
+                            if (ok !== true) return;
+                            setFriendLoading(true);
+                            setFriendError(null);
+                            try {
+                              await api.removeFriend(friend.publicId);
+                              setFriends(await api.getFriends());
+                              setInfo(t("friends.removed", { name: friend.name }));
+                            } catch (err) {
+                              setFriendError(errorMessage(err) || t("friends.removeError"));
+                            } finally {
+                              setFriendLoading(false);
+                            }
+                          }}
+                        >
+                          <UserMinus className="h-4 w-4" />
+                        </button>
                       </div>
                     </PlayerTooltip>
                   ))}
