@@ -86,6 +86,7 @@ class RateLimitFilter(private val limiter: RateLimiter) : OncePerRequestFilter()
         log.info("[RATE-LIMIT] {} blocked for ip={} policy={} retryAfter={}s", request.requestURI, ip, policy.name, retryAfterSec)
         response.status = HttpStatus.TOO_MANY_REQUESTS.value()
         response.setHeader("Retry-After", retryAfterSec.toString())
+        response.characterEncoding = "UTF-8"
         response.contentType = "application/json"
         val message = when (policy) {
             RateLimitPolicy.REGISTER -> "Слишком много регистраций с этого IP. Попробуйте через ${formatDuration(retryAfterSec)}."
