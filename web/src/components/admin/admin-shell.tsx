@@ -1,7 +1,8 @@
-import { FormEvent, ReactNode, useCallback, useState } from "react";
+import { FormEvent, ReactNode, useCallback, useEffect, useState } from "react";
 import { Link, useLocation } from "react-router-dom";
 import { api, ApiRequestError, adminToken, setAdminToken } from "@/lib/api";
 import { cn } from "@/lib/utils";
+import { adminUrl } from "@/lib/admin-path";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -12,7 +13,7 @@ import { AlertCircle, Eye, EyeOff, KeyRound, LogOut, MessageSquare, ShieldCheck,
 
 export type AdminSession = {
   token: string | null;
-  login: (username: string, password: string) => Promise<void>;
+  login: (username: string, password: string, code?: string) => Promise<void>;
   logout: () => void;
   /** Показывает тост; при 401/403 от admin-API завершает сессию. */
   handleError: (e: unknown, fallback: string) => void;
@@ -30,8 +31,8 @@ export function useAdminSession(): AdminSession {
     setToken(null);
   }, []);
 
-  const login = useCallback(async (username: string, password: string) => {
-    const res = await api.adminLogin(username.trim(), password);
+  const login = useCallback(async (username: string, password: string, code?: string) => {
+    const res = await api.adminLogin(username.trim(), password, code?.trim() || undefined);
     setAdminToken(res.token);
     setToken(res.token);
   }, []);
@@ -55,9 +56,22 @@ export function useAdminSession(): AdminSession {
 /* ---------- Каркас страницы ---------- */
 
 const NAV = [
-  { to: "/admin", label: "Пользователи", icon: Users },
-  { to: "/admin/feedback", label: "Обратная связь", icon: MessageSquare },
+  { to: adminUrl(), label: "Пользователи", icon: Users },
+  { to: adminUrl("feedback"), label: "Обратная связь", icon: MessageSquare },
 ] as const;
+
+/** Страницы админки не должны попадать в поисковики, даже если ссылка где-то всплывёт. */
+function useNoIndex() {
+  useEffect(() => {
+    const meta = document.createElement("meta");
+    meta.name = "robots";
+    meta.content = "noindex, nofollow";
+    document.head.appendChild(meta);
+    return () => {
+      document.head.removeChild(meta);
+    };
+  }, []);
+}
 
 export function AdminShell({
   session,
@@ -73,6 +87,7 @@ export function AdminShell({
   children: ReactNode;
 }) {
   const location = useLocation();
+  useNoIndex();
 
   if (!session.token) {
     return (
@@ -138,6 +153,8 @@ export function AdminShell({
 function AdminLogin({ session }: { session: AdminSession }) {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
+  const [code, setCode] = useState("");
+  const [needCode, setNeedCode] = useState(false);
   const [show, setShow] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -148,11 +165,27 @@ function AdminLogin({ session }: { session: AdminSession }) {
       setError("Введите логин и пароль");
       return;
     }
+    if (needCode && code.replace(/\D/g, "").length !== 6) {
+      setError("Введите 6-значный код из приложения");
+      return;
+    }
     setBusy(true);
     setError(null);
     try {
-      await session.login(username, password);
+      await session.login(username, password, needCode ? code : undefined);
     } catch (err: unknown) {
+      if (err instanceof ApiRequestError && err.code === "TOTP_REQUIRED") {
+        // Пароль верный — сервер просит второй фактор. Показываем поле кода без ошибки.
+        setNeedCode(true);
+        setBusy(false);
+        return;
+      }
+      if (err instanceof ApiRequestError && err.code === "TOTP_INVALID") {
+        setError("Неверный код. Проверьте время на телефоне и попробуйте снова.");
+        setCode("");
+        setBusy(false);
+        return;
+      }
       const status = err instanceof ApiRequestError ? err.status : 0;
       setError(status === 401 ? "Неверный логин или пароль" : err instanceof Error && err.message ? err.message : "Не удалось войти");
     } finally {
@@ -212,6 +245,23 @@ function AdminLogin({ session }: { session: AdminSession }) {
             </div>
           </div>
 
+          {needCode ? (
+            <div className="space-y-1.5 rounded-lg border border-primary/30 bg-primary/5 p-3">
+              <Label htmlFor="admin-code">Код из приложения-аутентификатора</Label>
+              <Input
+                id="admin-code"
+                className="h-11 text-center font-mono text-lg tracking-[0.4em]"
+                value={code}
+                onChange={(e) => setCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
+                inputMode="numeric"
+                autoComplete="one-time-code"
+                placeholder="000000"
+                autoFocus
+              />
+              <p className="text-xs text-muted-foreground">Пароль принят. Откройте Google Authenticator и введите 6 цифр для Padix.</p>
+            </div>
+          ) : null}
+
           {error ? (
             <div role="alert" className="flex items-start gap-2 rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
               <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
@@ -220,7 +270,7 @@ function AdminLogin({ session }: { session: AdminSession }) {
           ) : null}
 
           <Button type="submit" size="lg" className="h-11 w-full" disabled={busy}>
-            {busy ? "Входим…" : "Войти"}
+            {busy ? "Входим…" : needCode ? "Подтвердить" : "Войти"}
           </Button>
         </form>
       </div>

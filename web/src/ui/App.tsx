@@ -2,6 +2,7 @@ import { Navigate, Outlet, Route, Routes, useLocation, useNavigate } from "react
 import { useEffect, useRef, useState } from "react";
 import { api, EventInviteItem, FriendsSnapshot, hasToken, MeResponse, setToken } from "../lib/api";
 import { RatingNotificationModal } from "@/components/rating-notification-modal";
+import { ADMIN_PATH } from "@/lib/admin-path";
 import { V0HomePage } from "./v0/pages/V0HomePage";
 import { V0GamesPage } from "./v0/pages/V0GamesPage";
 import { V0EventPage } from "./v0/pages/V0EventPage";
@@ -284,14 +285,13 @@ export function App() {
           <Route path="auth/telegram-login" element={<V0TelegramBotLoginPage onAuth={onAuthenticated} />} />
           <Route path="auth/telegram-link-confirm" element={<V0TelegramLinkConfirmPage onAuth={onAuthenticated} />} />
           {/*
-            /admin доступна и в production: сама форма логина ничего не раскрывает,
-            а API требует отдельный admin-токен (POST /api/admin/login).
-            Скрыть маршруты можно сборкой с VITE_ENABLE_ADMIN_UI=false.
+            Админка живёт не на /admin, а на скрытом пути (см. lib/admin-path.ts, переопределяется
+            VITE_ADMIN_PATH на сборке). Отключить маршруты полностью: VITE_ENABLE_ADMIN_UI=false.
           */}
           {import.meta.env.VITE_ENABLE_ADMIN_UI !== "false" ? (
             <>
-              <Route path="admin" element={<V0AdminPage />} />
-              <Route path="admin/feedback" element={<V0AdminFeedbackPage />} />
+              <Route path={ADMIN_PATH} element={<V0AdminPage />} />
+              <Route path={`${ADMIN_PATH}/feedback`} element={<V0AdminFeedbackPage />} />
             </>
           ) : null}
           <Route path="privacy" element={<V0PrivacyPage />} />

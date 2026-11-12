@@ -144,6 +144,14 @@ data class CancelRequestedRequest(
     val playerName: String
 )
 
+data class AdminLoginRequest(
+    val adminUserId: UUID,
+    val success: Boolean,
+    val username: String,
+    val ip: String,
+    val reason: String? = null
+)
+
 data class AdminFeedbackRequest(
     val adminUserId: UUID,
     val ticketId: UUID,
@@ -309,6 +317,35 @@ class InternalNotifyController(
         }
 
         return NotifyResult(1)
+    }
+
+    /** Сообщение владельцу о каждой попытке входа в админку — чужую попытку видно сразу. */
+    @PostMapping("/notify/admin-login")
+    fun adminLogin(@RequestBody req: AdminLoginRequest): NotifyResult {
+        val privateChat = chatRepo.findAllByUserIdOrderByLinkedAtAsc(req.adminUserId)
+            .firstOrNull { it.chatType == TelegramChatType.PRIVATE.name }
+        if (privateChat == null) {
+            log.warn("admin-login: no PRIVATE TG chat linked for admin user {}", req.adminUserId)
+            return NotifyResult(0)
+        }
+        val now = java.time.ZonedDateTime.now(java.time.ZoneId.of("Europe/Moscow"))
+            .format(java.time.format.DateTimeFormatter.ofPattern("dd.MM HH:mm"))
+        val text = buildString {
+            if (req.success) append("\uD83D\uDD10 <b>Вход в админку Padix</b>\n")
+            else append("\u26A0\uFE0F <b>Неудачная попытка входа в админку</b>\n")
+            append("Логин: <code>").append(htmlEscape(req.username.take(64))).append("</code>\n")
+            append("IP: <code>").append(htmlEscape(req.ip.take(64))).append("</code>\n")
+            req.reason?.takeIf { it.isNotBlank() }?.let { append("Причина: ").append(htmlEscape(it)).append("\n") }
+            append("<i>").append(now).append(" МСК</i>")
+            if (!req.success) append("\n\nЕсли это не вы — смените пароль админки в Render.")
+        }
+        return try {
+            telegramClient.sendMessage(privateChat.chatId, text, parseMode = "HTML")
+            NotifyResult(1)
+        } catch (e: Exception) {
+            log.warn("admin-login: sendMessage failed for chat {}: {}", privateChat.chatId, e.message)
+            NotifyResult(0)
+        }
     }
 
     private fun htmlEscape(s: String): String =

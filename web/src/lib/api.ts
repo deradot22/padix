@@ -237,6 +237,8 @@ export type ApiError = {
   error: string;
   message: string;
   path?: string | null;
+  /** Машиночитаемая причина (например TOTP_REQUIRED) — см. ApiException.code на сервере. */
+  code?: string | null;
 };
 
 /**
@@ -246,11 +248,13 @@ export type ApiError = {
  */
 export class ApiRequestError extends Error {
   readonly status: number;
+  readonly code: string | null;
 
-  constructor(message: string, status: number) {
+  constructor(message: string, status: number, code: string | null = null) {
     super(message);
     this.name = "ApiRequestError";
     this.status = status;
+    this.code = code;
   }
 }
 
@@ -496,7 +500,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
         throw new ApiRequestError("Сессия недействительна или истекла. Войдите снова.", 401);
       }
     }
-    throw new ApiRequestError(msg, res.status);
+    throw new ApiRequestError(msg, res.status, apiErr?.code ?? null);
   }
 
   // 204 / empty
@@ -887,8 +891,11 @@ export const api = {
   adminDeleteFeedback: (id: string) =>
     adminRequest<void>(`/api/admin/feedback/${id}`, { method: "DELETE" }),
 
-  adminLogin: (username: string, password: string) =>
-    request<{ token: string }>("/api/admin/login", { method: "POST", body: JSON.stringify({ username, password }) }),
+  adminLogin: (username: string, password: string, code?: string) =>
+    request<{ token: string }>("/api/admin/login", {
+      method: "POST",
+      body: JSON.stringify(code ? { username, password, code } : { username, password }),
+    }),
   adminListUsers: () => adminRequest<AdminUser[]>("/api/admin/users"),
   adminUpdateUser: (userId: string, payload: { email?: string; name?: string; password?: string; disabled?: boolean; isFeedbackAdmin?: boolean; hidden?: boolean }) =>
     adminRequest<AdminUser>(`/api/admin/users/${userId}`, { method: "PATCH", body: JSON.stringify(payload) }),
