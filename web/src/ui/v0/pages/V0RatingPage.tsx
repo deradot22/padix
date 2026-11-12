@@ -329,7 +329,7 @@ export function V0RatingPage(props: { authed: boolean; me?: { playerId?: string 
               avatarUrl: player.avatarUrl,
               country: player.country,
             }}
-            showAddFriend={props.authed}
+            showAddFriend={props.authed && !isMe}
             addFriendStatus={friendStatus(player)}
             onAddFriend={addFriendHandler(player)}
           >
@@ -420,7 +420,7 @@ export function V0RatingPage(props: { authed: boolean; me?: { playerId?: string 
                 odid: player.publicId,
                 avatarUrl: player.avatarUrl,
               }}
-              showAddFriend={props.authed}
+              showAddFriend={props.authed && player.id !== meId}
               addFriendStatus={friendStatus(player)}
               onAddFriend={addFriendHandler(player)}
             >
